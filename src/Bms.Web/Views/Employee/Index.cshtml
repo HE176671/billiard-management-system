@@ -1,0 +1,145 @@
+﻿@model Bms.Web.Models.EmployeeListViewModel
+@{
+    ViewData["Title"] = "Quản lý nhân viên";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-people-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalCount</div>
+                <div class="stat-label">Tổng nhân viên</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-person-check-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.Employees.Count(e => e.IsActive)</div>
+                <div class="stat-label">Đang hoạt động</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data table -->
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách nhân viên</span>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <!-- Search & filter form -->
+            <form method="get" class="d-flex gap-2 flex-wrap" id="searchForm">
+                <input type="text" name="search" value="@Model.Search" placeholder="Tìm tên, mã, SĐT..."
+                       class="form-control" style="width:200px;font-size:0.8rem" />
+                <select name="status" class="form-select" style="width:140px;font-size:0.8rem"
+                        onchange="document.getElementById('searchForm').submit()">
+                    <option value="" selected="@(Model.StatusFilter == null)">Tất cả</option>
+                    <option value="active"   selected="@(Model.StatusFilter == "active")">Đang làm</option>
+                    <option value="inactive" selected="@(Model.StatusFilter == "inactive")">Đã khóa</option>
+                </select>
+                <button type="submit" class="btn-primary-bms"><i class="bi bi-search"></i></button>
+                @if (!string.IsNullOrEmpty(Model.Search) || Model.StatusFilter != null)
+                {
+                    <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x"></i> Xóa lọc</a>
+                }
+            </form>
+            <a asp-action="Create" class="btn-primary-bms ms-auto">
+                <i class="bi bi-plus-lg"></i> Thêm nhân viên
+            </a>
+        </div>
+    </div>
+
+    @if (!Model.Employees.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            Không tìm thấy nhân viên nào.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Mã NV</th>
+                        <th>Họ và tên</th>
+                        <th>Tài khoản</th>
+                        <th>Số điện thoại</th>
+                        <th>Ngày vào làm</th>
+                        <th>Trạng thái</th>
+                        <th style="width:100px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var emp in Model.Employees)
+                    {
+                        <tr>
+                            <td><code style="font-size:0.8rem">@(emp.EmployeeCode ?? "—")</code></td>
+                            <td><strong>@emp.FullName</strong></td>
+                            <td>
+                                <span style="font-size:0.8rem;color:#64748b">@emp.UserName</span>
+                            </td>
+                            <td>@(emp.PhoneNumber ?? "—")</td>
+                            <td>@(emp.HireDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                            <td>
+                                @if (emp.IsActive)
+                                { <span class="badge-active">Đang làm</span> }
+                                else
+                                { <span class="badge-inactive">Đã khóa</span> }
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a asp-action="Edit" asp-route-id="@emp.Id"
+                                       class="btn-sm-icon" title="Sửa thông tin">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form asp-action="ToggleLock" asp-route-id="@emp.Id"
+                                          method="post" class="d-inline"
+                                          onsubmit="return confirm('@(emp.IsActive ? "Khóa" : "Mở khóa") tài khoản @emp.FullName?')">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit"
+                                                class="btn-sm-icon @(!emp.IsActive ? "" : "danger")"
+                                                title="@(emp.IsActive ? "Khóa tài khoản" : "Mở khóa")">
+                                            <i class="bi @(emp.IsActive ? "bi-lock" : "bi-unlock")"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        @if (Model.TotalPages > 1)
+        {
+            <div class="d-flex justify-content-center align-items-center gap-2 py-3">
+                @for (int i = 1; i <= Model.TotalPages; i++)
+                {
+                    <a asp-action="Index"
+                       asp-route-search="@Model.Search"
+                       asp-route-status="@Model.StatusFilter"
+                       asp-route-page="@i"
+                       class="btn-sm-icon @(i == Model.Page ? "active" : "")"
+                       style="@(i == Model.Page ? "background:#e94560;color:#fff;border-color:#e94560" : "")">
+                        @i
+                    </a>
+                }
+            </div>
+        }
+    }
+</div>

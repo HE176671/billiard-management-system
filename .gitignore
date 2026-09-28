@@ -1,0 +1,23 @@
+﻿## Build outputs
+bin/
+obj/
+
+## Visual Studio / Rider
+.vs/
+*.user
+*.suo
+.idea/
+
+## .NET user-secrets (khong commit bi mat)
+**/secrets.json
+
+## appsettings local (co connection string)
+**/appsettings.Development.json
+
+## Logs
+logs/
+*.log
+
+## OS
+.DS_Store
+Thumbs.db
