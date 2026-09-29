@@ -78,7 +78,12 @@ public class EmployeeController : Controller
     }
 
     // GET /Employee/Create
-    public IActionResult Create() => View(new CreateEmployeeViewModel());
+    public async Task<IActionResult> Create()
+    {
+        var vm = new CreateEmployeeViewModel();
+        vm.EmployeeCode = await GenerateNextEmployeeCodeAsync();
+        return View(vm);
+    }
 
     // POST /Employee/Create
     [HttpPost]
@@ -87,13 +92,17 @@ public class EmployeeController : Controller
     {
         if (!ModelState.IsValid) return View(model);
 
+        string empCode = string.IsNullOrWhiteSpace(model.EmployeeCode) 
+            ? await GenerateNextEmployeeCodeAsync() 
+            : model.EmployeeCode.Trim().ToUpper();
+
         var user = new ApplicationUser
         {
             UserName     = model.UserName.Trim(),
             Email        = model.Email.Trim(),
             FullName     = model.FullName.Trim(),
             PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim(),
-            EmployeeCode = string.IsNullOrWhiteSpace(model.EmployeeCode) ? null : model.EmployeeCode.Trim().ToUpper(),
+            EmployeeCode = empCode,
             HireDate     = model.HireDate,
             IsActive     = true,
             CreatedAtUtc = DateTime.UtcNow
@@ -152,7 +161,9 @@ public class EmployeeController : Controller
 
         user.FullName     = model.FullName.Trim();
         user.PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
-        user.EmployeeCode = string.IsNullOrWhiteSpace(model.EmployeeCode) ? null : model.EmployeeCode.Trim().ToUpper();
+        user.EmployeeCode = string.IsNullOrWhiteSpace(model.EmployeeCode) 
+            ? await GenerateNextEmployeeCodeAsync() 
+            : model.EmployeeCode.Trim().ToUpper();
         user.HireDate     = model.HireDate;
 
         var result = await _userManager.UpdateAsync(user);
@@ -247,4 +258,23 @@ public class EmployeeController : Controller
         "PasswordRequiresUpper"           => "Mật khẩu phải có ít nhất 1 chữ hoa.",
         _ => err.Description
     };
+
+    /// <summary>Tự động sinh mã nhân viên tiếp theo (NV001, NV002...)</summary>
+    private async Task<string> GenerateNextEmployeeCodeAsync()
+    {
+        var existingCodes = await _userManager.Users
+            .Where(u => u.EmployeeCode != null && u.EmployeeCode.StartsWith("NV"))
+            .Select(u => u.EmployeeCode)
+            .ToListAsync();
+
+        int maxNumber = 0;
+        foreach (var code in existingCodes)
+        {
+            if (code != null && int.TryParse(code.AsSpan(2), out int number))
+            {
+                if (number > maxNumber) maxNumber = number;
+            }
+        }
+        return $"NV{(maxNumber + 1).ToString("D3")}";
+    }
 }
