@@ -1,0 +1,123 @@
+@model Bms.Web.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Đăng nhập";
+    Layout = null; // Trang login dùng layout riêng, không có navbar
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — Billiard Management System</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 25px 45px rgba(0,0,0,0.4);
+        }
+        .login-logo {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #e94560;
+            text-align: center;
+            margin-bottom: 0.25rem;
+        }
+        .login-subtitle {
+            color: rgba(255,255,255,0.5);
+            text-align: center;
+            font-size: 0.85rem;
+            margin-bottom: 2rem;
+        }
+        .form-label { color: rgba(255,255,255,0.8); font-size: 0.875rem; }
+        .form-control {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #fff;
+            border-radius: 8px;
+        }
+        .form-control:focus {
+            background: rgba(255,255,255,0.12);
+            border-color: #e94560;
+            color: #fff;
+            box-shadow: 0 0 0 0.2rem rgba(233,69,96,0.25);
+        }
+        .form-control::placeholder { color: rgba(255,255,255,0.3); }
+        .btn-login {
+            background: linear-gradient(135deg, #e94560, #c62a47);
+            border: none;
+            border-radius: 8px;
+            padding: 0.6rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .btn-login:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(233,69,96,0.4);
+        }
+        .form-check-label { color: rgba(255,255,255,0.6); font-size: 0.875rem; }
+        .text-danger { font-size: 0.8rem; }
+        .alert-danger {
+            background: rgba(233,69,96,0.15);
+            border: 1px solid rgba(233,69,96,0.3);
+            color: #ff6b7a;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-logo">🎱 BMS</div>
+        <div class="login-subtitle">Billiard Management System</div>
+
+        @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey(string.Empty))
+        {
+            <div class="alert alert-danger" role="alert">
+                @foreach (var error in ViewData.ModelState[string.Empty]!.Errors)
+                {
+                    <div>@error.ErrorMessage</div>
+                }
+            </div>
+        }
+
+        <form asp-action="Login" asp-route-returnUrl="@ViewData["ReturnUrl"]" method="post">
+            @Html.AntiForgeryToken()
+            <div class="mb-3">
+                <label asp-for="Username" class="form-label"></label>
+                <input asp-for="Username" class="form-control" placeholder="admin.demo" autocomplete="username" />
+                <span asp-validation-for="Username" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Password" class="form-label"></label>
+                <input asp-for="Password" class="form-control" placeholder="••••••••" autocomplete="current-password" />
+                <span asp-validation-for="Password" class="text-danger"></span>
+            </div>
+            <div class="mb-4 form-check">
+                <input asp-for="RememberMe" class="form-check-input" id="rememberMe" />
+                <label asp-for="RememberMe" class="form-check-label" for="rememberMe"></label>
+            </div>
+            <button type="submit" class="btn btn-login btn-primary w-100">Đăng nhập</button>
+            <div class="text-center mt-3" style="color:rgba(255,255,255,0.5);font-size:0.82rem">
+                Chưa có tài khoản? <a asp-action="Register" style="color:#e94560">Đăng ký ngay</a>
+            </div>
+        </form>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+    <script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+</body>
+</html>
