@@ -1,4 +1,4 @@
-﻿@model Bms.Web.Models.LoginViewModel
+@model Bms.Web.Models.LoginViewModel
 @{
     ViewData["Title"] = "Đăng nhập";
     Layout = null; // Trang login dùng layout riêng, không có navbar
@@ -110,6 +110,9 @@
                 <label asp-for="RememberMe" class="form-check-label" for="rememberMe"></label>
             </div>
             <button type="submit" class="btn btn-login btn-primary w-100">Đăng nhập</button>
+            <div class="text-center mt-3" style="color:rgba(255,255,255,0.5);font-size:0.82rem">
+                Chưa có tài khoản? <a asp-action="Register" style="color:#e94560">Đăng ký ngay</a>
+            </div>
         </form>
     </div>
 

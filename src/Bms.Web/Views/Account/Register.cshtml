@@ -1,0 +1,89 @@
+﻿@model Bms.Web.Models.RegisterViewModel
+@{
+    ViewData["Title"] = "Dang ky";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dang ky - BMS</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body { background: linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1rem; }
+        .card { background:rgba(255,255,255,0.05); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:2rem; width:100%; max-width:480px; box-shadow:0 25px 45px rgba(0,0,0,0.4); }
+        .logo { font-size:1.75rem; font-weight:700; color:#e94560; text-align:center; }
+        .subtitle { color:rgba(255,255,255,0.5); text-align:center; font-size:0.82rem; margin-bottom:1.5rem; }
+        .form-label { color:rgba(255,255,255,0.8); font-size:0.875rem; }
+        .form-control { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; border-radius:8px; }
+        .form-control:focus { background:rgba(255,255,255,0.12); border-color:#e94560; color:#fff; box-shadow:0 0 0 0.2rem rgba(233,69,96,0.25); }
+        .form-control::placeholder { color:rgba(255,255,255,0.3); }
+        .btn-submit { background:linear-gradient(135deg,#e94560,#c62a47); border:none; border-radius:8px; padding:0.6rem; font-weight:600; }
+        .btn-submit:hover { opacity:0.9; }
+        .link-light { color:rgba(255,255,255,0.6); font-size:0.82rem; }
+        .link-light a { color:#e94560; }
+        .text-danger { font-size:0.78rem; }
+        .alert-danger { background:rgba(233,69,96,0.15); border:1px solid rgba(233,69,96,0.3); color:#ff6b7a; border-radius:8px; font-size:0.82rem; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">Billiard MS</div>
+        <div class="subtitle">Tao tai khoan de dat ban</div>
+
+        @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey(string.Empty))
+        {
+            <div class="alert alert-danger mb-3">
+                @foreach (var e in ViewData.ModelState[string.Empty]!.Errors)
+                { <div>@e.ErrorMessage</div> }
+            </div>
+        }
+
+        <form asp-action="Register" method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-3">
+                <div class="col-12">
+                    <label asp-for="FullName" class="form-label">Ho va ten</label>
+                    <input asp-for="FullName" class="form-control" placeholder="Nguyen Van A" />
+                    <span asp-validation-for="FullName" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="UserName" class="form-label">Ten dang nhap</label>
+                    <input asp-for="UserName" class="form-control" placeholder="nguyenvana" />
+                    <span asp-validation-for="UserName" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="PhoneNumber" class="form-label">So dien thoai</label>
+                    <input asp-for="PhoneNumber" class="form-control" placeholder="0901234567" />
+                    <span asp-validation-for="PhoneNumber" class="text-danger"></span>
+                </div>
+                <div class="col-12">
+                    <label asp-for="Email" class="form-label">Email</label>
+                    <input asp-for="Email" class="form-control" placeholder="email@example.com" />
+                    <span asp-validation-for="Email" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Password" class="form-label">Mat khau</label>
+                    <input asp-for="Password" class="form-control" placeholder="..." />
+                    <span asp-validation-for="Password" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="ConfirmPassword" class="form-label">Xac nhan mat khau</label>
+                    <input asp-for="ConfirmPassword" class="form-control" placeholder="..." />
+                    <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-submit btn-primary w-100">Dang ky</button>
+                </div>
+                <div class="col-12 text-center link-light">
+                    Da co tai khoan? <a asp-action="Login">Dang nhap</a>
+                </div>
+            </div>
+        </form>
+    </div>
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+    <script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+</body>
+</html>
