@@ -1,4 +1,4 @@
-﻿using Bms.Web.Data;
+using Bms.Web.Data;
 using Bms.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -184,6 +184,45 @@ public class EmployeeController : Controller
 
         var action = user.IsActive ? "mở khóa" : "khóa";
         TempData["Success"] = $"Đã {action} tài khoản {user.FullName}.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // GET /Employee/ResetPassword/id
+    public async Task<IActionResult> ResetPassword(string id)
+    {
+        var user = await GetStaffOrNull(id);
+        if (user == null) return NotFound();
+        return View(new ResetStaffPasswordViewModel
+        {
+            UserId   = user.Id,
+            FullName = user.FullName,
+            UserName = user.UserName ?? string.Empty
+        });
+    }
+
+    // POST /Employee/ResetPassword
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetPassword(ResetStaffPasswordViewModel model)
+    {
+        if (!ModelState.IsValid) return View(model);
+
+        var user = await GetStaffOrNull(model.UserId);
+        if (user == null) return NotFound();
+
+        // Xóa mật khẩu cũ (nếu có) rồi đặt mới
+        if (await _userManager.HasPasswordAsync(user))
+            await _userManager.RemovePasswordAsync(user);
+
+        var result = await _userManager.AddPasswordAsync(user, model.NewPassword);
+        if (!result.Succeeded)
+        {
+            foreach (var err in result.Errors)
+                ModelState.AddModelError(string.Empty, TranslateIdentityError(err));
+            return View(model);
+        }
+
+        TempData["Success"] = $"Đã đặt lại mật khẩu cho {user.FullName}.";
         return RedirectToAction(nameof(Index));
     }
 

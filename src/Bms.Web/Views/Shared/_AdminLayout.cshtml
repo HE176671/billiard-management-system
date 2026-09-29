@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="utf-8" />
@@ -250,6 +250,9 @@
     <div class="topbar">
         <span class="topbar-title">@ViewData["Title"]</span>
         <div class="topbar-actions">
+            <a asp-controller="Profile" asp-action="ChangePassword" class="btn-logout" title="Đổi mật khẩu">
+                <i class="bi bi-shield-lock"></i> Đổi mật khẩu
+            </a>
             <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
                 @Html.AntiForgeryToken()
                 <button type="submit" class="btn-logout">

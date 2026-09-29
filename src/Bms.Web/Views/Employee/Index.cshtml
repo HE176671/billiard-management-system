@@ -1,4 +1,4 @@
-﻿@model Bms.Web.Models.EmployeeListViewModel
+@model Bms.Web.Models.EmployeeListViewModel
 @{
     ViewData["Title"] = "Quản lý nhân viên";
     Layout = "_AdminLayout";
@@ -116,6 +116,10 @@
                                             <i class="bi @(emp.IsActive ? "bi-lock" : "bi-unlock")"></i>
                                         </button>
                                     </form>
+                                    <a asp-action="ResetPassword" asp-route-id="@emp.Id"
+                                       class="btn-sm-icon" title="Đặt lại mật khẩu">
+                                        <i class="bi bi-key"></i>
+                                    </a>
                                 </div>
                             </td>
                         </tr>
