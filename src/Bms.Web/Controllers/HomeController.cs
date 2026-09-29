@@ -15,7 +15,15 @@ public class HomeController : Controller
 
     public IActionResult Index()
     {
-        return View();
+        if (User.Identity != null && User.Identity.IsAuthenticated)
+        {
+            if (User.IsInRole("Admin")) return RedirectToAction("Index", "Employee");
+            if (User.IsInRole("Staff")) return RedirectToAction("Index", "Staff");
+            if (User.IsInRole("Customer")) return RedirectToAction("Index", "Customer");
+        }
+        
+        // Nếu chưa đăng nhập, tự động chuyển ra màn Login
+        return RedirectToAction("Login", "Account");
     }
 
     public IActionResult Privacy()
