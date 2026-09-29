@@ -1,0 +1,71 @@
+﻿@model Bms.Web.Models.EditEmployeeViewModel
+@{
+    ViewData["Title"] = "Sửa thông tin nhân viên";
+    Layout = "_AdminLayout";
+}
+
+<div class="d-flex align-items-center gap-2 mb-4">
+    <a asp-action="Index" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <h5 class="mb-0">Sửa thông tin — @Model.FullName</h5>
+</div>
+
+<div class="form-card">
+    <!-- Thông tin chỉ đọc -->
+    <div class="mb-4 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0">
+        <div class="row g-2" style="font-size:0.8rem;color:#64748b">
+            <div class="col-md-6">
+                <span class="fw-500">Tài khoản:</span> <strong>@Model.UserName</strong>
+            </div>
+            <div class="col-md-6">
+                <span class="fw-500">Email:</span> <strong>@Model.Email</strong>
+            </div>
+        </div>
+        <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px">
+            Tên đăng nhập và email không thể sửa tại đây.
+        </div>
+    </div>
+
+    <form asp-action="Edit" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="UserName" />
+        <input type="hidden" asp-for="Email" />
+
+        @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey(string.Empty))
+        {
+            <div class="alert alert-danger rounded-3 mb-3" style="font-size:0.875rem">
+                @foreach (var err in ViewData.ModelState[string.Empty]!.Errors)
+                { <div><i class="bi bi-exclamation-circle me-1"></i>@err.ErrorMessage</div> }
+            </div>
+        }
+
+        <div class="row g-3">
+            <div class="col-12">
+                <label asp-for="FullName" class="form-label"></label>
+                <input asp-for="FullName" class="form-control" />
+                <span asp-validation-for="FullName" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="PhoneNumber" class="form-label"></label>
+                <input asp-for="PhoneNumber" class="form-control" placeholder="0901234567" />
+                <span asp-validation-for="PhoneNumber" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="EmployeeCode" class="form-label"></label>
+                <input asp-for="EmployeeCode" class="form-control" />
+                <span asp-validation-for="EmployeeCode" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="HireDate" class="form-label"></label>
+                <input asp-for="HireDate" type="date" class="form-control" />
+                <span asp-validation-for="HireDate" class="field-error"></span>
+            </div>
+            <div class="col-12 d-flex gap-2 pt-2">
+                <button type="submit" class="btn-primary-bms">
+                    <i class="bi bi-floppy"></i> Lưu thay đổi
+                </button>
+                <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+            </div>
+        </div>
+    </form>
+</div>

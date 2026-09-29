@@ -1,0 +1,27 @@
+BMS database starter v1 — 2026-09-28
+
+Static checks completed:
+- All 4 SQL files parsed successfully with SQLFluff T-SQL dialect.
+- 13 unique table declarations.
+- 5 business procedure declarations.
+- Every REFERENCES target is declared in the schema.
+- Initialization has no DROP TABLE/DATABASE or TRUNCATE statement.
+- Reviewed booking interval rule, serialized table operations, unique active-session index, role fixtures, and NULL password seed.
+
+Not performed:
+- Execution against Microsoft SQL Server (engine unavailable here).
+- Runtime/concurrent-session tests.
+- Compilation or runtime test of illustrative C# integration snippets (.NET unavailable here).
+
+Run 01, 02, 03, then 04 in SSMS. Stop at any SQL error.
+
+Local execution update — 2026-09-28:
+- Executed on localhost\SQLEXPRESS, SQL Server engine 15.0.2000.5.
+- 01 and 02 succeeded: 13 tables, 5 procedures.
+- Initial 03 execution failed with error 1934 (QUOTED_IDENTIFIER); transaction rolled back.
+- Added required filtered-index SET options to 03, then executed 03 and 04 successfully.
+- All seed counts matched; all 3 consistency queries returned zero rows.
+- UsersWithPassword = 0, as expected. Vietnamese text displayed correctly.
+- Composite Identity primary keys produced maximum-key-length warnings; sample inserts succeeded.
+- Business procedure behavior/concurrency and C# integration remain untested.
+- Do not rerun 01/03 against this initialized local database; use 04 for read-only checks.

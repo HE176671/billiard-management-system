@@ -1,0 +1,75 @@
+﻿@model Bms.Web.Models.CreateEmployeeViewModel
+@{
+    ViewData["Title"] = "Thêm nhân viên mới";
+    Layout = "_AdminLayout";
+}
+
+<div class="d-flex align-items-center gap-2 mb-4">
+    <a asp-action="Index" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <h5 class="mb-0">Thêm nhân viên mới</h5>
+</div>
+
+<div class="form-card">
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+
+        @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey(string.Empty))
+        {
+            <div class="alert alert-danger rounded-3 mb-3" style="font-size:0.875rem">
+                @foreach (var err in ViewData.ModelState[string.Empty]!.Errors)
+                { <div><i class="bi bi-exclamation-circle me-1"></i>@err.ErrorMessage</div> }
+            </div>
+        }
+
+        <div class="row g-3">
+            <div class="col-12">
+                <label asp-for="FullName" class="form-label"></label>
+                <input asp-for="FullName" class="form-control" placeholder="Nguyễn Văn A" />
+                <span asp-validation-for="FullName" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="UserName" class="form-label"></label>
+                <input asp-for="UserName" class="form-control" placeholder="nguyen.van.a" />
+                <div class="form-text">Dùng để đăng nhập, không thay đổi được sau khi tạo.</div>
+                <span asp-validation-for="UserName" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="Email" class="form-label"></label>
+                <input asp-for="Email" class="form-control" placeholder="nva@example.com" />
+                <span asp-validation-for="Email" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="PhoneNumber" class="form-label"></label>
+                <input asp-for="PhoneNumber" class="form-control" placeholder="0901234567" />
+                <span asp-validation-for="PhoneNumber" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="EmployeeCode" class="form-label"></label>
+                <input asp-for="EmployeeCode" class="form-control" placeholder="NV003" />
+                <span asp-validation-for="EmployeeCode" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="HireDate" class="form-label"></label>
+                <input asp-for="HireDate" type="date" class="form-control" />
+                <span asp-validation-for="HireDate" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="Password" class="form-label"></label>
+                <input asp-for="Password" class="form-control" placeholder="••••••••" />
+                <div class="form-text">Tối thiểu 8 ký tự, gồm chữ hoa, số và ký tự đặc biệt.</div>
+                <span asp-validation-for="Password" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="ConfirmPassword" class="form-label"></label>
+                <input asp-for="ConfirmPassword" class="form-control" placeholder="••••••••" />
+                <span asp-validation-for="ConfirmPassword" class="field-error"></span>
+            </div>
+            <div class="col-12 d-flex gap-2 pt-2">
+                <button type="submit" class="btn-primary-bms">
+                    <i class="bi bi-person-plus"></i> Tạo tài khoản
+                </button>
+                <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+            </div>
+        </div>
+    </form>
+</div>
