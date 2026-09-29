@@ -26,6 +26,14 @@ BEGIN TRY
     IF EXISTS (SELECT 1 FROM sys.tables WHERE is_ms_shipped = 0)
         THROW 51000, N'Database already contains tables. Stop: do not rerun initialization.', 1;
 
+        CREATE TABLE dbo.MembershipTiers (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_MembershipTiers PRIMARY KEY,
+        TierName nvarchar(50) NOT NULL CONSTRAINT UQ_MembershipTiers_Name UNIQUE,
+        DiscountPercent decimal(5,2) NOT NULL CONSTRAINT DF_MembershipTiers_Discount DEFAULT 0,
+        CONSTRAINT CK_MembershipTiers_Name CHECK (LEN(LTRIM(RTRIM(TierName))) > 0),
+        CONSTRAINT CK_MembershipTiers_Discount CHECK (DiscountPercent >= 0 AND DiscountPercent <= 100)
+    );
+
     CREATE TABLE dbo.AspNetRoles (
         Id nvarchar(450) NOT NULL CONSTRAINT PK_AspNetRoles PRIMARY KEY,
         Name nvarchar(256) NULL,
@@ -55,6 +63,9 @@ BEGIN TRY
         IsActive bit NOT NULL CONSTRAINT DF_User_IsActive DEFAULT 1,
         CreatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_User_Created DEFAULT SYSUTCDATETIME(),
         EmployeeCode nvarchar(20) NULL,
+        RewardPoints int NOT NULL CONSTRAINT DF_User_Points DEFAULT 0,
+        TierId int NULL,
+        CONSTRAINT FK_User_MembershipTier FOREIGN KEY (TierId) REFERENCES dbo.MembershipTiers(Id),
         HireDate date NULL,
         CONSTRAINT CK_User_FullName CHECK (LEN(LTRIM(RTRIM(FullName))) > 0),
         CONSTRAINT CK_User_Phone CHECK (PhoneNumber IS NULL OR LEN(LTRIM(RTRIM(PhoneNumber))) > 0),
@@ -213,8 +224,94 @@ BEGIN TRY
         CONSTRAINT CK_Product_Stock CHECK (StockQuantity >= 0)
     );
     CREATE INDEX IX_Products_Category_Active ON dbo.Products(CategoryId, IsActive);
+
+    CREATE TABLE dbo.PricingConfigs (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_PricingConfigs PRIMARY KEY,
+        TableTypeId int NOT NULL,
+        HourlyRate decimal(18,2) NOT NULL,
+        StartHour time NOT NULL,
+        EndHour time NOT NULL,
+        CONSTRAINT FK_PricingConfig_TableType FOREIGN KEY (TableTypeId) REFERENCES dbo.TableTypes(Id),
+        CONSTRAINT CK_PricingConfig_Hours CHECK (StartHour < EndHour),
+        CONSTRAINT CK_PricingConfig_Rate CHECK (HourlyRate > 0)
+    );
+
+    CREATE TABLE dbo.Orders (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_Orders PRIMARY KEY,
+        SessionId int NOT NULL,
+        OrderTimeUtc datetime2(0) NOT NULL CONSTRAINT DF_Order_Time DEFAULT SYSUTCDATETIME(),
+        Status varchar(20) NOT NULL CONSTRAINT DF_Order_Status DEFAULT 'Pending',
+        CONSTRAINT FK_Order_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+        CONSTRAINT CK_Order_Status CHECK (Status IN ('Pending', 'Preparing', 'Served', 'Cancelled'))
+    );
+    CREATE INDEX IX_Orders_Session ON dbo.Orders(SessionId);
+
+    CREATE TABLE dbo.OrderDetails (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_OrderDetails PRIMARY KEY,
+        OrderId int NOT NULL,
+        ProductId int NOT NULL,
+        Quantity int NOT NULL,
+        UnitPrice decimal(18,2) NOT NULL,
+        Subtotal AS (Quantity * UnitPrice) PERSISTED,
+        CONSTRAINT FK_OrderDetail_Order FOREIGN KEY (OrderId) REFERENCES dbo.Orders(Id) ON DELETE CASCADE,
+        CONSTRAINT FK_OrderDetail_Product FOREIGN KEY (ProductId) REFERENCES dbo.Products(Id),
+        CONSTRAINT CK_OrderDetail_Qty CHECK (Quantity > 0),
+        CONSTRAINT CK_OrderDetail_Price CHECK (UnitPrice >= 0)
+    );
+
+    CREATE TABLE dbo.Invoices (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_Invoices PRIMARY KEY,
+        SessionId int NOT NULL CONSTRAINT UQ_Invoice_Session UNIQUE,
+        CustomerId nvarchar(450) NULL,
+        TotalPlaytime decimal(18,2) NOT NULL CONSTRAINT DF_Invoice_Playtime DEFAULT 0,
+        TotalFandB decimal(18,2) NOT NULL CONSTRAINT DF_Invoice_FandB DEFAULT 0,
+        DiscountAmount decimal(18,2) NOT NULL CONSTRAINT DF_Invoice_Discount DEFAULT 0,
+        FinalAmount AS (TotalPlaytime + TotalFandB - DiscountAmount) PERSISTED,
+        Status varchar(20) NOT NULL CONSTRAINT DF_Invoice_Status DEFAULT 'Unpaid',
+        CreatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_Invoice_Created DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_Invoice_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+        CONSTRAINT FK_Invoice_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.AspNetUsers(Id),
+        CONSTRAINT CK_Invoice_Status CHECK (Status IN ('Unpaid', 'Paid'))
+    );
+
+    CREATE TABLE dbo.PaymentTransactions (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_PaymentTransactions PRIMARY KEY,
+        InvoiceId int NOT NULL,
+        PaymentMethod varchar(20) NOT NULL,
+        AmountPaid decimal(18,2) NOT NULL,
+        GatewayRefCode nvarchar(100) NULL,
+        TransactionTimeUtc datetime2(0) NOT NULL CONSTRAINT DF_Payment_Time DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_Payment_Invoice FOREIGN KEY (InvoiceId) REFERENCES dbo.Invoices(Id) ON DELETE CASCADE,
+        CONSTRAINT CK_Payment_Method CHECK (PaymentMethod IN ('Cash', 'VNPay', 'SePay', 'Transfer')),
+        CONSTRAINT CK_Payment_Amount CHECK (AmountPaid > 0)
+    );
+
+    CREATE TABLE dbo.Combos (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_Combos PRIMARY KEY,
+        Name nvarchar(100) NOT NULL CONSTRAINT UQ_Combos_Name UNIQUE,
+        Price decimal(18,2) NOT NULL,
+        PlaytimeHours decimal(5,2) NOT NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_Combo_Active DEFAULT 1,
+        CONSTRAINT CK_Combo_Name CHECK (LEN(LTRIM(RTRIM(Name))) > 0),
+        CONSTRAINT CK_Combo_Price CHECK (Price >= 0),
+        CONSTRAINT CK_Combo_Playtime CHECK (PlaytimeHours > 0)
+    );
+
+    CREATE TABLE dbo.WorkShifts (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_WorkShifts PRIMARY KEY,
+        StaffId nvarchar(450) NOT NULL,
+        StartTimeUtc datetime2(0) NOT NULL CONSTRAINT DF_Shift_Start DEFAULT SYSUTCDATETIME(),
+        EndTimeUtc datetime2(0) NULL,
+        StartingCash decimal(18,2) NOT NULL CONSTRAINT DF_Shift_StartCash DEFAULT 0,
+        EndingCash decimal(18,2) NULL,
+        Status varchar(20) NOT NULL CONSTRAINT DF_Shift_Status DEFAULT 'Active',
+        Notes nvarchar(500) NULL,
+        CONSTRAINT FK_Shift_Staff FOREIGN KEY (StaffId) REFERENCES dbo.AspNetUsers(Id),
+        CONSTRAINT CK_Shift_Status CHECK (Status IN ('Active', 'Closed')),
+        CONSTRAINT CK_Shift_Time CHECK (EndTimeUtc IS NULL OR EndTimeUtc >= StartTimeUtc)
+    );
     COMMIT;
-    PRINT N'Created 13 tables successfully. Next: 02_BusinessProcedures.sql';
+    PRINT N'Created full 21 tables successfully. Next: 02_BusinessProcedures.sql';
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK;
@@ -519,7 +616,7 @@ GO
 USE [BMS_Starter];
 GO
 SELECT DB_NAME() AS DatabaseName,
-    (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0) AS TableCount_Expected13,
+    (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0) AS TableCount_Expected21,
     (SELECT COUNT(*) FROM sys.procedures WHERE name IN
      ('usp_CreateBooking','usp_CancelBooking','usp_CheckInBooking','usp_OpenSession','usp_CloseSession')) AS ProcedureCount_Expected5;
 SELECT N'Roles' AS Item, COUNT(*) AS Actual, 3 AS ExpectedAfterSeed FROM dbo.AspNetRoles
@@ -529,7 +626,15 @@ UNION ALL SELECT N'Tables',COUNT(*),6 FROM dbo.BilliardTables
 UNION ALL SELECT N'Bookings',COUNT(*),4 FROM dbo.Bookings
 UNION ALL SELECT N'Play sessions',COUNT(*),2 FROM dbo.PlaySessions
 UNION ALL SELECT N'Categories',COUNT(*),2 FROM dbo.ProductCategories
-UNION ALL SELECT N'Products',COUNT(*),6 FROM dbo.Products;
+UNION ALL SELECT N'Products',COUNT(*),6 FROM dbo.Products
+UNION ALL SELECT N'MembershipTiers',COUNT(*),0 FROM dbo.MembershipTiers
+UNION ALL SELECT N'PricingConfigs',COUNT(*),0 FROM dbo.PricingConfigs
+UNION ALL SELECT N'Orders',COUNT(*),0 FROM dbo.Orders
+UNION ALL SELECT N'OrderDetails',COUNT(*),0 FROM dbo.OrderDetails
+UNION ALL SELECT N'Invoices',COUNT(*),0 FROM dbo.Invoices
+UNION ALL SELECT N'PaymentTransactions',COUNT(*),0 FROM dbo.PaymentTransactions
+UNION ALL SELECT N'Combos',COUNT(*),0 FROM dbo.Combos
+UNION ALL SELECT N'WorkShifts',COUNT(*),0 FROM dbo.WorkShifts;
 
 -- Screen 5: Staff listing; show inactive accounts too.
 SELECT u.Id,u.EmployeeCode,u.FullName,u.UserName,u.Email,u.PhoneNumber,u.HireDate,u.IsActive
@@ -570,5 +675,7 @@ SELECT COUNT(*) AS UsersWithPassword_Expected0 FROM dbo.AspNetUsers WHERE Passwo
 GO
 
 -----------------------------------------------------------
+
+
 
 
