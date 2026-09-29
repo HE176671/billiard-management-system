@@ -198,6 +198,38 @@ public class EmployeeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // POST /Employee/Delete
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(string id)
+    {
+        var user = await GetStaffOrNull(id);
+        if (user == null) return NotFound();
+
+        try
+        {
+            var result = await _userManager.DeleteAsync(user);
+            if (result.Succeeded)
+            {
+                TempData["Success"] = $"Đã xóa vĩnh viễn tài khoản {user.FullName}.";
+            }
+            else
+            {
+                TempData["Error"] = "Không thể xóa tài khoản. Lỗi hệ thống.";
+            }
+        }
+        catch (DbUpdateException)
+        {
+            TempData["Error"] = $"Không thể xóa {user.FullName} vì nhân viên này đã có dữ liệu giao dịch/ca làm việc. Khuyến nghị: Sử dụng tính năng Khóa tài khoản.";
+        }
+        catch (Exception)
+        {
+            TempData["Error"] = "Đã xảy ra lỗi khi xóa tài khoản.";
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
     // GET /Employee/ResetPassword/id
     public async Task<IActionResult> ResetPassword(string id)
     {
