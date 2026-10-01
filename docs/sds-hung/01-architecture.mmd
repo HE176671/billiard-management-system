@@ -1,0 +1,25 @@
+flowchart TB
+    Actor["Admin / Staff / Customer"] --> Browser["Trình duyệt<br/>HTML, CSS, Bootstrap, JavaScript"]
+    subgraph App["Bms.Web — ASP.NET Core MVC"]
+        Gate["Routing + Authentication + Authorization<br/>Anti-forgery cho POST"]
+        Controllers["MVC Controllers<br/>Account, Employee, Profile và các module nghiệp vụ"]
+        Views["Razor Views + ViewModels"]
+        Identity["ASP.NET Core Identity<br/>UserManager + SignInManager"]
+        Biz["Xử lý nghiệp vụ<br/>Bàn, Booking, F&B, Ca làm, Thanh toán, Thành viên"]
+        Data["ApplicationDbContext / EF Core<br/>SQL có tham số và procedure"]
+        Payment["VNPay adapter<br/>Dự kiến — TV3 phụ trách"]
+        Gate --> Controllers
+        Controllers --> Views
+        Controllers --> Identity
+        Controllers --> Biz
+        Identity --> Data
+        Biz --> Data
+        Biz -.-> Payment
+    end
+    Browser -->|"HTTPS request + cookie + form"| Gate
+    Views -->|"HTML response"| Browser
+    Data -->|"SQL qua kết nối server"| DB[("SQL Server<br/>BilliardDB")]
+    Payment -.->|"Tạo URL thanh toán có chữ ký"| Browser
+    Browser -.->|"Chuyển hướng thanh toán"| VNPay["VNPay — hệ thống ngoài, dự kiến"]
+    VNPay -.->|"IPN server-to-server"| Payment
+    VNPay -.->|"Return URL qua trình duyệt"| Browser
