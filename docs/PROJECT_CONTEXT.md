@@ -1,8 +1,8 @@
 # BMS — Bối cảnh để tiếp tục dự án
 
-Cập nhật: 28/09/2026. Trao đổi và hướng dẫn bằng tiếng Việt, từng bước cho người mới học Git và xây dựng dự án.
+Cập nhật: 01/10/2026. Trao đổi và hướng dẫn bằng tiếng Việt, từng bước cho người mới học Git và xây dựng dự án.
 
-**Trạng thái mới nhất:** đã khởi tạo và kiểm tra BMS_Starter trên localhost\SQLEXPRESS. Xem mục 7; các kết quả ở mục 2–3 là lần khảo sát trước khi khởi tạo.
+**Trạng thái mới nhất:** ngày 01/10/2026 đã soạn SDS phần Hùng, sửa verify chọn nhầm database và bổ sung quan hệ combo có giờ chơi + đồ ăn/nước uống. Database **localhost / BilliardDB** đã có **24 bảng nghiệp vụ, 5 procedure**; SSMS có thêm bảng hỗ trợ dbo.sysdiagrams. Repo có MVC .NET 8 và code tài khoản/nhân viên. Người dùng yêu cầu chia sẻ database qua main, xem mục 12; các cập nhật trước ở mục 9–11. Các mục trước lưu lịch sử; không dùng trạng thái cũ “chưa có project” hoặc database 13 bảng để ghi đè source/schema hiện tại. Không chạy lại Full/seed/05 trên database đã nâng cấp.
 
 ## 1. Những điều đã thống nhất với người dùng
 
@@ -128,3 +128,52 @@ Project ASP.NET Core MVC **Bms.Web** đã tạo tại `src/Bms.Web/`:
 Chưa làm: trang đăng nhập/đăng xuất (Account controller/view), đặt mật khẩu admin.demo, màn hình quản lý nhân viên. Chưa commit/push.
 
 Bước tiếp theo: làm AccountController (Login/Logout) + đặt mật khẩu admin.demo qua initializer Development, rồi kiểm tra đăng nhập Admin thật sự.
+
+## 9. SDS phần Hùng — 01/10/2026
+
+Người dùng đã mở rộng phân công tài liệu: Hùng phụ trách AspNetUsers/AspNetRoles/AspNetUserRoles/MembershipTiers, kiến trúc tổng thể, package diagram, class diagram và sequence Login/Tạo nhân viên/Đổi mật khẩu, cơ chế phân quyền/bảo mật. Các thành viên khác nhận bàn/giá/phiên; booking/ca làm; thanh toán VNPay/điểm/lịch sử; F&B/checkout/báo cáo/nâng hạng. Phân công này thay cho giới hạn tài liệu giai đoạn đầu; không có nghĩa mọi module mới đã được code.
+
+- Đọc mẫu SDS template2.docx qua Google Drive trong lượt phân công trước; lần này đối chiếu schema và code local hiện tại.
+- Repo sạch trước khi soạn; HEAD được đọc là 4cbb885. Có MVC net8.0, packages Identity EF/EF SQL Server khai báo 8.*; có AccountController, EmployeeController, ProfileController, DashboardController và các controller khung Staff/Customer.
+- File schema hiện là BMS_Database_Starter/BilliardDB_Full.sql với 21 CREATE TABLE; MembershipTiers có Id/TierName/DiscountPercent. AspNetUsers thêm RewardPoints/TierId. Chưa kiểm chứng database live đã được nâng cấp lên 21 bảng.
+- Tài liệu phần Hùng: docs/SDS_HUNG.md; bản xem có 7 SVG nhúng không cần Internet: docs/SDS_HUNG_OFFLINE.html; bản dựng bằng Mermaid: docs/SDS_HUNG.html. Nguồn 7 sơ đồ (.mmd), ảnh vector (.svg), README và script tạo preview: docs/sds-hung/. Đã kiểm tra cả 7 sơ đồ render thành công trong trình duyệt; HTML offline có đủ 7 SVG, không có script hoặc ký tự thay thế lỗi Unicode. Không coi đây là kiểm thử chức năng ứng dụng.
+- SDS ghi rõ thiết kế cần bổ sung: transaction nguyên tử CreateAsync + AddToRoleAsync; kiểm tra IsActive cho cookie; mapping thành viên; cấu hình ngưỡng nâng hạng. Không khẳng định source đã đáp ứng các yêu cầu này.
+- Phân công 20 bảng còn thiếu AspNetRoleClaims so với 21 bảng SQL; đề xuất nhóm giao TV2 cùng các bảng Identity phụ, chưa tự chốt thay người dùng.
+- Ghi nhận để xử lý sau: script Full còn USE BMS_Starter ở đoạn verify và một số chuỗi seed có dấu hiệu lỗi mã hóa. Không chạy hoặc sửa SQL trong tác vụ viết SDS.
+- Chỉ thay đổi tài liệu; chưa sửa code ứng dụng/database, chưa chạy kiểm thử chức năng, chưa commit/push hoặc ghi vào Google Doc chung.
+
+## 10. Sửa lỗi kiểm tra database từ ảnh SSMS — 01/10/2026
+
+- Người dùng chạy BilliardDB_Full trong SSMS kết nối `localhost` (engine 17.0.1000.7), báo tạo 21 bảng/5 procedure/seed thành công nhưng verify lỗi Invalid object name dbo.MembershipTiers.
+- Xác nhận chỉ đọc: `localhost` có cả BilliardDB và BMS_Starter; BilliardDB có 21 bảng, 5 procedure, có MembershipTiers. `localhost\SQLEXPRESS` có BilliardDB bản 13 bảng, 5 procedure, chưa có MembershipTiers. Đây là hai instance độc lập, không đổi cấu hình kết nối ứng dụng trong lần này.
+- Sửa đúng một dòng trong BMS_Database_Starter/BilliardDB_Full.sql ở phần verify: USE BMS_Starter thành USE BilliardDB. Các phần tạo/seed vốn đã dùng BilliardDB.
+- Tách phần verify thành BMS_Database_Starter/Verify_BilliardDB.sql (chỉ đọc) và chạy trên localhost thành công: 21 bảng/5 procedure, tất cả số lượng seed đúng, 3 truy vấn nhất quán trả 0 dòng, số user có mật khẩu = 0.
+- Không chạy lại tạo database/bảng/seed, không ghi dữ liệu live. Cảnh báo độ dài khóa ghép vẫn là vấn đề riêng, không gây lỗi thiếu bảng trong ảnh.
+- Ảnh còn Msg 102 ở dòng 1 của query đang mở; không có nội dung đầu query nên chưa kết luận nguyên nhân. File trên đĩa bắt đầu bằng comment hợp lệ và có UTF-8 BOM; không coi BOM trong file là bằng chứng chắc chắn của lỗi do copy/paste trong SSMS.
+- Kết quả đọc seed ở localhost có chuỗi tiếng Việt lỗi mã hóa, khớp dấu hiệu đã ghi nhận trong script Full. Chưa sửa dữ liệu hoặc seed encoding; cần xử lý riêng, không reset database.
+- Tài liệu SDS/HTML/ZIP phản ánh thời điểm trước lần sửa này; ghi chú trong đó về USE sai và chưa xác minh schema đã được cập nhật trạng thái bởi mục 10 này, chưa tái xuất bộ SDS.
+
+## 11. Combo gồm giờ chơi và đồ ăn/nước uống — 01/10/2026
+
+- Người dùng hỏi vì sao Combos đứng riêng trong Database Diagram rồi xác nhận combo có cả đồ ăn/nước uống. Schema cũ chỉ có Combos(Id, Name, Price, PlaytimeHours, IsActive), không có FK. Đã bổ sung cấu trúc quan hệ, chưa triển khai tính tiền/bán combo.
+- Tạo script nâng cấp cộng thêm `BMS_Database_Starter/05_AddComboRelations.sql`, đã chạy thành công trên **localhost / BilliardDB**. Tạo 3 bảng trống trong transaction; không tạo lại database, không seed lại hoặc sửa/xóa dòng nghiệp vụ cũ. Script từ chối nếu bất kỳ bảng mới nào đã tồn tại; **không chạy lại script trên database này**.
+- `ComboItems`: nối Combos với Products, PK(ComboId, ProductId), Quantity cho mỗi gói > 0.
+- `SessionCombos`: ghi lượt mua cho PlaySessions; liên kết Combos và AspNetUsers (CreatedById); lưu Quantity và tên/giá/giờ snapshot lúc mua. Cho phép nhiều lượt mua trong một phiên; không tự chốt chính sách cộng dồn/hủy.
+- `SessionComboItems`: lưu ProductId, tên món snapshot và QuantityPerCombo của từng lượt mua; không đọc lại thành phần danh mục để tính quyền lợi của lần mua cũ.
+- 7 FK mới đều bật/trusted và NO_ACTION khi xóa. Giữ lịch sử bằng ngừng bán IsActive; snapshot còn cần được service bảo vệ khỏi cập nhật trực tiếp. FK không xác minh quyền Staff/Admin, phiên active hay tồn kho.
+- Bổ sung cùng block CREATE TABLE vào `BilliardDB_Full.sql` dành cho **máy mới chưa có database**. Không chạy Full trên database đang có dữ liệu. Verify độc lập và verify trong Full dùng BilliardDB, kỳ vọng 24 bảng nghiệp vụ và 5 procedure; đã loại dbo.sysdiagrams khỏi bộ đếm. Database hiện có tổng 25 bảng nếu tính cả bảng hỗ trợ sơ đồ này.
+- Kiểm tra SQL thực tế qua `tests/ComboRelations_Rollback.sql`: gói thử có nước + đồ ăn, mua 2 gói; đổi danh mục nhưng giữ nguyên snapshot; từ chối FK sai, Quantity=0 và xóa combo có tham chiếu. PASS; toàn bộ dòng thử rollback, các số lượng bảng trước/sau không đổi. IDENTITY có thể tăng do insert thử dù rollback; không reset ID.
+- Verify sau nâng cấp: số lượng seed cũ đúng, 3 kiểm tra nhất quán không có dòng lỗi, ba bảng combo mới trống; tài khoản mẫu trên localhost vẫn PasswordHash=NULL. Chưa sửa lỗi dấu tiếng Việt trong seed.
+- Tài liệu chi tiết: `docs/COMBO_DESIGN.md`. Trong SSMS cần Add Table ba bảng mới vào sơ đồ đã có để hiện đường nối; Refresh Tables nếu chưa thấy. Không suy ra thiếu FK chỉ vì sơ đồ cũ chưa thêm bảng.
+- Phân công thêm 3 bảng cho TV4; TV1 phối hợp giờ chơi, TV3 phối hợp hóa đơn. Procedure usp_CloseSession hiện tính toàn bộ giờ theo giá giờ; Invoices chưa tách tiền combo. Cần chốt cách tính giờ vượt, đồ gọi thêm, trừ tồn/giao món/hủy và chống tính/trừ kho hai lần trước khi triển khai mua combo.
+- Chưa đổi connection string ứng dụng; localhost\\SQLEXPRESS còn BilliardDB bản 13 bảng riêng. Kiểm tra mục tiêu kết nối trước mọi thao tác tiếp theo. Chưa sửa code ứng dụng, chưa commit/push. Bộ SDS/HTML/ZIP chưa tái xuất theo schema 24 bảng; mục này là trạng thái bàn giao mới nhất.
+
+## 12. Chia sẻ database cho nhóm qua main — 01/10/2026
+
+- Người dùng yêu cầu đưa database mới lên Git và xác nhận **đẩy lên main**. Chỉ chia sẻ script SQL, dữ liệu mẫu và hướng dẫn; không đưa .bak/.mdf/.ldf, mật khẩu, cấu hình kết nối cá nhân hoặc bộ SDS chưa được yêu cầu publish vào commit database.
+- Trước khi publish: nhánh làm việc Hung ở 4cbb885, origin/main ở 9837936; phần code dashboard chỉ có trên Hung. Commit database được chuẩn bị từ main để không kèm dashboard vào bản cập nhật database.
+- Cập nhật README gốc và BMS_Database_Starter/README_VI.md theo tên file hiện có; bỏ hướng dẫn chạy 01–04 đã gộp. Identity integration ghi rõ repo dùng .NET 8, database BilliardDB và model ví dụ cũ chưa đủ cho schema mở rộng.
+- Máy mới: chạy BilliardDB_Full.sql một lần. Bản mở rộng 21 bảng: chỉ chạy 05 rồi Verify. Bản 24 bảng: chỉ Verify. Bản 13 bảng chưa có script nâng lên 24; kiểm tra riêng, không DROP hoặc chạy Full lên dữ liệu cũ.
+- Đã sửa chuỗi tiếng Việt bị lỗi mã hóa trong **nguồn seed của Full SQL** (tên người dùng/món/danh mục/ghi chú); không sửa/reseed các dòng hiện có trên localhost / BilliardDB. Các ghi chú lỗi dấu ở mục 10–11 là trạng thái dữ liệu live cũ, vẫn cần xử lý riêng.
+- Đã chạy Full SQL đã cập nhật trên database thử riêng mới tạo, xác nhận 24 bảng, 5 procedure, số lượng seed, tên tiếng Việt đúng, mật khẩu NULL và 7 FK combo trusted. Kiểm tra combo rollback cũng PASS trên database thử. Database thử đã được xóa; BilliardDB hiện có không bị thay đổi trong bước kiểm thử này.
+- Hướng dẫn lấy bản mới từ nhánh main đã được ghi trong README_VI.md. Git chỉ đồng bộ file; thành viên vẫn phải mở đúng SQL script trong SSMS và áp dụng trên instance local của mình.

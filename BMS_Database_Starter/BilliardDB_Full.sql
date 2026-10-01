@@ -1,5 +1,6 @@
 ﻿/* BMS Starter v1 - SQL Server 2019+.
-   Run the WHOLE file in SSMS. Uses a NEW database BilliardDB.
+   Expanded 2026-10-01: 24 business tables, 5 procedures.
+   Run the WHOLE file in SSMS only for a NEW database BilliardDB.
    No DROP/TRUNCATE; refuses to initialize a database that already has user tables.
    Identity schema V1, string keys, 128-character login/token provider keys.
    Schema owner is SQL scripts (not EF migrations) for this starter.
@@ -297,6 +298,59 @@ BEGIN TRY
         CONSTRAINT CK_Combo_Playtime CHECK (PlaytimeHours > 0)
     );
 
+    -- BEGIN COMBO RELATIONS
+    -- Catalog: which products are included in ONE unit of a combo.
+    CREATE TABLE dbo.ComboItems (
+        ComboId int NOT NULL,
+        ProductId int NOT NULL,
+        Quantity int NOT NULL,
+        CONSTRAINT PK_ComboItems PRIMARY KEY (ComboId, ProductId),
+        CONSTRAINT FK_ComboItems_Combo FOREIGN KEY (ComboId) REFERENCES dbo.Combos(Id),
+        CONSTRAINT FK_ComboItems_Product FOREIGN KEY (ProductId) REFERENCES dbo.Products(Id),
+        CONSTRAINT CK_ComboItems_Quantity CHECK (Quantity > 0)
+    );
+    CREATE INDEX IX_ComboItems_ProductId ON dbo.ComboItems(ProductId);
+
+    -- Purchase: preserve agreed name, price and playtime per combo unit.
+    -- Multiple purchases per session are supported; this does not decide pricing policy.
+    CREATE TABLE dbo.SessionCombos (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_SessionCombos PRIMARY KEY,
+        SessionId int NOT NULL,
+        ComboId int NOT NULL,
+        Quantity int NOT NULL,
+        ComboNameSnapshot nvarchar(100) NOT NULL,
+        UnitPriceSnapshot decimal(18,2) NOT NULL,
+        PlaytimeHoursSnapshot decimal(5,2) NOT NULL,
+        PurchasedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_SessionCombos_Purchased DEFAULT SYSUTCDATETIME(),
+        CreatedById nvarchar(450) NOT NULL,
+        CONSTRAINT FK_SessionCombos_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+        CONSTRAINT FK_SessionCombos_Combo FOREIGN KEY (ComboId) REFERENCES dbo.Combos(Id),
+        CONSTRAINT FK_SessionCombos_CreatedBy FOREIGN KEY (CreatedById) REFERENCES dbo.AspNetUsers(Id),
+        CONSTRAINT CK_SessionCombos_Quantity CHECK (Quantity > 0),
+        CONSTRAINT CK_SessionCombos_Name CHECK (LEN(LTRIM(RTRIM(ComboNameSnapshot))) > 0),
+        CONSTRAINT CK_SessionCombos_Price CHECK (UnitPriceSnapshot >= 0),
+        CONSTRAINT CK_SessionCombos_Hours CHECK (PlaytimeHoursSnapshot > 0)
+    );
+    CREATE INDEX IX_SessionCombos_SessionId ON dbo.SessionCombos(SessionId);
+    CREATE INDEX IX_SessionCombos_ComboId ON dbo.SessionCombos(ComboId);
+    CREATE INDEX IX_SessionCombos_CreatedById ON dbo.SessionCombos(CreatedById);
+
+    -- Purchase contents: copy included products at purchase time.
+    -- Do not recalculate past purchases from the editable ComboItems catalog.
+    CREATE TABLE dbo.SessionComboItems (
+        SessionComboId int NOT NULL,
+        ProductId int NOT NULL,
+        ProductNameSnapshot nvarchar(100) NOT NULL,
+        QuantityPerCombo int NOT NULL,
+        CONSTRAINT PK_SessionComboItems PRIMARY KEY (SessionComboId, ProductId),
+        CONSTRAINT FK_SessionComboItems_Purchase FOREIGN KEY (SessionComboId) REFERENCES dbo.SessionCombos(Id),
+        CONSTRAINT FK_SessionComboItems_Product FOREIGN KEY (ProductId) REFERENCES dbo.Products(Id),
+        CONSTRAINT CK_SessionComboItems_Name CHECK (LEN(LTRIM(RTRIM(ProductNameSnapshot))) > 0),
+        CONSTRAINT CK_SessionComboItems_Quantity CHECK (QuantityPerCombo > 0)
+    );
+    CREATE INDEX IX_SessionComboItems_ProductId ON dbo.SessionComboItems(ProductId);
+    -- END COMBO RELATIONS
+
     CREATE TABLE dbo.WorkShifts (
         Id int IDENTITY NOT NULL CONSTRAINT PK_WorkShifts PRIMARY KEY,
         StaffId nvarchar(450) NOT NULL,
@@ -311,7 +365,7 @@ BEGIN TRY
         CONSTRAINT CK_Shift_Time CHECK (EndTimeUtc IS NULL OR EndTimeUtc >= StartTimeUtc)
     );
     COMMIT;
-    PRINT N'Created full 21 tables successfully. Next: 02_BusinessProcedures.sql';
+    PRINT N'Created full 24 tables successfully. Procedures follow in this file.';
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK;
@@ -523,7 +577,7 @@ BEGIN
     END CATCH
 END;
 GO
-PRINT N'Created 5 procedures. Next: 03_DemoData.sql';
+PRINT N'Created 5 procedures. Demo data follows in this file.';
 
 
 GO
@@ -532,7 +586,7 @@ GO
 
 /* Fictional local-development fixtures. ALL PasswordHash values are NULL.
    These rows cannot sign in with a password until UserManager sets one.
-   Run once after 01 and 02. No existing data is deleted or reset.
+   Runs once after schema and procedures above. No existing data is deleted or reset.
 */
 USE [BilliardDB];
 GO
@@ -559,11 +613,11 @@ BEGIN TRY
     INSERT dbo.AspNetUsers(Id,UserName,NormalizedUserName,Email,NormalizedEmail,FullName,
         PhoneNumber,IsActive,EmployeeCode,HireDate,SecurityStamp,ConcurrencyStamp)
     VALUES
-        (N'demo-admin',N'admin.demo',N'ADMIN.DEMO',N'admin@example.test',N'ADMIN@EXAMPLE.TEST',N'Quáº£n trá»‹ máº«u',N'0900000001',1,N'AD001','2026-01-01',NEWID(),NEWID()),
-        (N'demo-staff-01',N'staff.demo01',N'STAFF.DEMO01',N'staff01@example.test',N'STAFF01@EXAMPLE.TEST',N'NhÃ¢n viÃªn máº«u 01',N'0900000002',1,N'NV001','2026-01-02',NEWID(),NEWID()),
-        (N'demo-staff-02',N'staff.demo02',N'STAFF.DEMO02',N'staff02@example.test',N'STAFF02@EXAMPLE.TEST',N'NhÃ¢n viÃªn máº«u 02',N'0900000003',0,N'NV002','2026-02-01',NEWID(),NEWID()),
-        (N'demo-customer-01',N'customer.demo01',N'CUSTOMER.DEMO01',N'customer01@example.test',N'CUSTOMER01@EXAMPLE.TEST',N'KhÃ¡ch máº«u 01',N'0900000004',1,NULL,NULL,NEWID(),NEWID()),
-        (N'demo-customer-02',N'customer.demo02',N'CUSTOMER.DEMO02',N'customer02@example.test',N'CUSTOMER02@EXAMPLE.TEST',N'KhÃ¡ch máº«u 02',N'0900000005',1,NULL,NULL,NEWID(),NEWID());
+        (N'demo-admin',N'admin.demo',N'ADMIN.DEMO',N'admin@example.test',N'ADMIN@EXAMPLE.TEST',N'Quản trị mẫu',N'0900000001',1,N'AD001','2026-01-01',NEWID(),NEWID()),
+        (N'demo-staff-01',N'staff.demo01',N'STAFF.DEMO01',N'staff01@example.test',N'STAFF01@EXAMPLE.TEST',N'Nhân viên mẫu 01',N'0900000002',1,N'NV001','2026-01-02',NEWID(),NEWID()),
+        (N'demo-staff-02',N'staff.demo02',N'STAFF.DEMO02',N'staff02@example.test',N'STAFF02@EXAMPLE.TEST',N'Nhân viên mẫu 02',N'0900000003',0,N'NV002','2026-02-01',NEWID(),NEWID()),
+        (N'demo-customer-01',N'customer.demo01',N'CUSTOMER.DEMO01',N'customer01@example.test',N'CUSTOMER01@EXAMPLE.TEST',N'Khách mẫu 01',N'0900000004',1,NULL,NULL,NEWID(),NEWID()),
+        (N'demo-customer-02',N'customer.demo02',N'CUSTOMER.DEMO02',N'customer02@example.test',N'CUSTOMER02@EXAMPLE.TEST',N'Khách mẫu 02',N'0900000005',1,NULL,NULL,NEWID(),NEWID());
     INSERT dbo.AspNetUserRoles(UserId,RoleId) VALUES
         (N'demo-admin',N'role-admin'),(N'demo-staff-01',N'role-staff'),(N'demo-staff-02',N'role-staff'),
         (N'demo-customer-01',N'role-customer'),(N'demo-customer-02',N'role-customer');
@@ -580,26 +634,26 @@ BEGIN TRY
     DECLARE @B04 int=(SELECT Id FROM dbo.BilliardTables WHERE TableCode=N'B04');
     DECLARE @B06 int=(SELECT Id FROM dbo.BilliardTables WHERE TableCode=N'B06');
     INSERT dbo.Bookings(CustomerId,TableId,StartAtUtc,EndAtUtc,Notes) VALUES
-        (N'demo-customer-01',@B02,DATEADD(hour,6,@Tomorrow),DATEADD(hour,8,@Tomorrow),N'13:00â€“15:00 giá» Viá»‡t Nam'),
-        (N'demo-customer-02',@B03,DATEADD(hour,8,@Tomorrow),DATEADD(hour,10,@Tomorrow),N'15:00â€“17:00 giá» Viá»‡t Nam');
+        (N'demo-customer-01',@B02,DATEADD(hour,6,@Tomorrow),DATEADD(hour,8,@Tomorrow),N'13:00–15:00 giờ Việt Nam'),
+        (N'demo-customer-02',@B03,DATEADD(hour,8,@Tomorrow),DATEADD(hour,10,@Tomorrow),N'15:00–17:00 giờ Việt Nam');
     INSERT dbo.Bookings(CustomerId,TableId,StartAtUtc,EndAtUtc,Status,CheckedInAtUtc,CheckedInById,Notes)
-    VALUES (N'demo-customer-02',@B06,DATEADD(minute,-10,@Now),DATEADD(minute,110,@Now),'CheckedIn',@Now,N'demo-staff-01',N'KhÃ¡ch Ä‘Ã£ Ä‘áº¿n; chá» nhÃ¢n viÃªn má»Ÿ bÃ n.');
+    VALUES (N'demo-customer-02',@B06,DATEADD(minute,-10,@Now),DATEADD(minute,110,@Now),'CheckedIn',@Now,N'demo-staff-01',N'Khách đã đến; chờ nhân viên mở bàn.');
     INSERT dbo.Bookings(CustomerId,TableId,StartAtUtc,EndAtUtc,Status,CancelledAtUtc,CancelledById,CancellationReason)
     VALUES (N'demo-customer-01',@B02,DATEADD(day,2,@Tomorrow),DATEADD(hour,2,DATEADD(day,2,@Tomorrow)),
-        'Cancelled',@Now,N'demo-customer-01',N'Dá»¯ liá»‡u máº«u: khÃ¡ch Ä‘á»•i káº¿ hoáº¡ch.');
+        'Cancelled',@Now,N'demo-customer-01',N'Dữ liệu mẫu: khách đổi kế hoạch.');
     INSERT dbo.PlaySessions(TableId,CustomerId,OpenedById,StartAtUtc,HourlyRateSnapshot)
     VALUES (@B01,N'demo-customer-01',N'demo-staff-01',DATEADD(minute,-90,@Now),100000);
     INSERT dbo.PlaySessions(TableId,CustomerId,OpenedById,ClosedById,StartAtUtc,EndAtUtc,HourlyRateSnapshot,PlaytimeAmount,Status)
     VALUES (@B04,NULL,N'demo-staff-01',N'demo-staff-01',DATEADD(hour,-3,@Now),DATEADD(hour,-1,@Now),120000,240000,'Closed');
-    INSERT dbo.ProductCategories(Name) VALUES (N'Äá»“ uá»‘ng'),(N'Äá»“ Äƒn');
-    DECLARE @Drink int=(SELECT Id FROM dbo.ProductCategories WHERE Name=N'Äá»“ uá»‘ng');
-    DECLARE @Food int=(SELECT Id FROM dbo.ProductCategories WHERE Name=N'Äá»“ Äƒn');
+    INSERT dbo.ProductCategories(Name) VALUES (N'Đồ uống'),(N'Đồ ăn');
+    DECLARE @Drink int=(SELECT Id FROM dbo.ProductCategories WHERE Name=N'Đồ uống');
+    DECLARE @Food int=(SELECT Id FROM dbo.ProductCategories WHERE Name=N'Đồ ăn');
     INSERT dbo.Products(CategoryId,Name,Price,StockQuantity,IsActive) VALUES
-        (@Drink,N'NÆ°á»›c suá»‘i',15000,50,1),(@Drink,N'TrÃ  Ä‘Ã o',39000,20,1),
-        (@Drink,N'NÆ°á»›c ngá»t',20000,0,1),(@Drink,N'CÃ  phÃª lon',25000,10,0),
-        (@Food,N'Khoai tÃ¢y chiÃªn',45000,15,1),(@Food,N'XÃºc xÃ­ch',30000,20,1);
+        (@Drink,N'Nước suối',15000,50,1),(@Drink,N'Trà đào',39000,20,1),
+        (@Drink,N'Nước ngọt',20000,0,1),(@Drink,N'Cà phê lon',25000,10,0),
+        (@Food,N'Khoai tây chiên',45000,15,1),(@Food,N'Xúc xích',30000,20,1);
     COMMIT;
-    PRINT N'Demo data created. Password login is NOT configured. Next: 04_Verify.sql';
+    PRINT N'Demo data created. Password login is NOT configured. Read-only verification follows in this file.';
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK;
@@ -612,11 +666,13 @@ GO
 
 -----------------------------------------------------------
 
-/* READ ONLY. Run after 01-03 in SSMS. */
-USE [BMS_Starter];
+/* READ ONLY. Run after schema, procedures and seed in SSMS. */
+USE [BilliardDB];
 GO
+-- SSMS creates dbo.sysdiagrams when saving database diagrams; exclude that support table.
 SELECT DB_NAME() AS DatabaseName,
-    (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0) AS TableCount_Expected21,
+    (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0
+     AND NOT (schema_id=SCHEMA_ID(N'dbo') AND name=N'sysdiagrams')) AS TableCount_Expected24,
     (SELECT COUNT(*) FROM sys.procedures WHERE name IN
      ('usp_CreateBooking','usp_CancelBooking','usp_CheckInBooking','usp_OpenSession','usp_CloseSession')) AS ProcedureCount_Expected5;
 SELECT N'Roles' AS Item, COUNT(*) AS Actual, 3 AS ExpectedAfterSeed FROM dbo.AspNetRoles
@@ -634,7 +690,10 @@ UNION ALL SELECT N'OrderDetails',COUNT(*),0 FROM dbo.OrderDetails
 UNION ALL SELECT N'Invoices',COUNT(*),0 FROM dbo.Invoices
 UNION ALL SELECT N'PaymentTransactions',COUNT(*),0 FROM dbo.PaymentTransactions
 UNION ALL SELECT N'Combos',COUNT(*),0 FROM dbo.Combos
-UNION ALL SELECT N'WorkShifts',COUNT(*),0 FROM dbo.WorkShifts;
+UNION ALL SELECT N'WorkShifts',COUNT(*),0 FROM dbo.WorkShifts
+UNION ALL SELECT N'ComboItems',COUNT(*),0 FROM dbo.ComboItems
+UNION ALL SELECT N'SessionCombos',COUNT(*),0 FROM dbo.SessionCombos
+UNION ALL SELECT N'SessionComboItems',COUNT(*),0 FROM dbo.SessionComboItems;
 
 -- Screen 5: Staff listing; show inactive accounts too.
 SELECT u.Id,u.EmployeeCode,u.FullName,u.UserName,u.Email,u.PhoneNumber,u.HireDate,u.IsActive
