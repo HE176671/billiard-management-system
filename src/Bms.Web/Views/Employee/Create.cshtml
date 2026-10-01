@@ -1,4 +1,4 @@
-﻿@model Bms.Web.Models.CreateEmployeeViewModel
+@model Bms.Web.Models.CreateEmployeeViewModel
 @{
     ViewData["Title"] = "Thêm nhân viên mới";
     Layout = "_AdminLayout";
@@ -45,7 +45,8 @@
             </div>
             <div class="col-md-6">
                 <label asp-for="EmployeeCode" class="form-label"></label>
-                <input asp-for="EmployeeCode" class="form-control" placeholder="NV003" />
+                <input asp-for="EmployeeCode" class="form-control" readonly style="background-color: #f1f5f9;" />
+                <div class="form-text">Mã được hệ thống cấp tự động.</div>
                 <span asp-validation-for="EmployeeCode" class="field-error"></span>
             </div>
             <div class="col-md-6">

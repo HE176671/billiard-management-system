@@ -1,0 +1,792 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SDS BMS — Phần Hùng</title><style>
+*{box-sizing:border-box}body{margin:0;background:#eef2f6;color:#172332;font:16px/1.65 "Segoe UI",Arial,sans-serif}main{max-width:1150px;margin:32px auto;padding:48px 60px;background:white;border:1px solid #dde3e9}h1{font-size:30px;margin:48px 0 20px}h1:first-of-type{margin-top:16px}h2{font-size:24px;margin:34px 0 16px}h3{font-size:19px;margin:28px 0 12px}h1,h2,h3{line-height:1.3;color:#111;break-after:avoid}p{margin:12px 0}code{font:0.89em Consolas,monospace;overflow-wrap:anywhere}a{color:#125694}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.5;margin:16px 0 26px}th,td{border:1px solid #d9d9d9;padding:10px 12px;text-align:left;vertical-align:middle;overflow-wrap:anywhere}th{background:#e8eff6;color:#111}tbody tr:nth-child(even){background:#f8fafc}tr{break-inside:avoid}thead{display:table-header-group}.tablewrap{overflow-x:auto}figure{margin:24px 0;padding:20px 10px;border:1px solid #dae3ec;background:#fff;break-inside:avoid}.diagram{overflow:auto;text-align:center}.mermaid{margin:0}.mermaid svg{max-width:100%;height:auto}details{margin:12px;font-size:13px}details pre{overflow:auto;background:#f3f5f7;padding:14px;text-align:left}.notice{background:#edf4fc;border-left:4px solid #386f9e;padding:14px 18px;font-size:14px}.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}button{border:1px solid #bdccd9;border-radius:4px;background:#fff;padding:8px 14px;cursor:pointer;font:inherit;font-size:14px}.error{color:#a31b16} @media(max-width:800px){main{margin:0;padding:24px 18px}table{font-size:12px}th,td{padding:8px}}@media print{body{background:#fff;font-size:10pt}main{margin:0;padding:0;border:0;max-width:none}.controls,.notice,details{display:none}h1{font-size:20pt}h2{font-size:16pt}h3{font-size:13pt}table{font-size:9pt}.tablewrap,.diagram{overflow:visible}figure{padding:8px;break-inside:avoid}h1:not(:first-of-type){break-before:page}a{color:inherit;text-decoration:none}}@page{size:A4;margin:16mm}
+</style></head><body><main><div class="controls"><button onclick="window.print()">In / Lưu PDF</button><button id="download" disabled>Tải bản HTML offline</button></div><div class="notice" id="status">Đang tải bộ vẽ Mermaid. Lần mở bản này cần Internet để hiển thị 7 sơ đồ. Có thể tải bản HTML offline sau khi các sơ đồ hiện đủ.</div><h1>Billiard Management System</h1>
+<h2>Software Design Specification — Phần của Hùng</h2>
+<p><strong>Ngày cập nhật:</strong> 01/10/2026. <strong>Phiên bản:</strong> 1.0. <strong>Người phụ trách theo phân công:</strong> Hùng.</p>
+<p>Tài liệu cung cấp phần thiết kế kiến trúc, package, bốn bảng dữ liệu và thiết kế chi tiết cho đăng nhập, tạo nhân viên, đổi mật khẩu. Cấu trúc đánh số tương ứng mẫu SDS của nhóm; có thể ghép các mục I, II và III vào báo cáo chung. Nội dung giải thích bằng tiếng Việt; tên lớp, bảng và phương thức giữ nguyên theo C# và SQL Server.</p>
+<p><strong>Cách đọc trạng thái:</strong> “Hiện có” nghĩa là đã thấy trong mã nguồn hoặc script, không đồng nghĩa đã kiểm thử chạy thực tế. “Thiết kế cần bổ sung” là hành vi phải triển khai để đáp ứng SDS. “Dự kiến” là thành phần thuộc phạm vi mở rộng mới được giao. Bản SDS không khẳng định các module VNPay, điểm thưởng và gọi món đã hoạt động.</p>
+<p>Nguồn đối chiếu: <code>BMS_Database_Starter/BilliardDB_Full.sql</code>, <code>src/Bms.Web/Program.cs</code>, <code>Data/ApplicationUser.cs</code>, <code>Data/ApplicationDbContext.cs</code>, ba controller Account/Employee/Profile và các ViewModel tương ứng. Repo hiện nhắm <strong>.NET 8</strong>, dùng <strong>ASP.NET Core MVC, Razor, Bootstrap, Identity và EF Core SQL Server 8.x</strong>; tên database trong phần tạo schema là <strong>BilliardDB</strong>. Các thông tin cũ về chưa có project hoặc chỉ có 13 bảng không còn đại diện cho source hiện tại.</p>
+<h3>Change Log</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Date</th><th>A / M / D</th><th>In charge</th><th>Change Description</th></tr></thead><tbody>
+<tr><td>01/10/2026</td><td>A</td><td>Hùng</td><td>Soạn phần kiến trúc, package, bốn bảng, thiết kế đăng nhập/tạo Staff/đổi mật khẩu và bảo mật; đối chiếu với source hiện tại</td></tr>
+</tbody></table></div>
+<h1>I. High Level Design</h1>
+<h2>1. Software Architecture</h2>
+<h3>1.1 Kiến trúc tổng thể</h3>
+<p>BMS sử dụng kiến trúc ứng dụng web MVC triển khai trong một ứng dụng ASP.NET Core. Trình duyệt hiển thị HTML do Razor tạo và gửi yêu cầu HTTP đến controller. Controller tiếp nhận ViewModel, kiểm tra dữ liệu và điều phối xử lý. ASP.NET Core Identity chịu trách nhiệm tài khoản, mật khẩu, vai trò và cookie đăng nhập. EF Core ánh xạ dữ liệu tài khoản vào SQL Server; các nghiệp vụ đặt bàn/phiên chơi dùng procedure có tham số theo thiết kế database.</p>
+<p>Các tầng dưới đây là phân chia trách nhiệm logic; không có nghĩa mỗi tầng là một server hoặc microservice riêng. Các module thanh toán, F&amp;B, ca làm và thành viên được đưa vào kiến trúc đích theo phân công mới, chưa coi là chức năng đã triển khai. Đối với nghiệp vụ phức tạp, nhóm có thể bổ sung service; source của Hùng hiện gọi Identity trực tiếp từ controller.</p>
+<figure><div class="diagram"><pre class="mermaid">flowchart TB
+    Actor[&quot;Admin / Staff / Customer&quot;] --&gt; Browser[&quot;Trình duyệt&lt;br/&gt;HTML, CSS, Bootstrap, JavaScript&quot;]
+    subgraph App[&quot;Bms.Web — ASP.NET Core MVC&quot;]
+        Gate[&quot;Routing + Authentication + Authorization&lt;br/&gt;Anti-forgery cho POST&quot;]
+        Controllers[&quot;MVC Controllers&lt;br/&gt;Account, Employee, Profile và các module nghiệp vụ&quot;]
+        Views[&quot;Razor Views + ViewModels&quot;]
+        Identity[&quot;ASP.NET Core Identity&lt;br/&gt;UserManager + SignInManager&quot;]
+        Biz[&quot;Xử lý nghiệp vụ&lt;br/&gt;Bàn, Booking, F&amp;B, Ca làm, Thanh toán, Thành viên&quot;]
+        Data[&quot;ApplicationDbContext / EF Core&lt;br/&gt;SQL có tham số và procedure&quot;]
+        Payment[&quot;VNPay adapter&lt;br/&gt;Dự kiến — TV3 phụ trách&quot;]
+        Gate --&gt; Controllers
+        Controllers --&gt; Views
+        Controllers --&gt; Identity
+        Controllers --&gt; Biz
+        Identity --&gt; Data
+        Biz --&gt; Data
+        Biz -.-&gt; Payment
+    end
+    Browser --&gt;|&quot;HTTPS request + cookie + form&quot;| Gate
+    Views --&gt;|&quot;HTML response&quot;| Browser
+    Data --&gt;|&quot;SQL qua kết nối server&quot;| DB[(&quot;SQL Server&lt;br/&gt;BilliardDB&quot;)]
+    Payment -.-&gt;|&quot;Tạo URL thanh toán có chữ ký&quot;| Browser
+    Browser -.-&gt;|&quot;Chuyển hướng thanh toán&quot;| VNPay[&quot;VNPay — hệ thống ngoài, dự kiến&quot;]
+    VNPay -.-&gt;|&quot;IPN server-to-server&quot;| Payment
+    VNPay -.-&gt;|&quot;Return URL qua trình duyệt&quot;| Browser</pre></div><details><summary>Xem mã sơ đồ</summary><pre>flowchart TB
+    Actor[&quot;Admin / Staff / Customer&quot;] --&gt; Browser[&quot;Trình duyệt&lt;br/&gt;HTML, CSS, Bootstrap, JavaScript&quot;]
+    subgraph App[&quot;Bms.Web — ASP.NET Core MVC&quot;]
+        Gate[&quot;Routing + Authentication + Authorization&lt;br/&gt;Anti-forgery cho POST&quot;]
+        Controllers[&quot;MVC Controllers&lt;br/&gt;Account, Employee, Profile và các module nghiệp vụ&quot;]
+        Views[&quot;Razor Views + ViewModels&quot;]
+        Identity[&quot;ASP.NET Core Identity&lt;br/&gt;UserManager + SignInManager&quot;]
+        Biz[&quot;Xử lý nghiệp vụ&lt;br/&gt;Bàn, Booking, F&amp;B, Ca làm, Thanh toán, Thành viên&quot;]
+        Data[&quot;ApplicationDbContext / EF Core&lt;br/&gt;SQL có tham số và procedure&quot;]
+        Payment[&quot;VNPay adapter&lt;br/&gt;Dự kiến — TV3 phụ trách&quot;]
+        Gate --&gt; Controllers
+        Controllers --&gt; Views
+        Controllers --&gt; Identity
+        Controllers --&gt; Biz
+        Identity --&gt; Data
+        Biz --&gt; Data
+        Biz -.-&gt; Payment
+    end
+    Browser --&gt;|&quot;HTTPS request + cookie + form&quot;| Gate
+    Views --&gt;|&quot;HTML response&quot;| Browser
+    Data --&gt;|&quot;SQL qua kết nối server&quot;| DB[(&quot;SQL Server&lt;br/&gt;BilliardDB&quot;)]
+    Payment -.-&gt;|&quot;Tạo URL thanh toán có chữ ký&quot;| Browser
+    Browser -.-&gt;|&quot;Chuyển hướng thanh toán&quot;| VNPay[&quot;VNPay — hệ thống ngoài, dự kiến&quot;]
+    VNPay -.-&gt;|&quot;IPN server-to-server&quot;| Payment
+    VNPay -.-&gt;|&quot;Return URL qua trình duyệt&quot;| Browser</pre></details></figure>
+<p><strong>Hình I.1 — Kiến trúc logic toàn hệ thống.</strong> Nét đứt biểu thị tích hợp dự kiến. Luồng IPN và Return URL thuộc thiết kế thanh toán của TV3, cần thống nhất trước khi triển khai; không tự công nhận thanh toán chỉ từ thông tin trình duyệt gửi về.</p>
+<h3>1.2 Architecture component descriptions</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>No</th><th>Component</th><th>Description</th></tr></thead><tbody>
+<tr><td>C01</td><td>Client tier — Web browser</td><td>Hiển thị giao diện, nhập dữ liệu và gửi yêu cầu. Không kết nối trực tiếp database, không tự quyết định quyền hoặc kết quả giao dịch</td></tr>
+<tr><td>A01</td><td>Routing và security pipeline</td><td>Chọn action, xác thực cookie, kiểm tra quyền; kiểm tra anti-forgery ở các POST có thay đổi dữ liệu</td></tr>
+<tr><td>A02</td><td>Controllers</td><td>Điều phối yêu cầu và trả View/Redirect. Account xử lý đăng nhập; Employee quản lý Staff; Profile xử lý đổi mật khẩu của người đang đăng nhập</td></tr>
+<tr><td>A03</td><td>Razor Views và ViewModels</td><td>Views dựng HTML; ViewModels giới hạn dữ liệu đầu vào/đầu ra và khai báo validation. Không đưa PasswordHash ra giao diện</td></tr>
+<tr><td>A04</td><td>ASP.NET Core Identity</td><td>Quản lý user, role, kiểm tra và băm mật khẩu, khóa tạm và cookie. Tất cả vai trò dùng chung nguồn tài khoản</td></tr>
+<tr><td>A05</td><td>Các module nghiệp vụ</td><td>Bàn/phiên, booking/ca làm, F&amp;B, thanh toán, điểm và hạng. Các nhóm cung cấp thiết kế chi tiết trong phần II của mình</td></tr>
+<tr><td>A06</td><td>Data access</td><td>ApplicationDbContext và Identity EF stores truy cập bảng tài khoản. Procedure có tham số xử lý nghiệp vụ cần kiểm soát transaction/đặt trùng</td></tr>
+<tr><td>D01</td><td>SQL Server</td><td>Lưu dữ liệu và thực thi PK, FK, UNIQUE, CHECK, transaction. Schema do SQL scripts quản lý theo SQL-first</td></tr>
+<tr><td>E01</td><td>VNPay adapter — dự kiến</td><td>Biên tích hợp bên ngoài, tách khỏi quản lý nhân viên. Xác thực thông báo thanh toán, xử lý lặp và cập nhật trạng thái do TV3 thiết kế</td></tr>
+</tbody></table></div>
+<h3>1.3 Ranh giới trách nhiệm</h3>
+<p>Hùng phụ trách tài khoản và quyền dùng chung cho các module. Các controller nghiệp vụ nhận định danh người gọi từ <code>HttpContext.User</code>, không tin <code>StaffId</code>, <code>CustomerId</code> hay role do form tùy ý gửi. Membership tier chỉ biểu thị ưu đãi; vai trò Admin/Staff/Customer quyết định quyền. Nâng hạng khách hàng không cấp quyền quản trị.</p>
+<p>Ứng dụng dùng cookie Identity cho website MVC. Kiến trúc này không có JWT Security Filter như ví dụ trong template. SQL scripts là nguồn quản lý schema; ứng dụng không gọi <code>EnsureCreated</code>, <code>Migrate</code> hoặc áp dụng migration khởi tạo lên BilliardDB đã có bảng.</p>
+<h2>2. Package Diagram</h2>
+<h3>2.1 Sơ đồ package</h3>
+<p>Trong C#, package được biểu diễn bằng namespace/thư mục và các dependency framework. Sơ đồ sau thể hiện phụ thuộc, không phải thứ tự thực thi. <code>Views</code> và <code>wwwroot</code> là nhóm tài nguyên, không phải namespace C#.</p>
+<figure><div class="diagram"><pre class="mermaid">flowchart LR
+    Root[&quot;Bms.Web&lt;br/&gt;Program.cs — composition root&quot;]
+    C[&quot;«namespace» Bms.Web.Controllers&lt;br/&gt;Account, Employee, Profile&lt;br/&gt;Home, Dashboard, Staff, Customer&quot;]
+    M[&quot;«namespace» Bms.Web.Models&lt;br/&gt;LoginViewModel&lt;br/&gt;CreateEmployeeViewModel&lt;br/&gt;ChangePasswordViewModel&quot;]
+    V[&quot;«folder» Views&lt;br/&gt;Account / Employee / Profile / Shared&quot;]
+    W[&quot;«folder» wwwroot&lt;br/&gt;CSS / JS / Bootstrap&quot;]
+    D[&quot;«namespace» Bms.Web.Data&lt;br/&gt;ApplicationUser&lt;br/&gt;ApplicationDbContext&lt;br/&gt;DbInitializer&quot;]
+    I[&quot;«framework» Microsoft.AspNetCore.Identity&quot;]
+    EF[&quot;«framework» Identity.EntityFrameworkCore&lt;br/&gt;Microsoft.EntityFrameworkCore.SqlServer&quot;]
+    Future[&quot;«proposed namespace» Bms.Web.Integrations.VNPay&lt;br/&gt;TV3 thiết kế, chưa có trong source&quot;]
+    Root -.-&gt;|&quot;đăng ký DI&quot;| C
+    Root -.-&gt; D
+    Root -.-&gt; I
+    C -.-&gt;|&quot;nhận/trả model&quot;| M
+    C -.-&gt;|&quot;sử dụng entity/context&quot;| D
+    C -.-&gt;|&quot;gọi manager&quot;| I
+    C -.-&gt;|&quot;chọn view&quot;| V
+    V -.-&gt;|&quot;strongly typed model&quot;| M
+    V -.-&gt;|&quot;tham chiếu tài nguyên&quot;| W
+    D -.-&gt;|&quot;kế thừa IdentityUser&quot;| I
+    D -.-&gt;|&quot;kế thừa IdentityDbContext&quot;| EF
+    C -.-&gt;|&quot;tích hợp dự kiến&quot;| Future</pre></div><details><summary>Xem mã sơ đồ</summary><pre>flowchart LR
+    Root[&quot;Bms.Web&lt;br/&gt;Program.cs — composition root&quot;]
+    C[&quot;«namespace» Bms.Web.Controllers&lt;br/&gt;Account, Employee, Profile&lt;br/&gt;Home, Dashboard, Staff, Customer&quot;]
+    M[&quot;«namespace» Bms.Web.Models&lt;br/&gt;LoginViewModel&lt;br/&gt;CreateEmployeeViewModel&lt;br/&gt;ChangePasswordViewModel&quot;]
+    V[&quot;«folder» Views&lt;br/&gt;Account / Employee / Profile / Shared&quot;]
+    W[&quot;«folder» wwwroot&lt;br/&gt;CSS / JS / Bootstrap&quot;]
+    D[&quot;«namespace» Bms.Web.Data&lt;br/&gt;ApplicationUser&lt;br/&gt;ApplicationDbContext&lt;br/&gt;DbInitializer&quot;]
+    I[&quot;«framework» Microsoft.AspNetCore.Identity&quot;]
+    EF[&quot;«framework» Identity.EntityFrameworkCore&lt;br/&gt;Microsoft.EntityFrameworkCore.SqlServer&quot;]
+    Future[&quot;«proposed namespace» Bms.Web.Integrations.VNPay&lt;br/&gt;TV3 thiết kế, chưa có trong source&quot;]
+    Root -.-&gt;|&quot;đăng ký DI&quot;| C
+    Root -.-&gt; D
+    Root -.-&gt; I
+    C -.-&gt;|&quot;nhận/trả model&quot;| M
+    C -.-&gt;|&quot;sử dụng entity/context&quot;| D
+    C -.-&gt;|&quot;gọi manager&quot;| I
+    C -.-&gt;|&quot;chọn view&quot;| V
+    V -.-&gt;|&quot;strongly typed model&quot;| M
+    V -.-&gt;|&quot;tham chiếu tài nguyên&quot;| W
+    D -.-&gt;|&quot;kế thừa IdentityUser&quot;| I
+    D -.-&gt;|&quot;kế thừa IdentityDbContext&quot;| EF
+    C -.-&gt;|&quot;tích hợp dự kiến&quot;| Future</pre></details></figure>
+<p><strong>Hình I.2 — Package Diagram.</strong> Mũi tên nét đứt biểu thị dependency; riêng namespace VNPay được gắn nhãn dự kiến. Không có dependency từ Data ngược về Controllers/Views.</p>
+<h3>2.2 Package descriptions và quy ước đặt tên</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Package / thư mục</th><th>Trách nhiệm</th><th>Quy ước và ví dụ</th></tr></thead><tbody>
+<tr><td><code>Bms.Web.Controllers</code></td><td>Tiếp nhận HTTP, kiểm tra quyền, điều phối xử lý</td><td>PascalCase và hậu tố <code>Controller</code>: <code>EmployeeController</code>; action <code>Login</code>, <code>Create</code>, <code>ChangePassword</code></td></tr>
+<tr><td><code>Bms.Web.Models</code></td><td>Dữ liệu form và hiển thị, validation</td><td>PascalCase và hậu tố <code>ViewModel</code>: <code>LoginViewModel</code>, <code>CreateEmployeeViewModel</code>; không bind trực tiếp toàn bộ entity từ form</td></tr>
+<tr><td><code>Bms.Web.Data</code></td><td>Entity, mapping và khởi tạo dữ liệu Development</td><td><code>ApplicationUser</code>, <code>ApplicationDbContext</code>, <code>DbInitializer</code>; không viết HTML tại đây</td></tr>
+<tr><td><code>Views/{Controller}</code></td><td>Giao diện Razor theo action</td><td><code>Views/Account/Login.cshtml</code>, <code>Views/Employee/Create.cshtml</code>, <code>Views/Profile/ChangePassword.cshtml</code></td></tr>
+<tr><td><code>Views/Shared</code></td><td>Layout và thành phần dùng chung</td><td><code>_Layout.cshtml</code>; tên partial có tiền tố <code>_</code></td></tr>
+<tr><td><code>wwwroot</code></td><td>Tài nguyên trình duyệt</td><td>Tên CSS/JS rõ mục đích; không lưu connection string hoặc khóa VNPay</td></tr>
+<tr><td><code>Bms.Web.Integrations.VNPay</code> — dự kiến</td><td>Adapter giao tiếp VNPay</td><td>Namespace đề xuất cho TV3; tên lớp cần chốt khi triển khai</td></tr>
+</tbody></table></div>
+<p>Kiểu và public member dùng PascalCase; tham số/biến cục bộ dùng camelCase; dependency private dùng <code>_userManager</code>, <code>_signInManager</code>. Phương thức bất đồng bộ mới nên có hậu tố Async; action hiện hữu giữ nguyên tên route đang dùng. Tên bảng và cột giữ đúng PascalCase của SQL script. Các module bổ sung phải dùng cùng <code>ApplicationUser</code> và cùng cấu hình Identity.</p>
+<h2>3. Database Design — Bốn bảng của Hùng</h2>
+<h3>3.0 Mô tả file và quan hệ</h3>
+<p><code>BMS_Database_Starter/BilliardDB_Full.sql</code> khai báo 21 bảng, gồm bộ Identity và các bảng nghiệp vụ mở rộng; cũng chứa procedure, seed và phần truy vấn kiểm tra. Tài liệu dưới đây mô tả <strong>DDL trong file</strong>, chưa xác nhận 21 bảng đó đều đã được triển khai trên SQL Server local. Không chạy nguyên script này lên database đang có dữ liệu.</p>
+<p>Các mục “Constraints” phản ánh đúng SQL hiện có. Những kiểm tra cần làm ở ứng dụng được ghi riêng; không biến yêu cầu nghiệp vụ thành một CHECK/NOT NULL chưa tồn tại trong database.</p>
+<figure><div class="diagram"><pre class="mermaid">erDiagram
+    MembershipTiers o|--o{ AspNetUsers : &quot;TierId optional&quot;
+    AspNetUsers ||--o{ AspNetUserRoles : &quot;UserId&quot;
+    AspNetRoles ||--o{ AspNetUserRoles : &quot;RoleId&quot;
+    MembershipTiers {
+        int Id PK
+        nvarchar TierName UK
+        decimal DiscountPercent
+    }
+    AspNetUsers {
+        nvarchar Id PK
+        nvarchar NormalizedUserName UK
+        nvarchar NormalizedEmail UK
+        nvarchar EmployeeCode UK
+        int RewardPoints
+        int TierId FK
+        bit IsActive
+    }
+    AspNetRoles {
+        nvarchar Id PK
+        nvarchar Name
+        nvarchar NormalizedName UK
+    }
+    AspNetUserRoles {
+        nvarchar UserId PK,FK
+        nvarchar RoleId PK,FK
+    }</pre></div><details><summary>Xem mã sơ đồ</summary><pre>erDiagram
+    MembershipTiers o|--o{ AspNetUsers : &quot;TierId optional&quot;
+    AspNetUsers ||--o{ AspNetUserRoles : &quot;UserId&quot;
+    AspNetRoles ||--o{ AspNetUserRoles : &quot;RoleId&quot;
+    MembershipTiers {
+        int Id PK
+        nvarchar TierName UK
+        decimal DiscountPercent
+    }
+    AspNetUsers {
+        nvarchar Id PK
+        nvarchar NormalizedUserName UK
+        nvarchar NormalizedEmail UK
+        nvarchar EmployeeCode UK
+        int RewardPoints
+        int TierId FK
+        bit IsActive
+    }
+    AspNetRoles {
+        nvarchar Id PK
+        nvarchar Name
+        nvarchar NormalizedName UK
+    }
+    AspNetUserRoles {
+        nvarchar UserId PK,FK
+        nvarchar RoleId PK,FK
+    }</pre></details></figure>
+<p><strong>Hình I.3 — ERD phần tài khoản và hạng thành viên.</strong> ERD rút gọn cột để dễ đọc; bảng mô tả bên dưới là danh sách đầy đủ. Một user có 0 hoặc 1 tier; một tier có 0 đến nhiều user. User và Role có quan hệ nhiều–nhiều qua AspNetUserRoles. Ứng dụng hiện gán một role khi tạo tài khoản nhưng schema không giới hạn mỗi user chỉ một role.</p>
+<h3>3.1 AspNetUsers</h3>
+<p><strong>Mục đích:</strong> nguồn tài khoản chung của Admin, Staff, Customer; lưu thông tin nhận diện, thông tin nhân viên, trạng thái bảo mật và liên kết hạng thành viên. <strong>PK:</strong> Id. <strong>FK:</strong> TierId → MembershipTiers.Id.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td>nvarchar(450), NOT NULL, PK</td><td>Khóa chuỗi Identity; không phải số tự tăng</td></tr>
+<tr><td><code>UserName</code></td><td>nvarchar(256), NULL</td><td>Tên đăng nhập gốc; form tạo Staff bắt buộc nhập</td></tr>
+<tr><td><code>NormalizedUserName</code></td><td>nvarchar(256), NULL; unique filtered index <code>UserNameIndex</code> khi khác NULL</td><td>Giá trị chuẩn hóa phục vụ tra cứu; Identity quản lý</td></tr>
+<tr><td><code>Email</code></td><td>nvarchar(256), NULL</td><td>Email gốc; form tạo Staff bắt buộc và kiểm tra định dạng</td></tr>
+<tr><td><code>NormalizedEmail</code></td><td>nvarchar(256), NULL; unique filtered index <code>EmailIndex</code> khi khác NULL</td><td>Không trùng email sau chuẩn hóa; cấu hình RequireUniqueEmail=true</td></tr>
+<tr><td><code>EmailConfirmed</code></td><td>bit, NOT NULL, DEFAULT 0</td><td>Cờ xác nhận email; hiện chưa bắt buộc xác nhận để đăng nhập</td></tr>
+<tr><td><code>PasswordHash</code></td><td>nvarchar(max), NULL</td><td>Hash do Identity tạo; NULL không có nghĩa mật khẩu rỗng hợp lệ</td></tr>
+<tr><td><code>SecurityStamp</code></td><td>nvarchar(max), NULL</td><td>Dấu thay đổi bảo mật để kiểm tra tính hợp lệ của phiên đăng nhập</td></tr>
+<tr><td><code>ConcurrencyStamp</code></td><td>nvarchar(max), NULL</td><td>Token kiểm soát cập nhật đồng thời của Identity; không phải rowversion</td></tr>
+<tr><td><code>PhoneNumber</code></td><td>nvarchar(20), NULL; CHECK khác chuỗi trắng nếu có; unique <code>UX_User_Phone</code> khi khác NULL</td><td>Cần chuẩn hóa thống nhất trước lưu; index chỉ chặn chuỗi trùng</td></tr>
+<tr><td><code>PhoneNumberConfirmed</code></td><td>bit, NOT NULL, DEFAULT 0</td><td>Cờ xác nhận số điện thoại</td></tr>
+<tr><td><code>TwoFactorEnabled</code></td><td>bit, NOT NULL, DEFAULT 0</td><td>Dự phòng 2FA; chưa có luồng giao diện 2FA đầy đủ trong phần này</td></tr>
+<tr><td><code>LockoutEnd</code></td><td>datetimeoffset(7), NULL</td><td>Mốc hết khóa tạm khi đăng nhập sai</td></tr>
+<tr><td><code>LockoutEnabled</code></td><td>bit, NOT NULL, DEFAULT 1</td><td>Cho phép cơ chế khóa tạm áp dụng cho user</td></tr>
+<tr><td><code>AccessFailedCount</code></td><td>int, NOT NULL, DEFAULT 0; CHECK &gt;= 0</td><td>Bộ đếm thất bại do Identity quản lý</td></tr>
+<tr><td><code>FullName</code></td><td>nvarchar(100), NOT NULL; CHECK LEN(LTRIM(RTRIM(FullName))) &gt; 0</td><td>Họ tên hiển thị, không chấp nhận chỉ khoảng trắng</td></tr>
+<tr><td><code>IsActive</code></td><td>bit, NOT NULL, DEFAULT 1</td><td>Khóa quản trị; false phải chặn đăng nhập và truy cập được bảo vệ</td></tr>
+<tr><td><code>CreatedAtUtc</code></td><td>datetime2(0), NOT NULL, DEFAULT SYSUTCDATETIME()</td><td>Thời điểm tạo theo UTC</td></tr>
+<tr><td><code>EmployeeCode</code></td><td>nvarchar(20), NULL; CHECK không trắng nếu có; unique <code>UX_User_EmployeeCode</code> khi khác NULL</td><td>Mã nhân viên; tính duy nhất áp dụng toàn bảng, không chỉ role Staff</td></tr>
+<tr><td><code>RewardPoints</code></td><td>int, NOT NULL, DEFAULT 0</td><td>Script chưa có CHECK &gt;= 0; quy tắc cộng/trừ điểm thuộc TV3/TV4</td></tr>
+<tr><td><code>TierId</code></td><td>int, NULL, FK → MembershipTiers.Id</td><td>NULL nghĩa chưa gán hạng; FK không có ON DELETE CASCADE</td></tr>
+<tr><td><code>HireDate</code></td><td>date, NULL</td><td>Ngày vào làm, không chuyển UTC</td></tr>
+</tbody></table></div>
+<p><strong>Liên kết ngoài phần Hùng:</strong> bảng này được các bảng Identity phụ thuộc và các bảng Bookings, PlaySessions, Invoices, WorkShifts tham chiếu. Các FK nghiệp vụ không khai báo cascade delete trong script. Do đó quản lý nhân viên ưu tiên vô hiệu hóa, không xóa tài khoản có lịch sử.</p>
+<p><strong>Mapping cần bổ sung:</strong> <code>ApplicationUser.cs</code> hiện có các trường nhân viên nhưng chưa có RewardPoints/TierId/navigation MembershipTier. Cần mapping rõ nếu module thành viên đọc/ghi qua EF; không tự coi chúng đã có chỉ vì SQL đã khai báo.</p>
+<h3>3.2 AspNetRoles</h3>
+<p><strong>Mục đích:</strong> lưu nhóm quyền Admin, Staff, Customer. Hạng thành viên không lưu tại đây.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td>nvarchar(450), NOT NULL, PK <code>PK_AspNetRoles</code></td><td>ID vai trò, được AspNetUserRoles tham chiếu</td></tr>
+<tr><td><code>Name</code></td><td>nvarchar(256), NULL</td><td>Tên role hiển thị và dùng trong Authorize, ví dụ Admin</td></tr>
+<tr><td><code>NormalizedName</code></td><td>nvarchar(256), NULL; unique <code>RoleNameIndex</code> khi khác NULL</td><td>Tên chuẩn hóa phục vụ tra cứu; ví dụ ADMIN</td></tr>
+<tr><td><code>ConcurrencyStamp</code></td><td>nvarchar(max), NULL</td><td>Kiểm soát sửa role đồng thời qua Identity</td></tr>
+</tbody></table></div>
+<p>Seed trong SQL định nghĩa ba role Admin/Staff/Customer. Code không nhận role Admin từ form đăng ký công khai. SQL cho phép NULL ở một số cột vì theo schema Identity; thao tác tạo role hợp lệ phải đi qua cơ chế kiểm tra của Identity.</p>
+<h3>3.3 AspNetUserRoles</h3>
+<p><strong>Mục đích:</strong> bảng nối tài khoản với vai trò. <strong>PK ghép:</strong> (UserId, RoleId).</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>UserId</code></td><td>nvarchar(450), NOT NULL; PK; FK → AspNetUsers.Id, ON DELETE CASCADE</td><td>Tài khoản được gán role</td></tr>
+<tr><td><code>RoleId</code></td><td>nvarchar(450), NOT NULL; PK; FK → AspNetRoles.Id, ON DELETE CASCADE</td><td>Vai trò được cấp; có index <code>IX_AspNetUserRoles_RoleId</code></td></tr>
+</tbody></table></div>
+<p>PK ghép ngăn cùng một cặp user–role xuất hiện hai lần. Cascade chỉ mô tả việc dọn liên kết khi bản ghi cha được xóa hợp lệ; không cấp quyền cho Admin xóa tài khoản có lịch sử nghiệp vụ. Luồng tạo Staff sử dụng <code>AddToRoleAsync(user, &quot;Staff&quot;)</code>, không tự chèn RoleId từ dữ liệu trình duyệt.</p>
+<h3>3.4 MembershipTiers</h3>
+<p><strong>Mục đích:</strong> danh mục hạng thành viên và phần trăm ưu đãi. Hùng mô tả cấu trúc; TV4 phụ trách thuật toán tính điểm/nâng hạng, phối hợp TV3 về điểm phát sinh sau thanh toán.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td>int, IDENTITY, NOT NULL, PK <code>PK_MembershipTiers</code></td><td>Khóa hạng tự tăng</td></tr>
+<tr><td><code>TierName</code></td><td>nvarchar(50), NOT NULL; UNIQUE <code>UQ_MembershipTiers_Name</code>; CHECK không trắng</td><td>Tên hạng; chưa chốt tên cụ thể trong seed hiện tại</td></tr>
+<tr><td><code>DiscountPercent</code></td><td>decimal(5,2), NOT NULL, DEFAULT 0; CHECK từ 0 đến 100</td><td>Phần trăm giảm giá; 10.00 biểu diễn 10%, không phải hệ số 0.10</td></tr>
+</tbody></table></div>
+<p>Script chưa có MinPoints, MaxPoints, thứ tự hạng, thời hạn hạng hoặc lịch sử điểm. Không tự thêm các cột này vào bảng mô tả. Nếu tự động nâng hạng, TV4 phải chốt nơi lưu ngưỡng và quy tắc trước khi triển khai; thay đổi schema cần script nâng cấp riêng. Tier được tham chiếu không xóa được bằng FK hiện có nếu chưa xử lý user liên quan. Cần thống nhất ưu đãi áp dụng tiền bàn, F&amp;B hay cả hai và thời điểm chụp ưu đãi trên hóa đơn.</p>
+<h1>II. Detailed Code Design</h1>
+<h2>1. Quản lý tài khoản và nhân viên</h2>
+<p>Phần này gồm ba chức năng được giao cho Hùng: Login, Tạo nhân viên và Đổi mật khẩu. GET trả form; POST nhận dữ liệu và thực hiện thao tác. Các sequence mô tả thiết kế đích; chỗ khác với code đã được đánh dấu ngay dưới sơ đồ và tổng hợp ở phụ lục.</p>
+<h3>1.1 Class Diagram</h3>
+<figure><div class="diagram"><pre class="mermaid">classDiagram
+    class IdentityUser {
+        +string Id
+        +string UserName
+        +string Email
+        +string PasswordHash
+        +string SecurityStamp
+        +string ConcurrencyStamp
+    }
+    class ApplicationUser {
+        +string FullName
+        +bool IsActive
+        +DateTime CreatedAtUtc
+        +string EmployeeCode
+        +DateOnly HireDate
+    }
+    class AccountController {
+        -UserManager userManager
+        -SignInManager signInManager
+        +Login(LoginViewModel, returnUrl) Task~IActionResult~
+        +Logout() Task~IActionResult~
+    }
+    class EmployeeController {
+        -UserManager userManager
+        +Create(CreateEmployeeViewModel) Task~IActionResult~
+        +Index(search, status, page) Task~IActionResult~
+        +ToggleLock(id) Task~IActionResult~
+        -GenerateNextEmployeeCodeAsync() Task~string~
+    }
+    class ProfileController {
+        -UserManager userManager
+        -SignInManager signInManager
+        +ChangePassword(ChangePasswordViewModel) Task~IActionResult~
+    }
+    class LoginViewModel {
+        +string Username
+        +string Password
+        +bool RememberMe
+    }
+    class CreateEmployeeViewModel {
+        +string FullName
+        +string UserName
+        +string Email
+        +string PhoneNumber
+        +string EmployeeCode
+        +DateOnly HireDate
+        +string Password
+        +string ConfirmPassword
+    }
+    class ChangePasswordViewModel {
+        +string CurrentPassword
+        +string NewPassword
+        +string ConfirmPassword
+    }
+    class UserManager {
+        +FindByNameAsync(name)
+        +CreateAsync(user, password)
+        +AddToRoleAsync(user, role)
+        +GetUserAsync(principal)
+        +ChangePasswordAsync(user, oldPassword, newPassword)
+    }
+    class SignInManager {
+        +PasswordSignInAsync(user, password, rememberMe, lockoutOnFailure)
+        +RefreshSignInAsync(user)
+        +SignOutAsync()
+    }
+    class IdentityEFStores
+    class IdentityDbContext
+    class ApplicationDbContext {
+        +OnModelCreating(builder)
+    }
+    IdentityUser &lt;|-- ApplicationUser
+    IdentityDbContext &lt;|-- ApplicationDbContext
+    AccountController --&gt; UserManager : DI
+    AccountController --&gt; SignInManager : DI
+    EmployeeController --&gt; UserManager : DI
+    EmployeeController ..&gt; ApplicationDbContext : transaction cần bổ sung
+    ProfileController --&gt; UserManager : DI
+    ProfileController --&gt; SignInManager : DI
+    AccountController ..&gt; LoginViewModel : input
+    EmployeeController ..&gt; CreateEmployeeViewModel : input
+    ProfileController ..&gt; ChangePasswordViewModel : input
+    SignInManager --&gt; UserManager : sử dụng
+    UserManager --&gt; IdentityEFStores : sử dụng
+    IdentityEFStores --&gt; ApplicationDbContext : cùng scoped context
+    ApplicationDbContext ..&gt; ApplicationUser : mapping</pre></div><details><summary>Xem mã sơ đồ</summary><pre>classDiagram
+    class IdentityUser {
+        +string Id
+        +string UserName
+        +string Email
+        +string PasswordHash
+        +string SecurityStamp
+        +string ConcurrencyStamp
+    }
+    class ApplicationUser {
+        +string FullName
+        +bool IsActive
+        +DateTime CreatedAtUtc
+        +string EmployeeCode
+        +DateOnly HireDate
+    }
+    class AccountController {
+        -UserManager userManager
+        -SignInManager signInManager
+        +Login(LoginViewModel, returnUrl) Task~IActionResult~
+        +Logout() Task~IActionResult~
+    }
+    class EmployeeController {
+        -UserManager userManager
+        +Create(CreateEmployeeViewModel) Task~IActionResult~
+        +Index(search, status, page) Task~IActionResult~
+        +ToggleLock(id) Task~IActionResult~
+        -GenerateNextEmployeeCodeAsync() Task~string~
+    }
+    class ProfileController {
+        -UserManager userManager
+        -SignInManager signInManager
+        +ChangePassword(ChangePasswordViewModel) Task~IActionResult~
+    }
+    class LoginViewModel {
+        +string Username
+        +string Password
+        +bool RememberMe
+    }
+    class CreateEmployeeViewModel {
+        +string FullName
+        +string UserName
+        +string Email
+        +string PhoneNumber
+        +string EmployeeCode
+        +DateOnly HireDate
+        +string Password
+        +string ConfirmPassword
+    }
+    class ChangePasswordViewModel {
+        +string CurrentPassword
+        +string NewPassword
+        +string ConfirmPassword
+    }
+    class UserManager {
+        +FindByNameAsync(name)
+        +CreateAsync(user, password)
+        +AddToRoleAsync(user, role)
+        +GetUserAsync(principal)
+        +ChangePasswordAsync(user, oldPassword, newPassword)
+    }
+    class SignInManager {
+        +PasswordSignInAsync(user, password, rememberMe, lockoutOnFailure)
+        +RefreshSignInAsync(user)
+        +SignOutAsync()
+    }
+    class IdentityEFStores
+    class IdentityDbContext
+    class ApplicationDbContext {
+        +OnModelCreating(builder)
+    }
+    IdentityUser &lt;|-- ApplicationUser
+    IdentityDbContext &lt;|-- ApplicationDbContext
+    AccountController --&gt; UserManager : DI
+    AccountController --&gt; SignInManager : DI
+    EmployeeController --&gt; UserManager : DI
+    EmployeeController ..&gt; ApplicationDbContext : transaction cần bổ sung
+    ProfileController --&gt; UserManager : DI
+    ProfileController --&gt; SignInManager : DI
+    AccountController ..&gt; LoginViewModel : input
+    EmployeeController ..&gt; CreateEmployeeViewModel : input
+    ProfileController ..&gt; ChangePasswordViewModel : input
+    SignInManager --&gt; UserManager : sử dụng
+    UserManager --&gt; IdentityEFStores : sử dụng
+    IdentityEFStores --&gt; ApplicationDbContext : cùng scoped context
+    ApplicationDbContext ..&gt; ApplicationUser : mapping</pre></details></figure>
+<p><strong>Hình II.1 — Class Diagram cho ba chức năng của Hùng.</strong> Tên <code>UserManager</code>, <code>SignInManager</code>, <code>IdentityDbContext</code> được rút gọn trên sơ đồ; kiểu thực tế dùng generic với <code>ApplicationUser</code>. <code>IdentityEFStores</code> là thành phần framework gom UserStore/RoleStore cho dễ đọc, không phải lớp tự viết trong repo. Các thuộc tính có thể null được mô tả đầy đủ ở bảng database và source; không suy ra NOT NULL từ kiểu rút gọn trong hình.</p>
+<p><strong>Class relationships:</strong> ApplicationUser IS-A IdentityUser; ApplicationDbContext IS-A IdentityDbContext. Controller giữ tham chiếu manager do DI cấp, là association, không phải composition vì controller không sở hữu vòng đời manager. ViewModel là dependency của action. Không thêm quan hệ aggregation/composition nếu source không có ý nghĩa sở hữu tương ứng. MembershipTiers xuất hiện trong ERD; chưa tạo một entity C# giả để đưa vào ba luồng không sử dụng hạng thành viên.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Class</th><th>Trách nhiệm</th></tr></thead><tbody>
+<tr><td>AccountController</td><td>Đọc tài khoản theo username, chặn inactive, gọi đăng nhập và điều hướng an toàn</td></tr>
+<tr><td>EmployeeController</td><td>Chỉ Admin tạo Staff, gán role cố định; cần cùng DbContext để bao transaction</td></tr>
+<tr><td>ProfileController</td><td>Lấy tài khoản từ principal, đổi mật khẩu của chính tài khoản đó, làm mới cookie</td></tr>
+<tr><td>Các ViewModel</td><td>Chứa đúng trường form, Required/StringLength/Compare; không chứa role có thể tự nâng quyền</td></tr>
+<tr><td>ApplicationUser</td><td>Mở rộng tài khoản Identity bằng thuộc tính BMS</td></tr>
+<tr><td>ApplicationDbContext</td><td>Mapping Identity đến schema SQL, cung cấp transaction và EF tracking</td></tr>
+<tr><td>UserManager / SignInManager</td><td>API framework cho vòng đời tài khoản, mật khẩu, role và đăng nhập</td></tr>
+</tbody></table></div>
+<h3>1.2 Sequence Diagram — Login</h3>
+<p><strong>Actor:</strong> Admin, Staff hoặc Customer. <strong>Route:</strong> GET/POST <code>/Account/Login</code>. <strong>Đầu vào:</strong> Username, Password, RememberMe, returnUrl tùy chọn. <strong>Điều kiện:</strong> tài khoản tồn tại, IsActive=true, có mật khẩu hợp lệ, không bị khóa tạm. <strong>Đầu ra thành công:</strong> cookie đăng nhập và điều hướng đến URL local hợp lệ hoặc trang theo role.</p>
+<figure><div class="diagram"><pre class="mermaid">sequenceDiagram
+    autonumber
+    actor U as Người dùng
+    participant B as Browser / Login View
+    participant C as AccountController
+    participant UM as UserManager
+    participant SM as SignInManager
+    participant DB as Identity EF / SQL Server
+    U-&gt;&gt;B: Nhập username, password, RememberMe
+    B-&gt;&gt;C: POST /Account/Login + anti-forgery token
+    Note over B,C: Framework từ chối token không hợp lệ trước action
+    alt ModelState không hợp lệ
+        C--&gt;&gt;B: Trả form và lỗi validation
+    else ModelState hợp lệ
+        C-&gt;&gt;UM: FindByNameAsync(Username)
+        UM-&gt;&gt;DB: Tra NormalizedUserName
+        DB--&gt;&gt;UM: User hoặc null
+        UM--&gt;&gt;C: User hoặc null
+        alt Không có user hoặc IsActive=false
+            C--&gt;&gt;B: Thông báo đăng nhập không hợp lệ
+        else Tài khoản hoạt động
+            C-&gt;&gt;SM: PasswordSignInAsync(user, password, RememberMe, true)
+            SM-&gt;&gt;UM: Kiểm tra khóa tạm và mật khẩu
+            UM-&gt;&gt;DB: Đọc / cập nhật trạng thái bảo mật khi cần
+            DB--&gt;&gt;UM: Kết quả lưu / đọc
+            UM--&gt;&gt;SM: Kết quả kiểm tra
+            alt Mật khẩu hợp lệ và được phép đăng nhập
+                SM--&gt;&gt;B: Ghi cookie qua HTTP response
+                SM--&gt;&gt;C: Succeeded
+                C-&gt;&gt;UM: IsInRoleAsync khi không có returnUrl local
+                UM--&gt;&gt;C: Vai trò
+                C--&gt;&gt;B: Redirect URL local hoặc Employee / Staff / Customer
+            else Đang bị khóa tạm
+                SM--&gt;&gt;C: IsLockedOut
+                C--&gt;&gt;B: Thông báo khóa tạm, không cấp cookie
+            else Sai mật khẩu hoặc trạng thái chưa hỗ trợ
+                SM--&gt;&gt;C: Không thành công
+                C--&gt;&gt;B: Thông báo chung, không cấp cookie
+            end
+        end
+    end</pre></div><details><summary>Xem mã sơ đồ</summary><pre>sequenceDiagram
+    autonumber
+    actor U as Người dùng
+    participant B as Browser / Login View
+    participant C as AccountController
+    participant UM as UserManager
+    participant SM as SignInManager
+    participant DB as Identity EF / SQL Server
+    U-&gt;&gt;B: Nhập username, password, RememberMe
+    B-&gt;&gt;C: POST /Account/Login + anti-forgery token
+    Note over B,C: Framework từ chối token không hợp lệ trước action
+    alt ModelState không hợp lệ
+        C--&gt;&gt;B: Trả form và lỗi validation
+    else ModelState hợp lệ
+        C-&gt;&gt;UM: FindByNameAsync(Username)
+        UM-&gt;&gt;DB: Tra NormalizedUserName
+        DB--&gt;&gt;UM: User hoặc null
+        UM--&gt;&gt;C: User hoặc null
+        alt Không có user hoặc IsActive=false
+            C--&gt;&gt;B: Thông báo đăng nhập không hợp lệ
+        else Tài khoản hoạt động
+            C-&gt;&gt;SM: PasswordSignInAsync(user, password, RememberMe, true)
+            SM-&gt;&gt;UM: Kiểm tra khóa tạm và mật khẩu
+            UM-&gt;&gt;DB: Đọc / cập nhật trạng thái bảo mật khi cần
+            DB--&gt;&gt;UM: Kết quả lưu / đọc
+            UM--&gt;&gt;SM: Kết quả kiểm tra
+            alt Mật khẩu hợp lệ và được phép đăng nhập
+                SM--&gt;&gt;B: Ghi cookie qua HTTP response
+                SM--&gt;&gt;C: Succeeded
+                C-&gt;&gt;UM: IsInRoleAsync khi không có returnUrl local
+                UM--&gt;&gt;C: Vai trò
+                C--&gt;&gt;B: Redirect URL local hoặc Employee / Staff / Customer
+            else Đang bị khóa tạm
+                SM--&gt;&gt;C: IsLockedOut
+                C--&gt;&gt;B: Thông báo khóa tạm, không cấp cookie
+            else Sai mật khẩu hoặc trạng thái chưa hỗ trợ
+                SM--&gt;&gt;C: Không thành công
+                C--&gt;&gt;B: Thông báo chung, không cấp cookie
+            end
+        end
+    end</pre></details></figure>
+<p><strong>Hình II.2 — Đăng nhập bằng Identity.</strong> Luồng kiểm tra bên trong manager được rút gọn; Identity tự quản lý hash, failed count và lockout. RememberMe quyết định cookie có được lưu lâu dài hay chỉ trong phiên trình duyệt, không bỏ qua các kiểm tra bảo mật.</p>
+<p>Quy tắc hiện có: tối đa 5 lần sai trước khóa tạm 5 phút với tài khoản có LockoutEnabled=true. AccountController kiểm tra <code>Url.IsLocalUrl(returnUrl)</code> trước khi redirect. Nếu không có returnUrl hợp lệ, ưu tiên Admin → Employee, Staff → Staff, Customer → Customer; không có role phù hợp → Home. Việc redirect không thay cho Authorize ở trang đích. Form chưa triển khai luồng 2FA, nên không bật TwoFactorEnabled cho user nếu chưa bổ sung luồng tương ứng.</p>
+<h3>1.3 Sequence Diagram — Tạo nhân viên</h3>
+<p><strong>Actor:</strong> Admin. <strong>Route:</strong> GET/POST <code>/Employee/Create</code>. <strong>Đầu vào:</strong> FullName, UserName, Email, PhoneNumber tùy chọn, EmployeeCode tùy chọn, HireDate tùy chọn, Password, ConfirmPassword. <strong>Điều kiện:</strong> phiên Admin hợp lệ và role Staff đã tồn tại. <strong>Hậu điều kiện:</strong> có một user hoạt động kèm role Staff; hoặc không có thay đổi dữ liệu khi thất bại.</p>
+<figure><div class="diagram"><pre class="mermaid">sequenceDiagram
+    autonumber
+    actor A as Admin
+    participant C as EmployeeController
+    participant CTX as ApplicationDbContext
+    participant UM as UserManager
+    participant DB as SQL Server
+    A-&gt;&gt;C: POST /Employee/Create + form + token
+    Note over A,C: Authorize Admin và anti-forgery phải hợp lệ
+    alt Dữ liệu form không hợp lệ
+        C--&gt;&gt;A: Trả form với lỗi validation
+    else Dữ liệu hợp lệ
+        C-&gt;&gt;C: Trim dữ liệu, chuẩn hóa mã, tạo ApplicationUser
+        C-&gt;&gt;CTX: BeginTransactionAsync()
+        CTX-&gt;&gt;DB: BEGIN TRANSACTION
+        C-&gt;&gt;UM: CreateAsync(user, password)
+        UM-&gt;&gt;DB: Qua EF store cùng context: INSERT user có hash
+        DB--&gt;&gt;UM: Thành công hoặc lỗi
+        UM--&gt;&gt;C: IdentityResult hoặc exception
+        alt Tạo user thất bại
+            C-&gt;&gt;CTX: RollbackAsync()
+            CTX-&gt;&gt;DB: ROLLBACK
+            C--&gt;&gt;A: Báo lỗi hợp lệ / lỗi hệ thống đã được che chi tiết
+        else Tạo user thành công
+            C-&gt;&gt;UM: AddToRoleAsync(user, Staff)
+            UM-&gt;&gt;DB: INSERT AspNetUserRoles
+            DB--&gt;&gt;UM: Thành công hoặc lỗi
+            UM--&gt;&gt;C: IdentityResult hoặc exception
+            alt Gán role thất bại
+                C-&gt;&gt;CTX: RollbackAsync()
+                CTX-&gt;&gt;DB: ROLLBACK cả user và role link
+                C--&gt;&gt;A: Báo không tạo được nhân viên
+            else Gán role thành công
+                C-&gt;&gt;CTX: CommitAsync()
+                CTX-&gt;&gt;DB: COMMIT
+                C--&gt;&gt;A: Thông báo thành công và redirect /Employee
+            end
+        end
+    end</pre></div><details><summary>Xem mã sơ đồ</summary><pre>sequenceDiagram
+    autonumber
+    actor A as Admin
+    participant C as EmployeeController
+    participant CTX as ApplicationDbContext
+    participant UM as UserManager
+    participant DB as SQL Server
+    A-&gt;&gt;C: POST /Employee/Create + form + token
+    Note over A,C: Authorize Admin và anti-forgery phải hợp lệ
+    alt Dữ liệu form không hợp lệ
+        C--&gt;&gt;A: Trả form với lỗi validation
+    else Dữ liệu hợp lệ
+        C-&gt;&gt;C: Trim dữ liệu, chuẩn hóa mã, tạo ApplicationUser
+        C-&gt;&gt;CTX: BeginTransactionAsync()
+        CTX-&gt;&gt;DB: BEGIN TRANSACTION
+        C-&gt;&gt;UM: CreateAsync(user, password)
+        UM-&gt;&gt;DB: Qua EF store cùng context: INSERT user có hash
+        DB--&gt;&gt;UM: Thành công hoặc lỗi
+        UM--&gt;&gt;C: IdentityResult hoặc exception
+        alt Tạo user thất bại
+            C-&gt;&gt;CTX: RollbackAsync()
+            CTX-&gt;&gt;DB: ROLLBACK
+            C--&gt;&gt;A: Báo lỗi hợp lệ / lỗi hệ thống đã được che chi tiết
+        else Tạo user thành công
+            C-&gt;&gt;UM: AddToRoleAsync(user, Staff)
+            UM-&gt;&gt;DB: INSERT AspNetUserRoles
+            DB--&gt;&gt;UM: Thành công hoặc lỗi
+            UM--&gt;&gt;C: IdentityResult hoặc exception
+            alt Gán role thất bại
+                C-&gt;&gt;CTX: RollbackAsync()
+                CTX-&gt;&gt;DB: ROLLBACK cả user và role link
+                C--&gt;&gt;A: Báo không tạo được nhân viên
+            else Gán role thành công
+                C-&gt;&gt;CTX: CommitAsync()
+                CTX-&gt;&gt;DB: COMMIT
+                C--&gt;&gt;A: Thông báo thành công và redirect /Employee
+            end
+        end
+    end</pre></details></figure>
+<p><strong>Hình II.3 — Thiết kế đích có transaction cho tạo Staff.</strong> Cần inject cùng scoped ApplicationDbContext mà UserManager đang sử dụng. <code>SaveChanges</code> riêng lẻ không tự làm hai lời gọi CreateAsync/AddToRoleAsync trở thành một transaction chung. <a href="https://learn.microsoft.com/en-us/ef/core/saving/transactions">Tham khảo transaction EF Core</a>.</p>
+<p><strong>Khác biệt hiện tại:</strong> EmployeeController mới chỉ nhận UserManager, tạo user rồi gán Staff; nếu gán role lỗi thì gọi DeleteAsync để bù. Đây không phải transaction nguyên tử, dù comment trong code nói “cùng transaction”. Sơ đồ trên là yêu cầu cần bổ sung, không phải mô tả tính năng đã kiểm chứng.</p>
+<p>Validation: FullName tối đa 100 ký tự và không toàn khoảng trắng; UserName 3–50 ký tự theo ViewModel; email đúng định dạng và không trùng sau chuẩn hóa; mật khẩu và xác nhận phải khớp. Số điện thoại/mã nhân viên rỗng chuyển thành NULL hoặc sinh mã theo quy tắc, không lưu chuỗi trắng. Password tối thiểu 8 ký tự, theo chính sách Identity của ứng dụng.</p>
+<p>Mã tự sinh hiện dựa trên mã NV lớn nhất cộng một, có thể trùng khi hai Admin tạo đồng thời. Unique index là lớp bảo vệ cuối; thiết kế cần bắt lỗi trùng và yêu cầu thử lại hoặc bổ sung cơ chế sinh mã an toàn. Không đổi Role từ input; luôn gán Staff tại backend. Việc tạo Staff không cấp lại cookie để tránh thay phiên Admin bằng tài khoản vừa tạo.</p>
+<h3>1.4 Sequence Diagram — Đổi mật khẩu</h3>
+<p><strong>Actor:</strong> tài khoản đã đăng nhập, gồm Admin, Staff, Customer. <strong>Route:</strong> GET/POST <code>/Profile/ChangePassword</code>. <strong>Đầu vào:</strong> CurrentPassword, NewPassword, ConfirmPassword. <strong>Điều kiện:</strong> phiên đăng nhập hợp lệ, tài khoản hoạt động và biết mật khẩu hiện tại. <strong>Hậu điều kiện:</strong> hash mật khẩu được cập nhật, phiên hiện tại được làm mới; thất bại thì giữ mật khẩu cũ.</p>
+<figure><div class="diagram"><pre class="mermaid">sequenceDiagram
+    autonumber
+    actor U as Người dùng đã đăng nhập
+    participant C as ProfileController
+    participant UM as UserManager
+    participant DB as Identity EF / SQL Server
+    participant SM as SignInManager
+    U-&gt;&gt;C: POST ChangePassword + current/new/confirm + token
+    Note over U,C: Authorize và anti-forgery, kiểm tra active theo thiết kế bảo mật
+    alt ModelState không hợp lệ
+        C--&gt;&gt;U: Trả lỗi required / độ dài / xác nhận không khớp
+    else Form hợp lệ
+        C-&gt;&gt;UM: GetUserAsync(HttpContext.User)
+        UM-&gt;&gt;DB: Tìm tài khoản theo user ID trong principal
+        DB--&gt;&gt;UM: User hoặc null
+        UM--&gt;&gt;C: User hoặc null
+        alt User không còn tồn tại
+            C--&gt;&gt;U: Challenge đăng nhập lại
+        else Có user
+            C-&gt;&gt;UM: ChangePasswordAsync(user, CurrentPassword, NewPassword)
+            UM-&gt;&gt;UM: Xác minh mật khẩu cũ và chính sách mật khẩu mới
+            alt Mật khẩu cũ sai / mới không hợp lệ
+                UM--&gt;&gt;C: IdentityResult thất bại
+                C--&gt;&gt;U: Trả lỗi, mật khẩu cũ không đổi
+            else Kiểm tra hợp lệ
+                UM-&gt;&gt;DB: Lưu hash mới và dấu bảo mật, kiểm tra concurrency
+                DB--&gt;&gt;UM: Kết quả cập nhật
+                UM--&gt;&gt;C: IdentityResult
+                alt Cập nhật thất bại
+                    C--&gt;&gt;U: Báo lỗi, không thông báo thành công
+                else Cập nhật thành công
+                    C-&gt;&gt;SM: RefreshSignInAsync(user)
+                    SM--&gt;&gt;U: Phát lại cookie cho phiên hiện tại
+                    C--&gt;&gt;U: Redirect ChangePassword với thông báo thành công
+                end
+            end
+        end
+    end</pre></div><details><summary>Xem mã sơ đồ</summary><pre>sequenceDiagram
+    autonumber
+    actor U as Người dùng đã đăng nhập
+    participant C as ProfileController
+    participant UM as UserManager
+    participant DB as Identity EF / SQL Server
+    participant SM as SignInManager
+    U-&gt;&gt;C: POST ChangePassword + current/new/confirm + token
+    Note over U,C: Authorize và anti-forgery, kiểm tra active theo thiết kế bảo mật
+    alt ModelState không hợp lệ
+        C--&gt;&gt;U: Trả lỗi required / độ dài / xác nhận không khớp
+    else Form hợp lệ
+        C-&gt;&gt;UM: GetUserAsync(HttpContext.User)
+        UM-&gt;&gt;DB: Tìm tài khoản theo user ID trong principal
+        DB--&gt;&gt;UM: User hoặc null
+        UM--&gt;&gt;C: User hoặc null
+        alt User không còn tồn tại
+            C--&gt;&gt;U: Challenge đăng nhập lại
+        else Có user
+            C-&gt;&gt;UM: ChangePasswordAsync(user, CurrentPassword, NewPassword)
+            UM-&gt;&gt;UM: Xác minh mật khẩu cũ và chính sách mật khẩu mới
+            alt Mật khẩu cũ sai / mới không hợp lệ
+                UM--&gt;&gt;C: IdentityResult thất bại
+                C--&gt;&gt;U: Trả lỗi, mật khẩu cũ không đổi
+            else Kiểm tra hợp lệ
+                UM-&gt;&gt;DB: Lưu hash mới và dấu bảo mật, kiểm tra concurrency
+                DB--&gt;&gt;UM: Kết quả cập nhật
+                UM--&gt;&gt;C: IdentityResult
+                alt Cập nhật thất bại
+                    C--&gt;&gt;U: Báo lỗi, không thông báo thành công
+                else Cập nhật thành công
+                    C-&gt;&gt;SM: RefreshSignInAsync(user)
+                    SM--&gt;&gt;U: Phát lại cookie cho phiên hiện tại
+                    C--&gt;&gt;U: Redirect ChangePassword với thông báo thành công
+                end
+            end
+        end
+    end</pre></details></figure>
+<p><strong>Hình II.4 — Người dùng tự đổi mật khẩu.</strong> Lấy user từ principal, không nhận UserId để chọn tài khoản khác. Đây là luồng đổi mật khẩu có kiểm tra mật khẩu cũ, khác chức năng Admin đặt lại mật khẩu Staff. Các phiên khác bị từ chối khi security stamp được kiểm tra; không khẳng định chúng bị đăng xuất tức thì với cấu hình hiện tại.</p>
+<p>Code ProfileController hiện đã dùng ChangePasswordAsync và RefreshSignInAsync. Kiểm tra active cho cookie và cách hiển thị lỗi database không dự kiến vẫn cần hoàn thiện theo phần III.</p>
+<h1>III. Other Design Specifications</h1>
+<h2>1. Cơ chế phân quyền và bảo mật</h2>
+<h3>1.1 Xác thực và quản lý phiên</h3>
+<p>BMS dùng ASP.NET Core Identity với cookie authentication. Mật khẩu được xử lý bởi password hasher của Identity, không tự lưu plaintext, không tự viết hash MD5/SHA256 và không giả định ứng dụng dùng BCrypt như mẫu SDS. Cookie chứa ticket được framework bảo vệ; request được chuyển thành ClaimsPrincipal trước khi kiểm tra Authorize. Chính sách hiện có trong Program.cs đặt độ dài tối thiểu 8, khóa tạm sau 5 lần sai trong 5 phút; các yêu cầu chữ hoa/chữ thường/chữ số/ký tự đặc biệt theo cấu hình mặc định chưa bị ghi đè. <a href="https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity-configuration?view=aspnetcore-8.0">Cấu hình Identity</a>.</p>
+<p>Logout chỉ qua POST có token và gọi SignOutAsync. Các POST Login/Create/ChangePassword cũng yêu cầu anti-forgery. Mật khẩu, hash, cookie và token không được ghi vào log. Cookie triển khai thật cần HttpOnly và Secure qua HTTPS; thời hạn phiên và SameSite phải chốt trước triển khai, tránh tự ghi một thời hạn chưa được cấu hình vào SDS. Demo hiện không yêu cầu xác nhận email; không tuyên bố có email verification hoặc 2FA đã hoàn thiện.</p>
+<h3>1.2 Ma trận quyền cho phạm vi Hùng</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Chức năng</th><th>Chưa đăng nhập</th><th>Admin</th><th>Staff</th><th>Customer</th></tr></thead><tbody>
+<tr><td>Gửi đăng nhập</td><td>Có</td><td>Có endpoint; UI thường điều hướng khi đã đăng nhập</td><td>Tương tự Admin</td><td>Tương tự Admin</td></tr>
+<tr><td>Danh sách/tìm nhân viên</td><td>Không</td><td>Có</td><td>Không</td><td>Không</td></tr>
+<tr><td>Tạo tài khoản Staff</td><td>Không</td><td>Có</td><td>Không</td><td>Không</td></tr>
+<tr><td>Sửa/khóa/mở khóa Staff</td><td>Không</td><td>Có, phải xác minh đối tượng là Staff</td><td>Không</td><td>Không</td></tr>
+<tr><td>Tự đổi mật khẩu</td><td>Không</td><td>Chỉ của mình</td><td>Chỉ của mình</td><td>Chỉ của mình</td></tr>
+<tr><td>Đăng xuất</td><td>Không</td><td>Phiên của mình</td><td>Phiên của mình</td><td>Phiên của mình</td></tr>
+<tr><td>Xem trang Staff hiện có</td><td>Không</td><td>Có</td><td>Có</td><td>Không</td></tr>
+<tr><td>Xem trang Customer hiện có</td><td>Không</td><td>Không theo attribute hiện tại</td><td>Không</td><td>Có</td></tr>
+</tbody></table></div>
+<p><code>EmployeeController</code> dùng <code>[Authorize(Roles = &quot;Admin&quot;)]</code>; <code>ProfileController</code> dùng <code>[Authorize]</code>. Admin không tự động được vào mọi endpoint Customer: quyền cụ thể phụ thuộc attribute/policy, không suy ra từ tên vai trò. Khi mở rộng quyền, nhóm cập nhật code và ma trận đồng thời.</p>
+<p>Ẩn nút/menu chỉ giúp giao diện dễ dùng. Server vẫn phải từ chối truy cập trực tiếp bằng URL hoặc POST giả. Hàm lấy Staff phải kiểm tra role thật trước sửa/khóa; backend không dùng role trong hidden input để quyết định quyền. Với booking/lịch sử chơi, Customer chỉ được truy cập bản ghi của mình; TV2/TV3 triển khai kiểm tra ownership ở phía server.</p>
+<h3>1.3 Phân biệt hai loại khóa tài khoản</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Cơ chế</th><th>Dữ liệu</th><th>Ai quyết định</th><th>Điều kiện mở lại</th></tr></thead><tbody>
+<tr><td>Khóa quản trị</td><td>IsActive=false</td><td>Admin quản lý nhân viên</td><td>Admin đặt lại IsActive=true</td></tr>
+<tr><td>Khóa tạm do đăng nhập sai</td><td>LockoutEnd, LockoutEnabled, AccessFailedCount</td><td>Identity theo chính sách đăng nhập</td><td>Hết thời gian khóa hoặc thao tác quản trị được thiết kế riêng</td></tr>
+</tbody></table></div>
+<p>Điều kiện đăng nhập phải đồng thời thỏa active và chính sách lockout. Mở khóa quản trị không tự xóa khóa tạm. Đổi SecurityStamp chỉ có hiệu lực khi cookie được kiểm tra, không tự đẩy thông báo logout ngay vào mọi trình duyệt.</p>
+<p><strong>Thiết kế cần bổ sung:</strong> kiểm tra user còn tồn tại và IsActive tại mỗi request được bảo vệ. Nếu có custom OnValidatePrincipal, vẫn gọi bộ kiểm tra SecurityStamp mặc định; nếu principal bị từ chối thì dừng xử lý. Với user bị khóa hoặc đã xóa, RejectPrincipal và SignOut. Tần suất kiểm tra stamp quyết định độ trễ thu hồi phiên khác sau đổi mật khẩu; phải mô tả đúng cấu hình thực tế. <a href="https://source.dot.net/Microsoft.AspNetCore.Identity/SecurityStampValidator.cs.html">Cơ chế xác thực SecurityStamp</a>.</p>
+<p>Code hiện chưa đăng ký kiểm tra IsActive trong cookie event. ToggleLock cập nhật stamp và user nhưng chưa kiểm tra đầy đủ IdentityResult; cần chỉ báo thành công sau khi lưu thành công. Không coi comment “mất hiệu lực ngay” là bằng chứng đã đáp ứng yêu cầu.</p>
+<h3>1.4 Bảo vệ dữ liệu và transaction</h3>
+<p>Các form nhận ViewModel có tập trường cho phép, tránh người gọi gửi thêm IsActive/role/RewardPoints/TierId để tự tăng quyền hoặc điểm. Razor hiển thị dữ liệu người dùng dưới dạng đã encode; không dùng Html.Raw với tên hoặc nội dung do user nhập. Truy vấn database dùng EF hoặc SQL có tham số; không nối chuỗi SQL với input.</p>
+<p>Tạo Staff phải nguyên tử: tạo user và liên kết role cùng commit hoặc cùng rollback. Bắt lỗi unique constraint cho username/email/phone/mã nhân viên và trả thông báo phù hợp; không đưa SQL stack trace ra UI. Khi sửa dữ liệu, kiểm tra concurrency bằng IdentityResult và giá trị phiên bản phù hợp với thời điểm tải form, tránh ghi đè thay đổi của người khác mà không báo.</p>
+<p>Tài khoản có lịch sử nghiệp vụ được giữ lại bằng khóa IsActive. Chính sách xóa vĩnh viễn tài khoản chưa có lịch sử cần nhóm chốt riêng; source hiện có action Delete nên không mô tả rằng mọi thao tác xóa đều đã bị cấm. Connection string và mật khẩu khởi tạo lấy từ cấu hình local/user-secrets/biến môi trường. Initializer mật khẩu chỉ chạy Development, không reset mật khẩu đã có.</p>
+<h3>1.5 Ranh giới với điểm thưởng và VNPay</h3>
+<p>MembershipTiers không có quyền cấp role; RewardPoints và TierId phải do backend có thẩm quyền cập nhật. Hùng bàn giao tên bảng/cột và mapping; không tự chốt tỷ lệ điểm, ngưỡng hạng hoặc mức ưu đãi thay TV3/TV4. Theo phân công mới, TV3 phụ trách sự kiện điểm sau thanh toán và TV4 phụ trách công thức/nâng hạng; nhóm phải chọn một luồng cập nhật để một giao dịch không cộng điểm hai lần.</p>
+<p>Endpoint VNPay IPN dự kiến không sử dụng phiên cookie của khách làm bằng chứng giao dịch; TV3 phải thiết kế xác thực thông báo riêng. Hùng cung cấp quyền truy cập trang thanh toán/quản trị, không tự nhận rằng chỉ có Authorize là đủ bảo vệ callback bên ngoài.</p>
+<h2>2. Tiêu chí kiểm tra phần Hùng</h2>
+<p>Các dòng dưới đây là tiêu chí nghiệm thu, chưa phải kết quả kiểm thử đã chạy trong lần soạn tài liệu này.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>ID</th><th>Tình huống</th><th>Kết quả mong đợi</th></tr></thead><tbody>
+<tr><td>H01</td><td>Login đúng với tài khoản active</td><td>Có cookie; vào đúng trang theo role hoặc returnUrl local</td></tr>
+<tr><td>H02</td><td>Không tồn tại / inactive / sai mật khẩu</td><td>Không đăng nhập; không tiết lộ thông tin không cần thiết</td></tr>
+<tr><td>H03</td><td>Sai mật khẩu tới ngưỡng với lockout bật</td><td>Khóa tạm đúng chính sách, không cấp cookie trong thời gian khóa</td></tr>
+<tr><td>H04</td><td>returnUrl trỏ website ngoài</td><td>Không redirect ra URL đó</td></tr>
+<tr><td>H05</td><td>Staff/Customer gửi POST tạo nhân viên</td><td>Bị từ chối; database không thay đổi</td></tr>
+<tr><td>H06</td><td>Admin tạo Staff hợp lệ</td><td>Có user và đúng liên kết Staff; phiên Admin không bị thay</td></tr>
+<tr><td>H07</td><td>Lỗi gán role / trùng mã khi tạo</td><td>Rollback; không để user dở dang; lỗi dễ hiểu</td></tr>
+<tr><td>H08</td><td>Hai Admin đồng thời tạo cùng mã</td><td>Không tạo hai user cùng mã; thao tác thất bại được xử lý</td></tr>
+<tr><td>H09</td><td>Đổi mật khẩu cũ sai / xác nhận không khớp</td><td>Giữ nguyên mật khẩu cũ</td></tr>
+<tr><td>H10</td><td>Đổi mật khẩu thành công</td><td>Mật khẩu mới dùng được; cookie hiện tại làm mới; phiên khác bị thu hồi theo chính sách stamp</td></tr>
+<tr><td>H11</td><td>POST thiếu hoặc sai anti-forgery token</td><td>Framework từ chối trước khi ghi dữ liệu</td></tr>
+<tr><td>H12</td><td>Khóa Staff đang đăng nhập</td><td>Request được bảo vệ tiếp theo bị từ chối theo thiết kế active check</td></tr>
+<tr><td>H13</td><td>Đổi ID nhân viên thành ID Admin/Customer</td><td>Không được sửa/khóa đối tượng ngoài Staff</td></tr>
+<tr><td>H14</td><td>Gửi role Admin hoặc điểm/hạng trong form tạo Staff</td><td>Dữ liệu ngoài ViewModel không tạo thay đổi quyền/điểm trái phép</td></tr>
+</tbody></table></div>
+<h1>Phụ lục bàn giao cho nhóm</h1>
+<h2>A. Chênh lệch cần xử lý trước khi coi SDS khớp hoàn toàn với code</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Vấn đề</th><th>Bằng chứng hiện tại</th><th>Việc cần làm</th></tr></thead><tbody>
+<tr><td>Tạo Staff chưa nguyên tử</td><td>EmployeeController chỉ dùng UserManager và DeleteAsync bù khi gán role lỗi</td><td>Thêm transaction cùng context theo Hình II.3</td></tr>
+<tr><td>Thu hồi phiên sau khóa chưa tức thời</td><td>Program.cs chưa kiểm tra IsActive trong cookie validation</td><td>Bổ sung active check và giữ stamp validation</td></tr>
+<tr><td>Thiếu mapping thành viên</td><td>SQL có RewardPoints/TierId/MembershipTiers; ApplicationUser chưa khai báo</td><td>Bổ sung khi triển khai thành viên; không khởi tạo lại database</td></tr>
+<tr><td>Chưa có ngưỡng nâng hạng</td><td>MembershipTiers chỉ có Id/TierName/DiscountPercent</td><td>TV4 chốt thuật toán và cấu hình; Hùng phối hợp schema</td></tr>
+<tr><td>Chưa phân công hết bảng</td><td>Phân công mới liệt kê 20 bảng, SQL khai báo 21 bảng</td><td>Còn AspNetRoleClaims; đề xuất TV2 nhận cùng bộ bảng Identity phụ, chờ nhóm chốt</td></tr>
+<tr><td>Script dùng sai DB ở đoạn kiểm tra cuối</td><td>BilliardDB_Full.sql cuối file còn USE BMS_Starter</td><td>Sửa ở tác vụ database riêng sau kiểm tra; lần soạn SDS này không chạy/sửa SQL</td></tr>
+<tr><td>Một số seed tiếng Việt có dấu hiệu lỗi mã hóa</td><td>Chuỗi tên/mô tả trong file SQL hiện tại bị lỗi ký tự</td><td>Kiểm tra encoding và dữ liệu thực tế trước khi seed máy mới</td></tr>
+<tr><td>Schema/runtime chưa được xác minh lại</td><td>DDL có bảng mới; tài liệu cũ chỉ xác nhận 13 bảng</td><td>Kiểm tra chỉ đọc trên database khi đến bước triển khai, không giả định đã nâng cấp</td></tr>
+</tbody></table></div>
+<h2>B. Cách ghép vào báo cáo nhóm</h2>
+<p>Đưa mục I.1 và I.2 vào phần High Level Design chung. Đưa bốn bảng ở I.3 vào Database Design, đánh lại số thứ tự cùng bảng của các bạn. Đưa mục II.1 và bốn tiểu mục vào Section 1 của Detailed Code Design. Đưa phần III.1 vào Other Design Specifications. Giữ ma trận quyền và tiêu chí nghiệm thu nếu mẫu báo cáo cho phép. Phụ lục A phục vụ rà soát nội bộ; xử lý từng điểm rồi cập nhật SDS cho đúng trước bản nộp cuối.</p>
+<p>Các khối Mermaid là file nguồn sơ đồ có thể sửa. Khi ghép Word/Google Docs, xuất chúng thành SVG/PNG bằng công cụ Mermaid, chèn ảnh kèm caption; không dán nguyên mã Mermaid vào báo cáo nộp. Giữ đồng nhất tên lớp trong diagram, bảng mô tả và code.</p>
+<h2>C. Nguồn tham khảo</h2>
+<ul>
+<li>Mẫu SDS của nhóm: https://docs.google.com/document/d/1ejRL6IrQYX4LTo6PDh2O4T5BMTfdGo2p/edit</li>
+<li>Schema: <code>BMS_Database_Starter/BilliardDB_Full.sql</code>.</li>
+<li>Source C#: <code>src/Bms.Web/Program.cs</code>, <code>Data/ApplicationUser.cs</code>, <code>Data/ApplicationDbContext.cs</code>, <code>Controllers/AccountController.cs</code>, <code>Controllers/EmployeeController.cs</code>, <code>Controllers/ProfileController.cs</code>, <code>Models/LoginViewModel.cs</code>, <code>Models/EmployeeViewModels.cs</code>, <code>Models/PasswordViewModels.cs</code>.</li>
+<li>Microsoft Learn — Configure ASP.NET Core Identity: https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity-configuration?view=aspnetcore-8.0</li>
+<li>Microsoft Learn — EF Core transactions: https://learn.microsoft.com/en-us/ef/core/saving/transactions</li>
+<li>.NET source — SecurityStampValidator: https://source.dot.net/Microsoft.AspNetCore.Identity/SecurityStampValidator.cs.html</li>
+</ul></main><script type="module">
+try {
+ const {default: mermaid}=await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+ mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'neutral',fontFamily:'Segoe UI, Arial, sans-serif',flowchart:{htmlLabels:true,useMaxWidth:true},sequence:{useMaxWidth:true,wrap:true,actorMargin:25,messageMargin:28},er:{useMaxWidth:true}});
+ await mermaid.run({querySelector:'.mermaid'});
+ const rendered=document.querySelectorAll('.mermaid svg').length;
+ if(rendered!==7) throw new Error('Chỉ vẽ được '+rendered+'/7 sơ đồ');
+ document.getElementById('status').textContent='Đã hiển thị đủ 7 sơ đồ. Dùng nút bên dưới mỗi sơ đồ để lưu SVG, hoặc tải bản HTML offline.';
+ document.querySelectorAll('figure').forEach((fig,i)=>{
+  const button=document.createElement('button');button.className='controls';button.textContent='Tải sơ đồ '+(i+1)+' dạng SVG';
+  button.onclick=()=>{const svg=fig.querySelector('svg');const a=document.createElement('a');const u=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)],{type:'image/svg+xml;charset=utf-8'}));a.href=u;a.download='SDS-Hung-diagram-'+(i+1)+'.svg';a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);};fig.append(button);
+ });
+ if(location.hostname==='127.0.0.1') {
+  const save=document.createElement('button');save.textContent='Lưu HTML offline và SVG vào docs';save.className='controls';
+  save.onclick=async()=>{try{const copy=document.documentElement.cloneNode(true);copy.querySelectorAll('script,.controls,.notice').forEach(e=>e.remove());const svgs=Array.from(document.querySelectorAll('.mermaid svg'),s=>new XMLSerializer().serializeToString(s));const r=await fetch('/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({html:'<!doctype html>'+copy.outerHTML,svgs})});if(!r.ok)throw new Error(await r.text());save.textContent='Đã lưu HTML offline và 7 SVG vào docs';save.disabled=true;}catch(e){save.textContent='Lỗi lưu: '+e.message;}};document.querySelector('.controls').append(save);
+ }
+ document.getElementById('download').disabled=false;
+ document.getElementById('download').onclick=()=>{
+  const copy=document.documentElement.cloneNode(true);copy.querySelectorAll('script,.controls,.notice').forEach(e=>e.remove());
+  const a=document.createElement('a');const u=URL.createObjectURL(new Blob(['<!doctype html>'+copy.outerHTML],{type:'text/html;charset=utf-8'}));a.href=u;a.download='SDS_HUNG_OFFLINE.html';a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);
+ };
+}catch(e){document.getElementById('status').classList.add('error');document.getElementById('status').textContent='Chưa vẽ được sơ đồ: '+e.message+'. Nội dung vẫn đọc được; mã nguồn sơ đồ nằm trong mục Xem mã sơ đồ và các file .mmd.';console.error(e);}
+</script></body></html>

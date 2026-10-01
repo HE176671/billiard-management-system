@@ -11,11 +11,13 @@ namespace Bms.Web.Controllers;
 public class EmployeeController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _context;
     private const int PageSize = 10;
 
-    public EmployeeController(UserManager<ApplicationUser> userManager)
+    public EmployeeController(UserManager<ApplicationUser> userManager, ApplicationDbContext context)
     {
         _userManager = userManager;
+        _context = context;
     }
 
     // GET /Employee
@@ -92,8 +94,8 @@ public class EmployeeController : Controller
     {
         if (!ModelState.IsValid) return View(model);
 
-        string empCode = string.IsNullOrWhiteSpace(model.EmployeeCode) 
-            ? await GenerateNextEmployeeCodeAsync() 
+        string empCode = string.IsNullOrWhiteSpace(model.EmployeeCode)
+            ? await GenerateNextEmployeeCodeAsync()
             : model.EmployeeCode.Trim().ToUpper();
 
         var user = new ApplicationUser
@@ -108,21 +110,33 @@ public class EmployeeController : Controller
             CreatedAtUtc = DateTime.UtcNow
         };
 
-        // Tạo user + gán role Staff trong cùng transaction
-        var createResult = await _userManager.CreateAsync(user, model.Password);
-        if (!createResult.Succeeded)
+        // Dùng DB transaction thực sự: CreateAsync + AddToRoleAsync phải thành công cùng nhau
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        try
         {
-            foreach (var err in createResult.Errors)
-                ModelState.AddModelError(string.Empty, TranslateIdentityError(err));
-            return View(model);
-        }
+            var createResult = await _userManager.CreateAsync(user, model.Password);
+            if (!createResult.Succeeded)
+            {
+                await tx.RollbackAsync();
+                foreach (var err in createResult.Errors)
+                    ModelState.AddModelError(string.Empty, TranslateIdentityError(err));
+                return View(model);
+            }
 
-        var roleResult = await _userManager.AddToRoleAsync(user, "Staff");
-        if (!roleResult.Succeeded)
+            var roleResult = await _userManager.AddToRoleAsync(user, "Staff");
+            if (!roleResult.Succeeded)
+            {
+                await tx.RollbackAsync();
+                ModelState.AddModelError(string.Empty, "Gán quyền Staff thất bại. Vui lòng thử lại.");
+                return View(model);
+            }
+
+            await tx.CommitAsync();
+        }
+        catch
         {
-            // Gán role thất bại → xóa user vừa tạo (rollback thủ công)
-            await _userManager.DeleteAsync(user);
-            ModelState.AddModelError(string.Empty, "Gán quyền Staff thất bại. Vui lòng thử lại.");
+            await tx.RollbackAsync();
+            ModelState.AddModelError(string.Empty, "Đã xảy ra lỗi hệ thống. Vui lòng thử lại.");
             return View(model);
         }
 
@@ -195,6 +209,38 @@ public class EmployeeController : Controller
 
         var action = user.IsActive ? "mở khóa" : "khóa";
         TempData["Success"] = $"Đã {action} tài khoản {user.FullName}.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // POST /Employee/Delete
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(string id)
+    {
+        var user = await GetStaffOrNull(id);
+        if (user == null) return NotFound();
+
+        try
+        {
+            var result = await _userManager.DeleteAsync(user);
+            if (result.Succeeded)
+            {
+                TempData["Success"] = $"Đã xóa vĩnh viễn tài khoản {user.FullName}.";
+            }
+            else
+            {
+                TempData["Error"] = "Không thể xóa tài khoản. Lỗi hệ thống.";
+            }
+        }
+        catch (DbUpdateException)
+        {
+            TempData["Error"] = $"Không thể xóa {user.FullName} vì nhân viên này đã có dữ liệu giao dịch/ca làm việc. Khuyến nghị: Sử dụng tính năng Khóa tài khoản.";
+        }
+        catch (Exception)
+        {
+            TempData["Error"] = "Đã xảy ra lỗi khi xóa tài khoản.";
+        }
+
         return RedirectToAction(nameof(Index));
     }
 

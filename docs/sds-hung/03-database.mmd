@@ -1,0 +1,27 @@
+erDiagram
+    MembershipTiers o|--o{ AspNetUsers : "TierId optional"
+    AspNetUsers ||--o{ AspNetUserRoles : "UserId"
+    AspNetRoles ||--o{ AspNetUserRoles : "RoleId"
+    MembershipTiers {
+        int Id PK
+        nvarchar TierName UK
+        decimal DiscountPercent
+    }
+    AspNetUsers {
+        nvarchar Id PK
+        nvarchar NormalizedUserName UK
+        nvarchar NormalizedEmail UK
+        nvarchar EmployeeCode UK
+        int RewardPoints
+        int TierId FK
+        bit IsActive
+    }
+    AspNetRoles {
+        nvarchar Id PK
+        nvarchar Name
+        nvarchar NormalizedName UK
+    }
+    AspNetUserRoles {
+        nvarchar UserId PK,FK
+        nvarchar RoleId PK,FK
+    }

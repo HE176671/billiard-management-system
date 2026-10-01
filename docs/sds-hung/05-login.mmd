@@ -1,0 +1,41 @@
+sequenceDiagram
+    autonumber
+    actor U as Người dùng
+    participant B as Browser / Login View
+    participant C as AccountController
+    participant UM as UserManager
+    participant SM as SignInManager
+    participant DB as Identity EF / SQL Server
+    U->>B: Nhập username, password, RememberMe
+    B->>C: POST /Account/Login + anti-forgery token
+    Note over B,C: Framework từ chối token không hợp lệ trước action
+    alt ModelState không hợp lệ
+        C-->>B: Trả form và lỗi validation
+    else ModelState hợp lệ
+        C->>UM: FindByNameAsync(Username)
+        UM->>DB: Tra NormalizedUserName
+        DB-->>UM: User hoặc null
+        UM-->>C: User hoặc null
+        alt Không có user hoặc IsActive=false
+            C-->>B: Thông báo đăng nhập không hợp lệ
+        else Tài khoản hoạt động
+            C->>SM: PasswordSignInAsync(user, password, RememberMe, true)
+            SM->>UM: Kiểm tra khóa tạm và mật khẩu
+            UM->>DB: Đọc / cập nhật trạng thái bảo mật khi cần
+            DB-->>UM: Kết quả lưu / đọc
+            UM-->>SM: Kết quả kiểm tra
+            alt Mật khẩu hợp lệ và được phép đăng nhập
+                SM-->>B: Ghi cookie qua HTTP response
+                SM-->>C: Succeeded
+                C->>UM: IsInRoleAsync khi không có returnUrl local
+                UM-->>C: Vai trò
+                C-->>B: Redirect URL local hoặc Employee / Staff / Customer
+            else Đang bị khóa tạm
+                SM-->>C: IsLockedOut
+                C-->>B: Thông báo khóa tạm, không cấp cookie
+            else Sai mật khẩu hoặc trạng thái chưa hỗ trợ
+                SM-->>C: Không thành công
+                C-->>B: Thông báo chung, không cấp cookie
+            end
+        end
+    end

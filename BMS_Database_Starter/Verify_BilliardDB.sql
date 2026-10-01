@@ -1,8 +1,10 @@
-/* READ ONLY. Run after 01-03 in SSMS. */
-USE [BMS_Starter];
+/* READ ONLY. Run after schema, procedures and seed in SSMS. */
+USE [BilliardDB];
 GO
+-- SSMS creates dbo.sysdiagrams when saving database diagrams; exclude that support table.
 SELECT DB_NAME() AS DatabaseName,
-    (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0) AS TableCount_Expected13,
+    (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped=0
+     AND NOT (schema_id=SCHEMA_ID(N'dbo') AND name=N'sysdiagrams')) AS TableCount_Expected24,
     (SELECT COUNT(*) FROM sys.procedures WHERE name IN
      ('usp_CreateBooking','usp_CancelBooking','usp_CheckInBooking','usp_OpenSession','usp_CloseSession')) AS ProcedureCount_Expected5;
 SELECT N'Roles' AS Item, COUNT(*) AS Actual, 3 AS ExpectedAfterSeed FROM dbo.AspNetRoles
@@ -12,7 +14,18 @@ UNION ALL SELECT N'Tables',COUNT(*),6 FROM dbo.BilliardTables
 UNION ALL SELECT N'Bookings',COUNT(*),4 FROM dbo.Bookings
 UNION ALL SELECT N'Play sessions',COUNT(*),2 FROM dbo.PlaySessions
 UNION ALL SELECT N'Categories',COUNT(*),2 FROM dbo.ProductCategories
-UNION ALL SELECT N'Products',COUNT(*),6 FROM dbo.Products;
+UNION ALL SELECT N'Products',COUNT(*),6 FROM dbo.Products
+UNION ALL SELECT N'MembershipTiers',COUNT(*),0 FROM dbo.MembershipTiers
+UNION ALL SELECT N'PricingConfigs',COUNT(*),0 FROM dbo.PricingConfigs
+UNION ALL SELECT N'Orders',COUNT(*),0 FROM dbo.Orders
+UNION ALL SELECT N'OrderDetails',COUNT(*),0 FROM dbo.OrderDetails
+UNION ALL SELECT N'Invoices',COUNT(*),0 FROM dbo.Invoices
+UNION ALL SELECT N'PaymentTransactions',COUNT(*),0 FROM dbo.PaymentTransactions
+UNION ALL SELECT N'Combos',COUNT(*),0 FROM dbo.Combos
+UNION ALL SELECT N'WorkShifts',COUNT(*),0 FROM dbo.WorkShifts
+UNION ALL SELECT N'ComboItems',COUNT(*),0 FROM dbo.ComboItems
+UNION ALL SELECT N'SessionCombos',COUNT(*),0 FROM dbo.SessionCombos
+UNION ALL SELECT N'SessionComboItems',COUNT(*),0 FROM dbo.SessionComboItems;
 
 -- Screen 5: Staff listing; show inactive accounts too.
 SELECT u.Id,u.EmployeeCode,u.FullName,u.UserName,u.Email,u.PhoneNumber,u.HireDate,u.IsActive
@@ -48,3 +61,8 @@ SELECT Id,Name,Price,StockQuantity FROM dbo.Products WHERE Price<=0 OR StockQuan
 
 -- Expected 0 initially: no password was written by the SQL seed.
 SELECT COUNT(*) AS UsersWithPassword_Expected0 FROM dbo.AspNetUsers WHERE PasswordHash IS NOT NULL;
+
+
+GO
+
+-----------------------------------------------------------

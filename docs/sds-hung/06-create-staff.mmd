@@ -1,0 +1,39 @@
+sequenceDiagram
+    autonumber
+    actor A as Admin
+    participant C as EmployeeController
+    participant CTX as ApplicationDbContext
+    participant UM as UserManager
+    participant DB as SQL Server
+    A->>C: POST /Employee/Create + form + token
+    Note over A,C: Authorize Admin và anti-forgery phải hợp lệ
+    alt Dữ liệu form không hợp lệ
+        C-->>A: Trả form với lỗi validation
+    else Dữ liệu hợp lệ
+        C->>C: Trim dữ liệu, chuẩn hóa mã, tạo ApplicationUser
+        C->>CTX: BeginTransactionAsync()
+        CTX->>DB: BEGIN TRANSACTION
+        C->>UM: CreateAsync(user, password)
+        UM->>DB: Qua EF store cùng context: INSERT user có hash
+        DB-->>UM: Thành công hoặc lỗi
+        UM-->>C: IdentityResult hoặc exception
+        alt Tạo user thất bại
+            C->>CTX: RollbackAsync()
+            CTX->>DB: ROLLBACK
+            C-->>A: Báo lỗi hợp lệ / lỗi hệ thống đã được che chi tiết
+        else Tạo user thành công
+            C->>UM: AddToRoleAsync(user, Staff)
+            UM->>DB: INSERT AspNetUserRoles
+            DB-->>UM: Thành công hoặc lỗi
+            UM-->>C: IdentityResult hoặc exception
+            alt Gán role thất bại
+                C->>CTX: RollbackAsync()
+                CTX->>DB: ROLLBACK cả user và role link
+                C-->>A: Báo không tạo được nhân viên
+            else Gán role thành công
+                C->>CTX: CommitAsync()
+                CTX->>DB: COMMIT
+                C-->>A: Thông báo thành công và redirect /Employee
+            end
+        end
+    end
