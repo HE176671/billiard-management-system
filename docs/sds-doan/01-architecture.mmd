@@ -1,0 +1,27 @@
+flowchart TB
+    Actor["Staff (Thu ngân) / Admin"] --> Browser["Trình duyệt Web<br/>HTML5, CSS3, Bootstrap 5, JavaScript<br/>Đồng hồ đếm giây + Polling định kỳ"]
+    subgraph App["Bms.Web — ASP.NET Core MVC (.NET 8)"]
+        Gate["Routing + Authentication + Authorization<br/>[Authorize(Roles = 'Staff,Admin')]<br/>ValidateAntiForgeryToken cho POST"]
+        Controller["TableController<br/>Index, GetTableList, OpenSession, CloseSession"]
+        Views["Razor Views & Partial Views<br/>_StaffLayout, Index.cshtml, _TableGridPartial<br/>ViewModels: TableManagementViewModel"]
+        Service["ITableSessionService / TableSessionService<br/>Nghiệp vụ bàn/phiên, đồng bộ giờ server,<br/>bắt lỗi SqlException và dịch mã 5140x/5150x"]
+        DataLayer["ApplicationDbContext & ADO.NET qua DbContext<br/>EF Core đọc danh sách bàn + session Active<br/>Microsoft.Data.SqlClient gọi Stored Procedures"]
+        
+        Gate --> Controller
+        Controller --> Views
+        Controller --> Service
+        Service --> DataLayer
+    end
+    
+    subgraph OtherModules["Các phân hệ liên quan (Ranh giới nghiệp vụ)"]
+        BookingModule["TV2: Quản lý Đặt bàn (Bookings)<br/>Check-in khách, giữ chỗ 51407"]
+        InvoiceModule["TV3: Hóa đơn & Thanh toán (Invoices)<br/>Xử lý bàn AwaitingPayment"]
+        AccountModule["TV5: Tài khoản & Nhân viên (Identity)<br/>Cung cấp StaffId từ ClaimsPrincipal"]
+    end
+    
+    Browser -->|"HTTPS request + Cookie + Anti-forgery token"| Gate
+    Views -->|"HTML / Partial HTML / JSON"| Browser
+    DataLayer -->|"T-SQL Query & EXEC usp_OpenSession/usp_CloseSession"| DB[("SQL Server Local<br/>BilliardDB")]
+    Service -.->|"Lấy StaffId hiện tại"| AccountModule
+    Service -.->|"Ràng buộc giữ chỗ (51407)"| BookingModule
+    Service -.->|"Chuyển bàn sang AwaitingPayment"| InvoiceModule

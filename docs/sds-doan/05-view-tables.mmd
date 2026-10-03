@@ -1,0 +1,48 @@
+sequenceDiagram
+    autonumber
+    actor S as Thu ngân (Staff/Admin)
+    participant B as Browser / _StaffLayout
+    participant C as TableController
+    participant Svc as TableSessionService
+    participant EF as ApplicationDbContext
+    participant DB as SQL Server / BilliardDB
+
+    S->>B: Truy cập /Table (GET)
+    Note over B,C: [Authorize(Roles = "Staff,Admin")] kiểm tra cookie trước action
+    B->>C: GET /Table/Index
+    C->>Svc: GetTableCardsAsync()
+    Svc->>EF: LINQ query BilliardTables JOIN TableTypes<br/>LEFT JOIN PlaySessions WHERE ps.Status = 'Active'
+    EF->>DB: SELECT tbl.*, tt.Name, tt.HourlyRate,<br/>ps.Id AS SessionId, ps.StartAtUtc<br/>FROM BilliardTables tbl<br/>JOIN TableTypes tt ON ...<br/>LEFT JOIN PlaySessions ps ON ps.TableId = tbl.Id AND ps.Status = 'Active'<br/>ORDER BY tbl.TableCode
+    DB-->>EF: Result rows (5 cột trạng thái)
+    EF-->>Svc: List of anonymous objects
+    Svc->>Svc: Map sang List<TableCardViewModel><br/>Gắn ServerTimeUtc = DateTime.UtcNow<br/>SpecifyKind(StartAtUtc, DateTimeKind.Utc)
+    Svc-->>C: List<TableCardViewModel> + ServerTimeUtc
+    C-->>B: View("Index", TableManagementViewModel)
+    B->>S: Render sơ đồ bàn (cột trái)<br/>+ Panel chi tiết trống (cột phải)
+
+    Note over B: JavaScript khởi động:
+    Note over B: 1) Tính deltaOffset = Date.now() - serverTimeUtc
+    Note over B: 2) setInterval mỗi 1s → cập nhật đồng hồ đếm giờ mỗi bàn
+    Note over B: 3) Polling: setInterval mỗi 10s → gọi /Table/GetTableCardsPartial
+
+    loop Mỗi 10 giây (Polling)
+        B->>C: GET /Table/GetTableCardsPartial
+        Note over B,C: Dừng poll nếu document.hidden = true (Page Visibility API)
+        C->>Svc: GetTableCardsAsync()
+        Svc->>DB: SELECT như trên
+        DB-->>Svc: Danh sách cập nhật
+        Svc-->>C: List<TableCardViewModel> + ServerTimeUtc mới
+        C-->>B: Partial HTML (_TableGridPartial)
+        B->>B: innerHTML cập nhật lưới bàn<br/>Tái tính deltaOffset từ ServerTimeUtc mới<br/>Giữ nguyên bàn đang chọn (nếu còn tồn tại)
+    end
+
+    S->>B: Click vào thẻ bàn (ví dụ Bàn 01 "Đang chơi")
+    B->>C: GET /Table/GetTableDetail?tableId=1
+    C->>Svc: GetTableDetailAsync(tableId=1)
+    Svc->>EF: Query BilliardTable + PlaySession Active + AspNetUsers (FullName của Customer)
+    EF->>DB: SELECT ... JOIN AspNetUsers ON ps.CustomerId
+    DB-->>EF: Chi tiết bàn và phiên
+    EF-->>Svc: TableDetailViewModel (gồm CustomerFullName)
+    Svc-->>C: TableDetailViewModel
+    C-->>B: JSON TableDetailViewModel
+    B->>S: Cập nhật Panel chi tiết (cột phải):<br/>TableCode, Status, Customer, StartTime, Duration (đồng hồ chạy)

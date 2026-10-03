@@ -1,0 +1,114 @@
+classDiagram
+    class TableType {
+        +int Id
+        +string Name
+        +decimal HourlyRate
+    }
+    class BilliardTable {
+        +int Id
+        +string TableCode
+        +int TableTypeId
+        +int FloorNumber
+        +string Status
+        +byte[] RowVersion
+    }
+    class PlaySession {
+        +int Id
+        +int TableId
+        +int? BookingId
+        +string? CustomerId
+        +string OpenedById
+        +string? ClosedById
+        +DateTime StartAtUtc
+        +DateTime? EndAtUtc
+        +decimal HourlyRateSnapshot
+        +decimal? PlaytimeAmount
+        +string Status
+        +byte[] RowVersion
+    }
+    class TableCardViewModel {
+        +int Id
+        +string TableCode
+        +string TableTypeName
+        +int FloorNumber
+        +string Status
+        +string DisplayStatus
+        +int? ActiveSessionId
+        +DateTime? SessionStartUtc
+        +DateTime ServerTimeUtc
+    }
+    class TableDetailViewModel {
+        +int TableId
+        +string TableCode
+        +string TableTypeName
+        +decimal HourlyRate
+        +string Status
+        +string DisplayStatus
+        +int? SessionId
+        +DateTime? StartAtUtc
+        +DateTime? EndAtUtc
+        +decimal? HourlyRateSnapshot
+        +string? CustomerFullName
+        +DateTime ServerTimeUtc
+    }
+    class OpenSessionRequest {
+        +int TableId
+    }
+    class CloseSessionRequest {
+        +int SessionId
+    }
+    class TableOperationResult {
+        +bool Success
+        +int? ErrorCode
+        +string? Message
+        +bool AutoReload
+        +object? Data
+        +static Ok(data) TableOperationResult
+        +static Fail(code, msg, reload) TableOperationResult
+    }
+    class ITableSessionService {
+        <<interface>>
+        +GetTableCardsAsync() Task~List~TableCardViewModel~~
+        +GetTableDetailAsync(tableId) Task~TableDetailViewModel~
+        +OpenSessionAsync(tableId, staffId) Task~TableOperationResult~
+        +CloseSessionAsync(sessionId, staffId) Task~TableOperationResult~
+    }
+    class TableSessionService {
+        -ApplicationDbContext _context
+        +GetTableCardsAsync() Task~List~TableCardViewModel~~
+        +GetTableDetailAsync(tableId) Task~TableDetailViewModel~
+        +OpenSessionAsync(tableId, staffId) Task~TableOperationResult~
+        +CloseSessionAsync(sessionId, staffId) Task~TableOperationResult~
+        -ExecuteOpenSessionAsync(conn, tableId, staffId) Task~int~
+        -ExecuteCloseSessionAsync(conn, sessionId, staffId) Task~CloseSessionResult~
+        -MapErrorCode(sqlErrorNumber) string
+    }
+    class TableController {
+        -ITableSessionService _service
+        +Index() Task~IActionResult~
+        +GetTableCardsPartial() Task~IActionResult~
+        +GetTableDetail(tableId) Task~IActionResult~
+        +OpenSession(OpenSessionRequest) Task~IActionResult~
+        +CloseSession(CloseSessionRequest) Task~IActionResult~
+    }
+    class ApplicationDbContext {
+        +DbSet~TableType~ TableTypes
+        +DbSet~BilliardTable~ BilliardTables
+        +DbSet~PlaySession~ PlaySessions
+        +OnModelCreating(builder)
+    }
+
+    TableType "1" --> "0..*" BilliardTable : TableTypeId
+    BilliardTable "1" --> "0..*" PlaySession : TableId
+    TableController --> ITableSessionService : DI
+    TableController ..> OpenSessionRequest : input
+    TableController ..> CloseSessionRequest : input
+    TableController ..> TableOperationResult : output JSON
+    ITableSessionService <|.. TableSessionService : implements
+    TableSessionService --> ApplicationDbContext : DI
+    TableSessionService ..> TableCardViewModel : produces
+    TableSessionService ..> TableDetailViewModel : produces
+    TableSessionService ..> TableOperationResult : produces
+    ApplicationDbContext ..> TableType : DbSet
+    ApplicationDbContext ..> BilliardTable : DbSet
+    ApplicationDbContext ..> PlaySession : DbSet

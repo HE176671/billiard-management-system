@@ -1,0 +1,46 @@
+sequenceDiagram
+    autonumber
+    actor S as Thu ngân (Staff/Admin)
+    participant B as Browser / Table/Index.cshtml
+    participant C as TableController
+    participant Svc as TableSessionService
+    participant DB as SQL Server / BilliardDB
+
+    S->>B: Bấm nút "CLOSE TABLE" (bàn ở trạng thái InUse)
+    Note over B: Nút CLOSE TABLE chỉ được bật khi bàn đang ở trạng thái InUse
+    Note over B: Có xác nhận confirm dialog trước khi gửi request
+    B->>C: POST /Table/CloseSession<br/>{ sessionId: 42 }<br/>+ Anti-forgery token (RequestVerificationToken header)
+    Note over B,C: Framework từ chối request nếu anti-forgery token không hợp lệ
+    Note over C: [ValidateAntiForgeryToken] + [Authorize(Roles = "Staff,Admin")]
+    C->>C: staffId = User.FindFirstValue(ClaimTypes.NameIdentifier)<br/>Lấy từ ClaimsPrincipal - KHÔNG nhận từ client
+    alt staffId null (cookie hết hạn)
+        C-->>B: HTTP 401 Unauthorized → redirect Login
+    else staffId hợp lệ
+        C->>Svc: CloseSessionAsync(sessionId=42, staffId)
+        Svc->>DB: Mở connection qua GetDbConnection() và OpenAsync()
+        Svc->>DB: EXEC dbo.usp_CloseSession<br/>@SessionId=42, @StaffId='...'
+        Note over DB: Procedure thực hiện trong BEGIN TRANSACTION:<br/>1) Kiểm tra @StaffId IsActive và Role Staff/Admin<br/>2) Khóa BilliardTables WITH (UPDLOCK, HOLDLOCK)<br/>3) Khóa PlaySessions WITH (UPDLOCK)<br/>4) Kiểm tra PlaySessions.Status = 'Active' → THROW 51502 nếu không<br/>5) @Now = SYSUTCDATETIME()<br/>6) PlaytimeAmount = ROUND(DATEDIFF_BIG(second,@Start,@Now)*@Rate/3600.0, 0)<br/>7) UPDATE PlaySessions SET EndAtUtc=@Now, ClosedById, Status='Closed', PlaytimeAmount<br/>8) UPDATE BilliardTables SET Status='AwaitingPayment'<br/>9) Nếu BookingId khác NULL thì UPDATE Bookings SET Status='Completed'<br/>10) COMMIT → SELECT Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status
+
+        alt Procedure thành công → trả thông tin phiên đã đóng
+            DB-->>Svc: ResultSet { Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status:'Closed' }
+            Svc->>DB: CloseAsync() connection
+            Svc->>Svc: SpecifyKind StartAtUtc và EndAtUtc sang Utc
+            Svc-->>C: TableOperationResult.Ok({ sessionId, startUtc, endUtc, rateSnapshot, playtimeAmount })
+            C-->>B: HTTP 200 JSON { success: true, data: { playtimeAmount, ... } }
+            B->>B: Toast xanh "Đã đóng phiên — Tổng tiền: 150.000 VND"<br/>Gọi ngay reloadTableGrid()<br/>Reset Panel chi tiết về rỗng
+        else SqlException 51502 (Phiên đã bị đóng bởi người khác)
+            DB-->>Svc: SqlException { Number: 51502 }
+            Svc->>DB: CloseAsync() connection
+            Svc->>Svc: MapErrorCode(51502) → "Phiên chơi không còn ở trạng thái Hoạt động..."
+            Svc-->>C: TableOperationResult.Fail(51502, message, autoReload: true)
+            C-->>B: HTTP 200 JSON { success: false, errorCode: 51502, message: "...", autoReload: true }
+            B->>B: Toast đỏ hiển thị thông báo tiếng Việt
+            B->>B: autoReload=true → gọi reloadTableGrid() ngay
+        else SqlException 51501 (Quyền không hợp lệ)
+            DB-->>Svc: SqlException { Number: 51501 }
+            Svc->>DB: CloseAsync() connection
+            Svc-->>C: TableOperationResult.Fail(51501, message, autoReload: false)
+            C-->>B: HTTP 200 JSON { success: false, errorCode: 51501, message: "..." }
+            B->>B: Toast đỏ, không tải lại (lỗi logic nghiêm trọng)
+        end
+    end

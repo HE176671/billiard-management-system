@@ -1,0 +1,52 @@
+erDiagram
+    TableTypes ||--o{ BilliardTables : "TableTypeId"
+    BilliardTables ||--o{ PlaySessions : "TableId"
+    Bookings o|--o{ PlaySessions : "BookingId (optional)"
+    AspNetUsers ||--o{ PlaySessions : "OpenedById"
+    AspNetUsers o|--o{ PlaySessions : "ClosedById (optional)"
+    AspNetUsers o|--o{ PlaySessions : "CustomerId (optional)"
+
+    TableTypes {
+        int Id PK
+        nvarchar Name UK
+        decimal HourlyRate
+    }
+
+    BilliardTables {
+        int Id PK
+        nvarchar TableCode UK
+        int TableTypeId FK
+        int FloorNumber
+        varchar Status
+        rowversion RowVersion
+    }
+
+    PlaySessions {
+        int Id PK
+        int TableId FK
+        int BookingId FK
+        nvarchar CustomerId FK
+        nvarchar OpenedById FK
+        nvarchar ClosedById FK
+        datetime2 StartAtUtc
+        datetime2 EndAtUtc
+        decimal HourlyRateSnapshot
+        decimal PlaytimeAmount
+        varchar Status
+        rowversion RowVersion
+    }
+
+    AspNetUsers {
+        nvarchar Id PK
+        nvarchar FullName
+        bit IsActive
+    }
+
+    Bookings {
+        int Id PK
+        int TableId FK
+        nvarchar CustomerId FK
+        varchar Status
+        datetime2 StartAtUtc
+        datetime2 EndAtUtc
+    }

@@ -1,0 +1,22 @@
+flowchart LR
+    Root["Bms.Web<br/>Program.cs — Composition Root"]
+    C["«namespace» Bms.Web.Controllers<br/>TableController, StaffController"]
+    S["«namespace» Bms.Web.Services<br/>ITableSessionService<br/>TableSessionService"]
+    M["«namespace» Bms.Web.Models<br/>TableManagementViewModel<br/>TableCardViewModel, TableDetailViewModel<br/>OpenSessionRequest, CloseSessionRequest<br/>TableOperationResult"]
+    D["«namespace» Bms.Web.Data<br/>ApplicationDbContext<br/>TableType, BilliardTable, PlaySession"]
+    V["«folder» Views<br/>Views/Table/Index.cshtml<br/>Views/Table/_TableGridPartial.cshtml<br/>Views/Shared/_StaffLayout.cshtml"]
+    W["«folder» wwwroot<br/>js/table-management.js<br/>css/table-management.css"]
+    SqlClient["«package» Microsoft.Data.SqlClient<br/>(Có sẵn từ EF Core SqlServer)"]
+    EF["«framework» Microsoft.EntityFrameworkCore.SqlServer<br/>Microsoft.AspNetCore.Identity.EntityFrameworkCore"]
+
+    Root -.->|"Đăng ký DI AddScoped"| S
+    Root -.->|"Cấu hình DbContext"| D
+    Root -.->|"Map default routes"| C
+    C -.->|"Nhận/trả ViewModel"| M
+    C -.->|"Gọi xử lý nghiệp vụ"| S
+    C -.->|"Chọn View & truyền Model"| V
+    S -.->|"Sử dụng Entity/DbSet"| D
+    S -.->|"Thực thi qua DbConnection"| SqlClient
+    D -.->|"Thừa kế IdentityDbContext"| EF
+    V -.->|"Strongly-typed binding"| M
+    V -.->|"Tải CSS/JS giao diện"| W

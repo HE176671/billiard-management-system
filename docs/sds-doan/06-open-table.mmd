@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    actor S as Thu ngân (Staff/Admin)
+    participant B as Browser / Table/Index.cshtml
+    participant C as TableController
+    participant Svc as TableSessionService
+    participant DB as SQL Server / BilliardDB
+
+    S->>B: Bấm nút "OPEN TABLE" (bàn ở trạng thái Available)
+    Note over B: Nút OPEN TABLE chỉ được bật khi bàn đang ở trạng thái Available
+    B->>C: POST /Table/OpenSession<br/>{ tableId: 1 }<br/>+ Anti-forgery token (RequestVerificationToken header)
+    Note over B,C: Framework từ chối request nếu anti-forgery token không hợp lệ
+    Note over C: [ValidateAntiForgeryToken] + [Authorize(Roles = "Staff,Admin")]
+    C->>C: staffId = User.FindFirstValue(ClaimTypes.NameIdentifier)<br/>Lấy từ ClaimsPrincipal - KHÔNG nhận từ client
+    alt staffId null (cookie hết hạn)
+        C-->>B: HTTP 401 Unauthorized → redirect Login
+    else staffId hợp lệ
+        C->>Svc: OpenSessionAsync(tableId=1, staffId)
+        Svc->>DB: Mở connection qua GetDbConnection() và OpenAsync()
+        Svc->>DB: EXEC dbo.usp_OpenSession<br/>@TableId=1, @StaffId='...', @BookingId=NULL, @CustomerId=NULL
+        Note over DB: Procedure thực hiện trong BEGIN TRANSACTION:<br/>1) Kiểm tra @StaffId IsActive và Role Staff/Admin<br/>2) Khóa bàn WITH (UPDLOCK, HOLDLOCK)<br/>3) Kiểm tra Status = 'Available' → THROW 51402 nếu không<br/>4) Kiểm tra không có phiên Active → THROW 51403 nếu có<br/>5) Kiểm tra booking giữ chỗ → THROW 51407 nếu có<br/>6) INSERT PlaySessions, UPDATE BilliardTables SET Status='InUse'<br/>7) COMMIT → SELECT SessionId
+
+        alt Procedure thành công → trả SessionId
+            DB-->>Svc: ResultSet { SessionId: 42 }
+            Svc->>DB: CloseAsync() connection
+            Svc-->>C: TableOperationResult.Ok({ SessionId: 42 })
+            C-->>B: HTTP 200 JSON { success: true, sessionId: 42 }
+            B->>B: Toast xanh "Đã mở bàn thành công"<br/>Gọi ngay reloadTableGrid()<br/>Cập nhật Panel chi tiết với StartTime
+        else SqlException (bắt lỗi THROW từ procedure)
+            DB-->>Svc: SqlException { Number: 51402 } hoặc 51403, 51407...
+            Svc->>DB: CloseAsync() connection
+            Svc->>Svc: MapErrorCode(ex.Number) → chuỗi tiếng Việt
+            Svc-->>C: TableOperationResult.Fail(code, message, autoReload: true)
+            C-->>B: HTTP 200 JSON { success: false, errorCode: 51402, message: "Bàn hiện không ở trạng thái Trống...", autoReload: true }
+            B->>B: Toast đỏ hiển thị thông báo tiếng Việt
+            B->>B: autoReload=true → gọi reloadTableGrid()
+        end
+    end
