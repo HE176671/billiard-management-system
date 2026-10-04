@@ -1,16 +1,21 @@
+using System.Data;
 using Bms.Web.Data;
 using Bms.Web.Models;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Bms.Web.Services;
 
 public class TableSessionService : ITableSessionService
 {
     private readonly ApplicationDbContext _context;
+    private readonly ILogger<TableSessionService> _logger;
 
-    public TableSessionService(ApplicationDbContext context)
+    public TableSessionService(ApplicationDbContext context, ILogger<TableSessionService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<List<TableCardViewModel>> GetTableCardsAsync()
@@ -116,5 +121,186 @@ public class TableSessionService : ITableSessionService
         "Maintenance" => "Bảo trì",
         "Inactive" => "Ngừng hoạt động",
         _ => status
+    };
+
+    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId)
+    {
+        if (tableId <= 0)
+        {
+            return TableOperationResult.Fail(null, "Mã bàn không hợp lệ.", autoReload: false);
+        }
+
+        if (string.IsNullOrWhiteSpace(staffId))
+        {
+            return TableOperationResult.Fail(null, "Thông tin nhân viên thực hiện không hợp lệ.", autoReload: false);
+        }
+
+        var conn = (SqlConnection)_context.Database.GetDbConnection();
+        var openedHere = conn.State == ConnectionState.Closed;
+
+        try
+        {
+            if (openedHere)
+            {
+                await conn.OpenAsync();
+            }
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "dbo.usp_OpenSession";
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            cmd.Parameters.Add(new SqlParameter("@TableId", SqlDbType.Int) { Value = tableId });
+            cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
+            cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = DBNull.Value });
+            cmd.Parameters.Add(new SqlParameter("@CustomerId", SqlDbType.NVarChar, 450) { Value = DBNull.Value });
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                int sessionIdOrdinal = reader.GetOrdinal("SessionId");
+                int sessionId = reader.GetInt32(sessionIdOrdinal);
+
+                return TableOperationResult.Ok(new { SessionId = sessionId });
+            }
+
+            return TableOperationResult.Fail(null, "Không nhận được phản hồi từ hệ thống cơ sở dữ liệu khi mở phiên.", autoReload: true);
+        }
+        catch (SqlException ex)
+        {
+            return HandleSqlException(ex, "OpenSessionAsync", tableId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi không xác định khi thực hiện OpenSessionAsync cho bàn {TableId} bởi nhân viên {StaffId}.", tableId, staffId);
+            return TableOperationResult.Fail(null, "Đã xảy ra lỗi không xác định trên hệ thống. Vui lòng thử lại sau.", autoReload: false);
+        }
+        finally
+        {
+            if (openedHere && conn.State == ConnectionState.Open)
+            {
+                await conn.CloseAsync();
+            }
+        }
+    }
+
+    public async Task<TableOperationResult> CloseSessionAsync(int sessionId, string staffId)
+    {
+        if (sessionId <= 0)
+        {
+            return TableOperationResult.Fail(null, "Mã phiên chơi không hợp lệ.", autoReload: false);
+        }
+
+        if (string.IsNullOrWhiteSpace(staffId))
+        {
+            return TableOperationResult.Fail(null, "Thông tin nhân viên thực hiện không hợp lệ.", autoReload: false);
+        }
+
+        var conn = (SqlConnection)_context.Database.GetDbConnection();
+        var openedHere = conn.State == ConnectionState.Closed;
+
+        try
+        {
+            if (openedHere)
+            {
+                await conn.OpenAsync();
+            }
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "dbo.usp_CloseSession";
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            cmd.Parameters.Add(new SqlParameter("@SessionId", SqlDbType.Int) { Value = sessionId });
+            cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                int idOrdinal = reader.GetOrdinal("Id");
+                int startOrdinal = reader.GetOrdinal("StartAtUtc");
+                int endOrdinal = reader.GetOrdinal("EndAtUtc");
+                int rateOrdinal = reader.GetOrdinal("HourlyRateSnapshot");
+                int amountOrdinal = reader.GetOrdinal("PlaytimeAmount");
+
+                int id = reader.GetInt32(idOrdinal);
+                DateTime startAtUtc = DateTime.SpecifyKind(reader.GetDateTime(startOrdinal), DateTimeKind.Utc);
+                DateTime endAtUtc = DateTime.SpecifyKind(reader.GetDateTime(endOrdinal), DateTimeKind.Utc);
+                decimal hourlyRateSnapshot = reader.GetDecimal(rateOrdinal);
+                decimal playtimeAmount = reader.GetDecimal(amountOrdinal);
+
+                return TableOperationResult.Ok(new
+                {
+                    SessionId = id,
+                    PlaytimeAmount = playtimeAmount,
+                    HourlyRateSnapshot = hourlyRateSnapshot,
+                    StartAtUtc = startAtUtc,
+                    EndAtUtc = endAtUtc
+                });
+            }
+
+            return TableOperationResult.Fail(null, "Không nhận được phản hồi từ hệ thống cơ sở dữ liệu khi đóng phiên.", autoReload: true);
+        }
+        catch (SqlException ex)
+        {
+            return HandleSqlException(ex, "CloseSessionAsync", sessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi không xác định khi thực hiện CloseSessionAsync cho phiên {SessionId} bởi nhân viên {StaffId}.", sessionId, staffId);
+            return TableOperationResult.Fail(null, "Đã xảy ra lỗi không xác định trên hệ thống. Vui lòng thử lại sau.", autoReload: false);
+        }
+        finally
+        {
+            if (openedHere && conn.State == ConnectionState.Open)
+            {
+                await conn.CloseAsync();
+            }
+        }
+    }
+
+    private TableOperationResult HandleSqlException(SqlException ex, string operationName, int targetId)
+    {
+        if (IsKnownDomainError(ex.Number))
+        {
+            var message = MapErrorCode(ex.Number);
+            var autoReload = IsAutoReloadError(ex.Number);
+            _logger.LogWarning("Nghiệp vụ từ chối {Operation} (TargetId: {TargetId}) với mã {ErrorCode}: {ErrorMessage}",
+                operationName, targetId, ex.Number, message);
+            return TableOperationResult.Fail(ex.Number, message, autoReload: autoReload);
+        }
+
+        _logger.LogError(ex, "Lỗi cơ sở dữ liệu ({SqlErrorNumber}) khi thực thi {Operation} (TargetId: {TargetId}).",
+            ex.Number, operationName, targetId);
+
+        return TableOperationResult.Fail(
+            ex.Number,
+            "Đã xảy ra lỗi khi kết nối hoặc xử lý cơ sở dữ liệu. Vui lòng thử lại sau.",
+            autoReload: false);
+    }
+
+    private static bool IsKnownDomainError(int errorNumber) => errorNumber switch
+    {
+        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51501 or 51502 => true,
+        _ => false
+    };
+
+    private static bool IsAutoReloadError(int errorNumber) => errorNumber switch
+    {
+        51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51502 => true,
+        _ => false
+    };
+
+    private static string MapErrorCode(int errorNumber) => errorNumber switch
+    {
+        51401 => "Thao tác yêu cầu tài khoản Nhân viên hoặc Quản trị viên đang hoạt động.",
+        51402 => "Bàn hiện không ở trạng thái Trống để có thể mở phiên.",
+        51403 => "Bàn này đã có một phiên chơi đang hoạt động.",
+        51404 => "Lượt đặt bàn không hợp lệ (chưa check-in, sai bàn hoặc đã hết hạn giữ chỗ).",
+        51405 => "Khách hàng không khớp với thông tin người đặt trước.",
+        51406 => "Lượt đặt bàn này đã được mở phiên chơi trước đó.",
+        51407 => "Bàn đang được giữ chỗ cho khách đặt trước trong khung giờ này.",
+        51408 => "Tài khoản hội viên của khách hàng không tồn tại hoặc đang bị khóa.",
+        51501 => "Thao tác đóng phiên yêu cầu quyền Nhân viên hoặc Quản trị viên đang hoạt động.",
+        51502 => "Phiên chơi không còn ở trạng thái Hoạt động (có thể đã được nhân viên khác đóng).",
+        _ => "Đã xảy ra lỗi khi kết nối hoặc xử lý cơ sở dữ liệu. Vui lòng thử lại sau."
     };
 }
