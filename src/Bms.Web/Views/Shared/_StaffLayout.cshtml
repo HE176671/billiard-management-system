@@ -9,35 +9,56 @@
     <link rel="stylesheet" href="~/css/table-management.css" asp-append-version="true" />
 </head>
 <body class="staff-layout-body">
-    <!-- Topbar: BMS - TABLE MANAGEMENT SCREEN & User actions -->
-    <header class="staff-topbar">
-        <div class="topbar-brand">
-            <span class="brand-title">BMS - TABLE MANAGEMENT SCREEN</span>
+    <!-- Sidebar cố định bên trái phong cách _AdminLayout -->
+    <nav class="sidebar">
+        <div class="sidebar-brand">
+            <div class="logo">🎱 BMS</div>
+            <span class="logo-sub">Billiard Management System</span>
         </div>
-        <div class="topbar-user-area">
-            <div class="user-chip">
-                <i class="bi bi-person-fill user-icon"></i>
-                <span class="user-role-label">Thu ngân</span>
-                <span class="user-name">@(User.Identity?.Name ?? "Nhân viên")</span>
-            </div>
-            <a asp-controller="Profile" asp-action="ChangePassword" class="btn-topbar-action" title="Đổi mật khẩu">
-                <i class="bi bi-shield-lock"></i>
-                <span>Đổi mật khẩu</span>
+        <div class="sidebar-nav">
+            <div class="nav-section-label">NGHIỆP VỤ</div>
+            <a class="sidebar-link active" asp-controller="Table" asp-action="Index">
+                <i class="bi bi-grid-3x3"></i> Quản lý bàn
             </a>
-            <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn-topbar-action btn-logout" title="Đăng xuất">
-                    <i class="bi bi-box-arrow-right"></i>
-                    <span>Đăng xuất</span>
-                </button>
-            </form>
         </div>
-    </header>
+        <div class="sidebar-footer">
+            @{
+                var userName = User.Identity?.Name?.Trim();
+                var initialChar = !string.IsNullOrEmpty(userName) ? char.ToUpper(userName[0]).ToString() : "?";
+                var displayName = !string.IsNullOrEmpty(userName) ? userName : "Nhân viên";
+                var roleName = User.IsInRole("Admin") ? "Administrator" : "Staff";
+            }
+            <div class="user-chip">
+                <div class="user-avatar">@initialChar</div>
+                <div>
+                    <div class="user-name">@displayName</div>
+                    <div class="user-role">@roleName</div>
+                </div>
+            </div>
+        </div>
+    </nav>
 
-    <!-- Main Content: Full-width layout -->
-    <main class="staff-main-container">
-        @RenderBody()
-    </main>
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+        <header class="topbar">
+            <span class="topbar-title">@ViewData["Title"]</span>
+            <div class="topbar-actions">
+                <a asp-controller="Profile" asp-action="ChangePassword" class="btn-logout" title="Đổi mật khẩu">
+                    <i class="bi bi-shield-lock"></i> Đổi mật khẩu
+                </a>
+                <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn-logout" title="Đăng xuất">
+                        <i class="bi bi-box-arrow-right"></i> Đăng xuất
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        <main class="page-content">
+            @RenderBody()
+        </main>
+    </div>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>

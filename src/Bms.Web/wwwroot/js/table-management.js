@@ -1,6 +1,6 @@
 /**
  * BMS - Quản lý bàn & Phiên chơi (Table Management)
- * Lượt 6: Đồng hồ thời gian thực và Polling
+ * Lượt 8: Đổi giao diện màn hình Quản lý bàn cho Staff
  */
 (() => {
     'use strict';
@@ -19,6 +19,8 @@
         cardStatus: '',
         cardSessionStart: ''
     };
+
+    let lastSelectedCardId = null;     // Lưu ID thẻ bàn vừa chọn để trả focus khi đóng panel
 
     // Cờ trạng thái điều phối bất đồng bộ
     let isProcessing = false;          // Đang thực hiện mở bàn hoặc đóng phiên
@@ -155,7 +157,6 @@
         if (window.bootstrap && window.bootstrap.Tooltip) {
             const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.forEach(tooltipTriggerEl => {
-                // Kiểm tra xem đã có instance chưa để tránh tạo trùng sau mỗi lần thay lưới
                 if (typeof window.bootstrap.Tooltip.getInstance === 'function') {
                     const existing = window.bootstrap.Tooltip.getInstance(tooltipTriggerEl);
                     if (existing) return;
@@ -197,8 +198,8 @@
         if (btnTransfer) btnTransfer.disabled = true;
         if (btnSplitMerge) btnSplitMerge.disabled = true;
 
-        // Nếu đang xử lý request (mở/đóng) thì vô hiệu hóa cả OPEN và CLOSE để chống bấm đúp
-        if (isProcessing) {
+        // Nếu đang xử lý (mở/đóng) hoặc đang tải dữ liệu chi tiết thì vô hiệu hóa cả OPEN và CLOSE
+        if (isProcessing || isDetailLoading) {
             if (btnOpen) btnOpen.disabled = true;
             if (btnClose) btnClose.disabled = true;
             return;
@@ -227,7 +228,7 @@
 
         const cards = container.querySelectorAll('.table-card');
         cards.forEach(card => {
-            if (card.getAttribute('data-table-id') === String(tableId)) {
+            if (tableId && card.getAttribute('data-table-id') === String(tableId)) {
                 card.classList.add('selected');
             } else {
                 card.classList.remove('selected');
@@ -252,7 +253,7 @@
     /**
      * Cập nhật đồng hồ mỗi giây:
      * - Truy vấn lại DOM trên thẻ bàn: tính thời gian chơi từ data-session-start và deltaOffset
-     * - Cập nhật dòng Duration của panel phải nếu bàn đang chọn có phiên Active
+     * - Cập nhật dòng Duration của panel phải nếu bàn đang chọn có phiên Active và panel đang hiển thị
      */
     function updateClocks() {
         const cards = document.querySelectorAll('#table-grid-container .table-card');
@@ -282,8 +283,11 @@
             clockEl.textContent = formatElapsedSeconds(totalSeconds);
         });
 
-        // Panel phải: chỉ chạy đồng hồ nếu bàn đang chọn có phiên Active (có StartAtUtc, không có EndAtUtc)
-        if (currentSelectedTable.id && currentSelectedTable.startAtUtc && !currentSelectedTable.endAtUtc) {
+        // Panel phải: chỉ chạy đồng hồ nếu bàn đang chọn có phiên Active và panel đang mở
+        const panel = document.getElementById('table-detail-panel');
+        const isPanelVisible = panel && !panel.classList.contains('d-none');
+
+        if (isPanelVisible && currentSelectedTable.id && currentSelectedTable.startAtUtc && !currentSelectedTable.endAtUtc) {
             const elDuration = document.getElementById('detail-duration');
             if (elDuration) {
                 const startParsed = Date.parse(currentSelectedTable.startAtUtc);
@@ -339,7 +343,6 @@
         // Điền các phần tử giao diện bằng textContent (An toàn XSS)
         const elTableName = document.getElementById('detail-table-name');
         const elStatus = document.getElementById('detail-status');
-        const elBadge = document.getElementById('detail-panel-badge');
         const elCustomer = document.getElementById('detail-customer');
         const elBookingTime = document.getElementById('detail-booking-time');
         const elStartTime = document.getElementById('detail-start-time');
@@ -348,15 +351,13 @@
 
         if (elTableName) elTableName.textContent = currentSelectedTable.code || '--';
         if (elStatus) elStatus.textContent = currentSelectedTable.displayStatus || '--';
-        if (elBadge) elBadge.textContent = currentSelectedTable.displayStatus || 'Chưa chọn bàn';
 
         const customerName = detail.customerFullName ?? detail.CustomerFullName;
         if (elCustomer) elCustomer.textContent = customerName ? customerName : '--';
         if (elBookingTime) elBookingTime.textContent = '--';
 
-        // Xử lý hiển thị thời gian Start Time, End Time, Duration theo mục 3
+        // Xử lý hiển thị thời gian Start Time, End Time, Duration
         if (startUtc && !endUtc) {
-            // Phiên Active (có StartAtUtc, không có EndAtUtc): End Time là "--", Duration chạy đồng hồ
             if (elStartTime) elStartTime.textContent = formatVnDateTime(startUtc);
             if (elEndTime) elEndTime.textContent = '--';
 
@@ -369,12 +370,10 @@
                 if (elDuration) elDuration.textContent = formatElapsedSeconds(totalSeconds);
             }
         } else if (startUtc && endUtc) {
-            // Bàn Chờ thanh toán (có cả StartAtUtc và EndAtUtc): Duration cố định, KHÔNG chạy đồng hồ
             if (elStartTime) elStartTime.textContent = formatVnDateTime(startUtc);
             if (elEndTime) elEndTime.textContent = formatVnDateTime(endUtc);
             if (elDuration) elDuration.textContent = formatDuration(startUtc, endUtc);
         } else {
-            // Không có phiên
             if (elStartTime) elStartTime.textContent = '--';
             if (elEndTime) elEndTime.textContent = '--';
             if (elDuration) elDuration.textContent = '--';
@@ -392,13 +391,56 @@
             if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
         }
 
+        isDetailLoading = false;
         updateButtons();
     }
 
     // =========================================================================
-    // Xóa trắng thông tin trên panel phải khi không chọn bàn nào
+    // Xóa trắng thông tin trên panel chi tiết
     // =========================================================================
-    function resetDetailPanel() {
+    function clearDetailFields() {
+        const elTableName = document.getElementById('detail-table-name');
+        const elStatus = document.getElementById('detail-status');
+        const elCustomer = document.getElementById('detail-customer');
+        const elBookingTime = document.getElementById('detail-booking-time');
+        const elStartTime = document.getElementById('detail-start-time');
+        const elEndTime = document.getElementById('detail-end-time');
+        const elDuration = document.getElementById('detail-duration');
+
+        if (elTableName) elTableName.textContent = '--';
+        if (elStatus) elStatus.textContent = '--';
+        if (elCustomer) elCustomer.textContent = '--';
+        if (elBookingTime) elBookingTime.textContent = '--';
+        if (elStartTime) elStartTime.textContent = '--';
+        if (elEndTime) elEndTime.textContent = '--';
+        if (elDuration) elDuration.textContent = '--';
+
+        const elPlaytimeRow = document.getElementById('detail-playtime-row');
+        const elPlaytimeAmount = document.getElementById('detail-playtime-amount');
+        if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
+        if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
+    }
+
+    // =========================================================================
+    // Đóng panel chi tiết (✕ hoặc Esc hoặc khi bàn biến mất)
+    // =========================================================================
+    function closeDetailPanel(returnFocus = true) {
+        const panel = document.getElementById('table-detail-panel');
+        if (panel) {
+            panel.classList.add('d-none');
+        }
+
+        // Bỏ highlight thẻ bàn đang chọn
+        highlightSelectedCard(null);
+
+        const prevSelectedId = currentSelectedTable.id || lastSelectedCardId;
+
+        // Hủy yêu cầu lấy chi tiết đang bay nếu có
+        if (detailAbortController) {
+            detailAbortController.abort();
+            detailAbortController = null;
+        }
+
         currentSelectedTable = {
             id: null,
             code: '',
@@ -411,38 +453,37 @@
             cardSessionStart: ''
         };
 
-        const elTableName = document.getElementById('detail-table-name');
-        const elStatus = document.getElementById('detail-status');
-        const elBadge = document.getElementById('detail-panel-badge');
-        const elCustomer = document.getElementById('detail-customer');
-        const elBookingTime = document.getElementById('detail-booking-time');
-        const elStartTime = document.getElementById('detail-start-time');
-        const elEndTime = document.getElementById('detail-end-time');
-        const elDuration = document.getElementById('detail-duration');
-
-        if (elTableName) elTableName.textContent = '--';
-        if (elStatus) elStatus.textContent = '--';
-        if (elBadge) elBadge.textContent = 'Chưa chọn bàn';
-        if (elCustomer) elCustomer.textContent = '--';
-        if (elBookingTime) elBookingTime.textContent = '--';
-        if (elStartTime) elStartTime.textContent = '--';
-        if (elEndTime) elEndTime.textContent = '--';
-        if (elDuration) elDuration.textContent = '--';
-
-        const elPlaytimeRow = document.getElementById('detail-playtime-row');
-        const elPlaytimeAmount = document.getElementById('detail-playtime-amount');
-        if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
-        if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
-
+        isDetailLoading = false;
+        clearDetailFields();
         updateButtons();
+
+        // Trả focus về thẻ vừa chọn nếu còn tồn tại
+        if (returnFocus && prevSelectedId) {
+            const card = document.querySelector(`.table-card[data-table-id="${prevSelectedId}"]`);
+            if (card && typeof card.focus === 'function') {
+                card.focus();
+            }
+        }
+    }
+
+    // resetDetailPanel: khi bàn đang chọn biến mất sau polling -> ẩn panel
+    function resetDetailPanel() {
+        closeDetailPanel(false);
     }
 
     // =========================================================================
-    // Xử lý khi click chọn bàn (handleTableSelect)
-    // Chống phản hồi sai thứ tự bằng AbortController và bộ đếm yêu cầu
+    // Xử lý khi click / phím chọn bàn (handleTableSelect)
     // =========================================================================
     async function handleTableSelect(tableId) {
         if (!tableId) return;
+
+        lastSelectedCardId = tableId;
+
+        // Hiển thị panel ngay lập tức bên cạnh sơ đồ
+        const panel = document.getElementById('table-detail-panel');
+        if (panel) {
+            panel.classList.remove('d-none');
+        }
 
         // Hủy yêu cầu lấy chi tiết trước đó nếu còn đang bay
         if (detailAbortController) {
@@ -454,9 +495,34 @@
 
         isDetailLoading = true;
 
-        // Cập nhật id và đánh dấu thẻ bàn được chọn ngay lập tức
         currentSelectedTable.id = tableId;
         highlightSelectedCard(tableId);
+
+        // Hiển thị trạng thái đang tải ngắn gọn trong lúc đợi phản hồi
+        const card = document.querySelector(`.table-card[data-table-id="${tableId}"]`);
+        const cardCode = card ? card.getAttribute('data-table-code') : '';
+
+        const elTableName = document.getElementById('detail-table-name');
+        const elStatus = document.getElementById('detail-status');
+        const elCustomer = document.getElementById('detail-customer');
+        const elBookingTime = document.getElementById('detail-booking-time');
+        const elStartTime = document.getElementById('detail-start-time');
+        const elEndTime = document.getElementById('detail-end-time');
+        const elDuration = document.getElementById('detail-duration');
+
+        if (elTableName) elTableName.textContent = cardCode || 'Đang tải...';
+        if (elStatus) elStatus.textContent = 'Đang tải...';
+        if (elCustomer) elCustomer.textContent = 'Đang tải...';
+        if (elBookingTime) elBookingTime.textContent = 'Đang tải...';
+        if (elStartTime) elStartTime.textContent = 'Đang tải...';
+        if (elEndTime) elEndTime.textContent = 'Đang tải...';
+        if (elDuration) elDuration.textContent = 'Đang tải...';
+
+        const elPlaytimeRow = document.getElementById('detail-playtime-row');
+        if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
+
+        // Vô hiệu hóa các nút hành động trong lúc đang tải
+        updateButtons();
 
         try {
             const response = await fetch(`/Table/GetTableDetail?tableId=${encodeURIComponent(tableId)}`, {
@@ -502,6 +568,12 @@
             const detail = await response.json();
             if (requestId !== detailRequestId) return;
 
+            // Kiểm tra nếu người dùng đã chủ động đóng panel trong lúc fetch thì không điền dữ liệu
+            const currentPanel = document.getElementById('table-detail-panel');
+            if (!currentPanel || currentPanel.classList.contains('d-none')) {
+                return;
+            }
+
             applyTableDetail(detail);
         } catch (err) {
             if (err.name === 'AbortError') return;
@@ -511,6 +583,7 @@
         } finally {
             if (requestId === detailRequestId) {
                 isDetailLoading = false;
+                updateButtons();
             }
         }
     }
@@ -519,12 +592,10 @@
     // Áp dụng HTML lưới bàn mới và bảo toàn trạng thái bàn đang chọn
     // =========================================================================
     async function applyGridHtml(html) {
-        // Chỉ thay innerHTML của #table-grid-container khi HTML nhận về thật sự chứa phần tử #table-grid
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const newGrid = doc.getElementById('table-grid');
         if (!newGrid) {
-            // Kiểm tra xem có phải phản hồi trang Đăng nhập / AccessDenied không
             const isLoginPage = doc.querySelector('form[action*="Login"]') ||
                                 doc.title?.toLowerCase().includes('đăng nhập') ||
                                 doc.title?.toLowerCase().includes('login') ||
@@ -543,7 +614,7 @@
         const container = document.getElementById('table-grid-container');
         if (!container) return;
 
-        // Dọn dẹp tooltip cũ trong container để tránh rò rỉ bộ nhớ
+        // Dọn dẹp tooltip cũ trong container
         disposeContainerTooltips(container);
 
         const selectedId = currentSelectedTable.id;
@@ -553,25 +624,28 @@
         // Thay thế HTML lưới bàn
         container.innerHTML = html;
 
-        // Tái tính deltaOffset và cập nhật đồng hồ ngay lập tức
+        // Tái tính deltaOffset và cập nhật đồng hồ
         recalculateDeltaOffset();
         updateClocks();
         initTooltips();
 
-        // Xử lý giữ bàn đang chọn
-        if (!selectedId) {
+        const panel = document.getElementById('table-detail-panel');
+        const isPanelVisible = panel && !panel.classList.contains('d-none');
+
+        // Nếu không có bàn nào đang chọn hoặc panel đang ẩn thì không hiển thị lại panel
+        if (!selectedId || !isPanelVisible) {
             updateButtons();
             return;
         }
 
         const card = container.querySelector(`.table-card[data-table-id="${selectedId}"]`);
         if (!card) {
-            // Bàn đang chọn không còn trên lưới -> Xóa panel về "--" và tắt nút
+            // Bàn đang chọn không còn trên lưới -> ẩn panel và xóa thông tin
             resetDetailPanel();
             return;
         }
 
-        // Gán lại class selected
+        // Gán lại class selected cho thẻ bàn
         card.classList.add('selected');
 
         const newCardStatus = card.getAttribute('data-status') || '';
@@ -581,7 +655,6 @@
         if (newCardStatus !== prevCardStatus || newCardSessionStart !== prevCardSessionStart) {
             await handleTableSelect(selectedId);
         } else {
-            // Trạng thái không đổi: gọi lại hàm cập nhật trạng thái nút
             updateButtons();
         }
     }
@@ -605,7 +678,6 @@
         if (isPollingStopped) return;
         if (document.hidden) return;
 
-        // Bỏ qua lượt polling khi thao tác mở/đóng đang diễn ra, hoặc đang lấy chi tiết, hoặc polling trước chưa xong
         if (isPolling || isProcessing || isDetailLoading) return;
 
         if (pollingAbortController) {
@@ -629,7 +701,6 @@
 
             if (requestId !== pollingRequestId) return;
 
-            // Kiểm tra bị chuyển hướng về login hoặc lỗi phân quyền
             const isRedirectToLogin = response.redirected && (
                 response.url.includes('/Account/Login') ||
                 response.url.includes('/AccessDenied') ||
@@ -663,10 +734,8 @@
             const html = await response.text();
             if (requestId !== pollingRequestId) return;
 
-            // Nếu người dùng vừa kích hoạt mở/đóng bàn trong lúc đợi phản hồi thì hủy áp dụng kết quả poll cũ
             if (isProcessing) return;
 
-            // Thành công: đặt lại cờ thông báo lỗi mạng
             hasNetworkErrorNotified = false;
 
             await applyGridHtml(html);
@@ -737,7 +806,6 @@
             return;
         }
 
-        // Chống ghi đè do phản hồi polling đến muộn: hủy polling đang bay và tăng thế hệ
         if (pollingAbortController) {
             pollingAbortController.abort();
             pollingAbortController = null;
@@ -745,7 +813,6 @@
         pollingRequestId++;
         isPolling = false;
 
-        // Chống bấm đúp: vô hiệu nút và bật cờ xử lý
         isProcessing = true;
         updateButtons();
 
@@ -753,7 +820,6 @@
         const targetTableCode = currentSelectedTable.code;
 
         try {
-            // Gửi dữ liệu form urlencoded, KHÔNG dùng header token, KHÔNG gửi JSON
             const params = new URLSearchParams();
             params.append('TableId', targetTableId);
             params.append('__RequestVerificationToken', token);
@@ -819,7 +885,6 @@
         const targetSessionId = currentSelectedTable.sessionId;
         const targetTableCode = currentSelectedTable.code;
 
-        // Hộp xác nhận có tên bàn trước khi gửi
         const confirmed = window.confirm(`Bạn có chắc chắn muốn đóng phiên cho bàn ${targetTableCode}?`);
         if (!confirmed) {
             return;
@@ -831,7 +896,6 @@
             return;
         }
 
-        // Chống ghi đè do phản hồi polling đến muộn: hủy polling đang bay và tăng thế hệ
         if (pollingAbortController) {
             pollingAbortController.abort();
             pollingAbortController = null;
@@ -839,12 +903,10 @@
         pollingRequestId++;
         isPolling = false;
 
-        // Chống bấm đúp: vô hiệu nút và bật cờ xử lý
         isProcessing = true;
         updateButtons();
 
         try {
-            // Gửi dữ liệu form urlencoded, KHÔNG dùng header token, KHÔNG gửi JSON
             const params = new URLSearchParams();
             params.append('SessionId', targetSessionId);
             params.append('__RequestVerificationToken', token);
@@ -904,12 +966,12 @@
     }
 
     // =========================================================================
-    // Khởi tạo các sự kiện giao diện (Event Delegation)
+    // Khởi tạo các sự kiện giao diện (Event Delegation & Keyboard Navigation)
     // =========================================================================
     function initEvents() {
-        // Lắng nghe trên container cha #table-grid-container để khi partial view tải lại vẫn nhận event
         const gridContainer = document.getElementById('table-grid-container');
         if (gridContainer) {
+            // Click chuột vào thẻ bàn
             gridContainer.addEventListener('click', (e) => {
                 const card = e.target.closest('.table-card');
                 if (!card) return;
@@ -918,7 +980,38 @@
                     handleTableSelect(tableId);
                 }
             });
+
+            // Chọn thẻ bàn bằng bàn phím (Enter hoặc Space)
+            gridContainer.addEventListener('keydown', (e) => {
+                const card = e.target.closest('.table-card');
+                if (!card) return;
+                if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+                    e.preventDefault();
+                    const tableId = card.getAttribute('data-table-id');
+                    if (tableId) {
+                        handleTableSelect(tableId);
+                    }
+                }
+            });
         }
+
+        // Nút đóng panel chi tiết (✕)
+        const btnCloseDetail = document.getElementById('btn-close-detail');
+        if (btnCloseDetail) {
+            btnCloseDetail.addEventListener('click', () => {
+                closeDetailPanel(true);
+            });
+        }
+
+        // Phím Escape: chỉ đóng panel khi panel đang hiển thị
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' || e.key === 'Esc') {
+                const panel = document.getElementById('table-detail-panel');
+                if (panel && !panel.classList.contains('d-none')) {
+                    closeDetailPanel(true);
+                }
+            }
+        });
 
         const btnOpen = document.getElementById('btn-open-table');
         if (btnOpen) {

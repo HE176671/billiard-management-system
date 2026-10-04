@@ -1,8 +1,10 @@
 /* ==========================================================================
-   BMS - Table Management Stylesheet (Bố cục theo wireframe-table-management.png)
+   BMS - Table Management Stylesheet
+   Giao diện Quản lý bàn cho Staff (kế thừa phong cách _AdminLayout)
    ========================================================================== */
 
 :root {
+    --sidebar-width: 240px;
     --primary: #e94560;
     --primary-dark: #c62a47;
     --primary-green: #10b981;
@@ -10,7 +12,8 @@
     --bg-dark: #0f172a;
     --bg-sidebar: #1e293b;
     --bg-surface: #ffffff;
-    --bg-page: #f8fafc;
+    --bg-page: #f1f5f9;
+    --text-muted-light: #94a3b8;
     --border-color: #cbd5e1;
     --border-dark: #334155;
     --text-main: #0f172a;
@@ -35,108 +38,190 @@ body.staff-layout-body {
     background-color: var(--bg-page);
     color: var(--text-main);
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
 }
 
 /* ==========================================================================
-   Topbar (Thanh tiêu đề trên cùng theo wireframe)
+   Sidebar cố định (Phong cách từ _AdminLayout)
    ========================================================================== */
-.staff-topbar {
-    height: 60px;
-    background-color: #ffffff;
-    border-bottom: 2px solid var(--border-dark);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 1.5rem;
-    position: sticky;
+.sidebar {
+    position: fixed;
     top: 0;
+    left: 0;
+    width: var(--sidebar-width);
+    height: 100vh;
+    background: var(--bg-sidebar);
+    display: flex;
+    flex-direction: column;
     z-index: 100;
 }
 
-.topbar-brand .brand-title {
-    font-size: 1.15rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    color: var(--bg-dark);
-    text-transform: uppercase;
+.sidebar-brand {
+    padding: 1.5rem 1.25rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.topbar-user-area {
+.sidebar-brand .logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: -0.5px;
+}
+
+.sidebar-brand .logo-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted-light);
+    display: block;
+    margin-top: 2px;
+}
+
+.sidebar-nav {
+    flex: 1;
+    padding: 1rem 0;
+    overflow-y: auto;
+}
+
+.nav-section-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--text-muted-light);
+    text-transform: uppercase;
+    padding: 0.75rem 1.25rem 0.35rem;
+}
+
+.sidebar-link {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: 0.65rem;
+    padding: 0.55rem 1.25rem;
+    color: #cbd5e1;
+    font-size: 0.875rem;
+    text-decoration: none;
+    border-radius: 0;
+    transition: background 0.15s, color 0.15s;
+    border-left: 3px solid transparent;
+}
+
+.sidebar-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+}
+
+.sidebar-link.active {
+    background: rgba(233, 69, 96, 0.15);
+    color: var(--primary);
+    border-left-color: var(--primary);
+    font-weight: 600;
+}
+
+.sidebar-link i {
+    font-size: 1rem;
+    width: 1.1rem;
+    text-align: center;
+}
+
+.sidebar-footer {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .user-chip {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.35rem 0.75rem;
-    background: #f1f5f9;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    font-size: 0.875rem;
+    gap: 0.6rem;
 }
 
-.user-icon {
-    font-size: 1rem;
-    color: var(--primary);
-}
-
-.user-role-label {
-    font-weight: 600;
-    color: var(--primary);
-}
-
-.user-name {
-    font-weight: 500;
-    color: var(--text-main);
-}
-
-.btn-topbar-action {
-    display: inline-flex;
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--primary);
+    display: flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0.85rem;
-    font-size: 0.85rem;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: #ffffff;
+    flex-shrink: 0;
+}
+
+.user-chip .user-name {
+    font-size: 0.8rem;
+    color: #e2e8f0;
     font-weight: 500;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background: #ffffff;
-    color: var(--text-muted);
-    text-decoration: none;
-    transition: all 0.15s ease-in-out;
-    cursor: pointer;
 }
 
-.btn-topbar-action:hover {
-    border-color: var(--border-dark);
-    color: var(--text-main);
-    background-color: #f8fafc;
-}
-
-.btn-topbar-action.btn-logout:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-    background-color: #fff1f2;
+.user-chip .user-role {
+    font-size: 0.7rem;
+    color: var(--text-muted-light);
 }
 
 /* ==========================================================================
-   Main Content POS (Bố cục 2 cột)
+   Main Content Wrapper & Topbar (Phong cách từ _AdminLayout)
    ========================================================================== */
-.staff-main-container {
-    flex: 1;
-    padding: 1.25rem 1.5rem;
+.main-wrapper {
+    margin-left: var(--sidebar-width);
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
 }
 
+.topbar {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 1.5rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.topbar-title {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1e293b;
+}
+
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.btn-logout {
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #64748b;
+    border-radius: 8px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    text-decoration: none;
+}
+
+.btn-logout:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.page-content {
+    padding: 1.5rem;
+    flex: 1;
+}
+
+/* ==========================================================================
+   Bố cục Quản lý bàn (2 vùng: Sơ đồ bàn & Chi tiết phiên)
+   ========================================================================== */
 .table-management-wrapper {
     display: flex;
     gap: 1.5rem;
-    flex: 1;
     align-items: flex-start;
 }
 
@@ -146,10 +231,15 @@ body.staff-layout-body {
     min-width: 0;
 }
 
-/* Cột phải: Panel chi tiết phiên chơi */
+/* Cột phải: Panel chi tiết phiên chơi (Sticky và align-self) */
 .table-detail-aside {
     width: 380px;
     flex-shrink: 0;
+    align-self: flex-start;
+    position: sticky;
+    top: calc(56px + 1.5rem);
+    max-height: calc(100vh - 56px - 3rem);
+    overflow-y: auto;
 }
 
 /* Hộp tiêu đề theo kiểu khung dây wireframe */
@@ -174,14 +264,29 @@ body.staff-layout-body {
     justify-content: space-between;
 }
 
-.panel-status-badge {
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 0.2rem 0.6rem;
-    border-radius: 4px;
-    background-color: #f1f5f9;
+.btn-close-detail {
+    background: transparent;
+    border: 1px solid transparent;
     color: var(--text-muted);
-    border: 1px solid var(--border-color);
+    font-size: 0.95rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease-in-out;
+}
+
+.btn-close-detail:hover {
+    color: var(--primary);
+    background-color: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+.btn-close-detail:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
 }
 
 /* ==========================================================================
@@ -210,6 +315,11 @@ body.staff-layout-body {
 .table-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.table-card:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }
 
 .table-card.selected {
@@ -323,7 +433,7 @@ body.staff-layout-body {
 }
 
 /* ==========================================================================
-   Panel Chi tiết Phiên chơi (Cột phải theo wireframe)
+   Panel Chi tiết Phiên chơi
    ========================================================================== */
 .detail-panel-container {
     border: 2px solid var(--border-dark);
@@ -461,13 +571,16 @@ button:disabled {
 /* ==========================================================================
    Responsive Breakpoints
    ========================================================================== */
-@media (max-width: 992px) {
+@media (max-width: 991.98px) {
     .table-management-wrapper {
         flex-direction: column;
     }
     
     .table-detail-aside {
         width: 100%;
+        position: static;
+        max-height: none;
+        overflow-y: visible;
     }
 }
 
@@ -483,4 +596,3 @@ button:disabled {
     font-size: 0.95rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
-

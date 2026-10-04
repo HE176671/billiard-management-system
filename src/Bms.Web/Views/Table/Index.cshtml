@@ -1,7 +1,7 @@
 @model Bms.Web.Models.TableManagementViewModel
 @{
     Layout = "_StaffLayout";
-    ViewData["Title"] = "Quản lý bàn & Phiên chơi";
+    ViewData["Title"] = "Quản lý bàn";
 }
 
 <!-- Token Anti-forgery riêng cho các thao tác AJAX của trang Quản lý bàn -->
@@ -20,7 +20,7 @@
 </div>
 
 <div class="table-management-wrapper">
-    <!-- Cột trái: Sơ đồ bàn -->
+    <!-- Cột trái: Sơ đồ bàn (mặc định chiếm toàn bộ chiều rộng khi panel ẩn) -->
     <section class="table-grid-section">
         <div class="section-box-header">
             <h2 class="section-box-title">Sơ đồ bàn</h2>
@@ -30,12 +30,14 @@
         </div>
     </section>
 
-    <!-- Cột phải: Chi tiết phiên chơi -->
-    <aside class="table-detail-aside">
+    <!-- Cột phải: Chi tiết phiên chơi (mặc định ẨN bằng d-none, không dùng modal) -->
+    <aside class="table-detail-aside d-none" id="table-detail-panel" aria-label="Chi tiết phiên chơi">
         <div class="detail-panel-container">
             <div class="section-box-header detail-header-box">
-                <h2 class="section-box-title">Chi tiết Phiên chơi</h2>
-                <span id="detail-panel-badge" class="panel-status-badge">Chưa chọn bàn</span>
+                <h2 class="section-box-title">Chi tiết phiên chơi</h2>
+                <button type="button" class="btn-close-detail" id="btn-close-detail" aria-label="Đóng" title="Đóng panel (Esc)">
+                    <i class="bi bi-x-lg"></i>
+                </button>
             </div>
 
             <!-- Khung 1: Thông tin bàn & Trạng thái -->
