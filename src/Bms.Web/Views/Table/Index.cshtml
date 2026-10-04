@@ -1,0 +1,103 @@
+@model Bms.Web.Models.TableManagementViewModel
+@{
+    Layout = "_StaffLayout";
+    ViewData["Title"] = "Quản lý bàn & Phiên chơi";
+}
+
+<!-- Token Anti-forgery riêng cho các thao tác AJAX của trang Quản lý bàn -->
+<div id="antiforgery-holder" style="display:none;">
+    @Html.AntiForgeryToken()
+</div>
+
+<div class="table-management-wrapper">
+    <!-- Cột trái: Sơ đồ bàn -->
+    <section class="table-grid-section">
+        <div class="section-box-header">
+            <h2 class="section-box-title">Sơ đồ bàn</h2>
+        </div>
+        <div id="table-grid-container" class="table-grid-container">
+            <partial name="_TableGridPartial" model="Model.Tables" />
+        </div>
+    </section>
+
+    <!-- Cột phải: Chi tiết phiên chơi -->
+    <aside class="table-detail-aside">
+        <div class="detail-panel-container">
+            <div class="section-box-header detail-header-box">
+                <h2 class="section-box-title">Chi tiết Phiên chơi</h2>
+                <span id="detail-panel-badge" class="panel-status-badge">Chưa chọn bàn</span>
+            </div>
+
+            <!-- Khung 1: Thông tin bàn & Trạng thái -->
+            <div class="panel-card-box">
+                <div class="detail-data-row">
+                    <span class="detail-key">Table Name:</span>
+                    <span class="detail-val" id="detail-table-name">--</span>
+                </div>
+                <div class="detail-data-row">
+                    <span class="detail-key">Status:</span>
+                    <span class="detail-val" id="detail-status">--</span>
+                </div>
+            </div>
+
+            <!-- Khung 2: Khách hàng & Thông tin đặt bàn -->
+            <div class="panel-card-box">
+                <div class="detail-data-row">
+                    <span class="detail-key">Customer:</span>
+                    <span class="detail-val" id="detail-customer">--</span>
+                </div>
+                <div class="detail-data-row">
+                    <span class="detail-key">Booking Time:</span>
+                    <span class="detail-val" id="detail-booking-time">--</span>
+                </div>
+                <div class="action-single-btn-wrapper">
+                    <span class="tooltip-wrapper d-block" title="Chưa hỗ trợ" data-bs-toggle="tooltip">
+                        <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe" id="btn-confirm-booking" disabled>
+                            CONFIRM BOOKING
+                        </button>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Khung 3: Thời gian chơi -->
+            <div class="panel-card-box">
+                <div class="detail-data-row">
+                    <span class="detail-key">Start Time:</span>
+                    <span class="detail-val" id="detail-start-time">--</span>
+                </div>
+                <div class="detail-data-row">
+                    <span class="detail-key">End Time:</span>
+                    <span class="detail-val" id="detail-end-time">--</span>
+                </div>
+                <div class="detail-data-row">
+                    <span class="detail-key">Duration:</span>
+                    <span class="detail-val duration-val" id="detail-duration">--</span>
+                </div>
+            </div>
+
+            <!-- Khung 4: Các nút hành động theo wireframe -->
+            <div class="panel-card-box action-buttons-container">
+                <div class="action-btn-row">
+                    <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-open-table" disabled>
+                        OPEN TABLE
+                    </button>
+                    <button type="button" class="btn btn-danger-bms btn-action-main" id="btn-close-table" disabled>
+                        CLOSE TABLE
+                    </button>
+                </div>
+                <div class="action-btn-row">
+                    <span class="tooltip-wrapper flex-fill" title="Chưa hỗ trợ" data-bs-toggle="tooltip">
+                        <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe" id="btn-transfer" disabled>
+                            TRANSFER
+                        </button>
+                    </span>
+                    <span class="tooltip-wrapper flex-fill" title="Chưa hỗ trợ" data-bs-toggle="tooltip">
+                        <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe" id="btn-split-merge" disabled>
+                            SPLIT/MERGE
+                        </button>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </aside>
+</div>

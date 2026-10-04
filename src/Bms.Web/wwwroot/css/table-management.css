@@ -1,0 +1,462 @@
+/* ==========================================================================
+   BMS - Table Management Stylesheet (Bố cục theo wireframe-table-management.png)
+   ========================================================================== */
+
+:root {
+    --primary: #e94560;
+    --primary-dark: #c62a47;
+    --primary-green: #10b981;
+    --primary-green-dark: #059669;
+    --bg-dark: #0f172a;
+    --bg-sidebar: #1e293b;
+    --bg-surface: #ffffff;
+    --bg-page: #f8fafc;
+    --border-color: #cbd5e1;
+    --border-dark: #334155;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    
+    /* 5 trạng thái bàn theo SCOPE.md mục 6 */
+    --status-available: #10b981;        /* Trống - Xanh lá */
+    --status-inuse: #e94560;            /* Đang chơi - Đỏ */
+    --status-awaitingpayment: #f59e0b;  /* Chờ thanh toán - Vàng */
+    --status-maintenance: #94a3b8;      /* Bảo trì - Xám */
+    --status-inactive: #475569;         /* Ngừng hoạt động - Xám đậm */
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body.staff-layout-body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-page);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ==========================================================================
+   Topbar (Thanh tiêu đề trên cùng theo wireframe)
+   ========================================================================== */
+.staff-topbar {
+    height: 60px;
+    background-color: #ffffff;
+    border-bottom: 2px solid var(--border-dark);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.topbar-brand .brand-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--bg-dark);
+    text-transform: uppercase;
+}
+
+.topbar-user-area {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.user-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.75rem;
+    background: #f1f5f9;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.user-icon {
+    font-size: 1rem;
+    color: var(--primary);
+}
+
+.user-role-label {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.user-name {
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.btn-topbar-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: #ffffff;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+}
+
+.btn-topbar-action:hover {
+    border-color: var(--border-dark);
+    color: var(--text-main);
+    background-color: #f8fafc;
+}
+
+.btn-topbar-action.btn-logout:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background-color: #fff1f2;
+}
+
+/* ==========================================================================
+   Main Content POS (Bố cục 2 cột)
+   ========================================================================== */
+.staff-main-container {
+    flex: 1;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.table-management-wrapper {
+    display: flex;
+    gap: 1.5rem;
+    flex: 1;
+    align-items: flex-start;
+}
+
+/* Cột trái: Sơ đồ bàn */
+.table-grid-section {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Cột phải: Panel chi tiết phiên chơi */
+.table-detail-aside {
+    width: 380px;
+    flex-shrink: 0;
+}
+
+/* Hộp tiêu đề theo kiểu khung dây wireframe */
+.section-box-header {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    padding: 0.65rem 1.25rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+}
+
+.section-box-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--bg-dark);
+}
+
+.detail-header-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.panel-status-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    background-color: #f1f5f9;
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+
+/* ==========================================================================
+   Lưới thẻ bàn (Table Grid & Cards)
+   ========================================================================== */
+.table-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.table-card {
+    background-color: #ffffff;
+    border: 2px solid var(--border-dark);
+    border-radius: 4px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    position: relative;
+    user-select: none;
+}
+
+.table-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.table-card.selected {
+    box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.4);
+    border-color: var(--primary) !important;
+}
+
+.table-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.table-code {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--bg-dark);
+}
+
+.table-type {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.table-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.table-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.9rem;
+}
+
+.info-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.info-value {
+    font-weight: 600;
+}
+
+.table-clock {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 700;
+    font-size: 0.95rem;
+    min-height: 1.25rem;
+    display: inline-block;
+}
+
+/* Định kiểu 5 màu trạng thái bàn theo SCOPE.md mục 6 */
+.table-card.status-available {
+    border-left: 6px solid var(--status-available);
+}
+.table-card.status-available .status-text {
+    color: var(--status-available);
+}
+
+.table-card.status-inuse {
+    border-left: 6px solid var(--status-inuse);
+    background-color: #fffafb;
+}
+.table-card.status-inuse .status-text {
+    color: var(--status-inuse);
+}
+.table-card.status-inuse .table-clock {
+    color: var(--status-inuse);
+}
+
+.table-card.status-awaitingpayment {
+    border-left: 6px solid var(--status-awaitingpayment);
+    background-color: #fffdf5;
+}
+.table-card.status-awaitingpayment .status-text {
+    color: var(--status-awaitingpayment);
+}
+
+.table-card.status-maintenance {
+    border-left: 6px solid var(--status-maintenance);
+    background-color: #f8fafc;
+    opacity: 0.85;
+}
+.table-card.status-maintenance .status-text {
+    color: var(--status-maintenance);
+}
+
+.table-card.status-inactive {
+    border-left: 6px solid var(--status-inactive);
+    background-color: #f1f5f9;
+    opacity: 0.7;
+}
+.table-card.status-inactive .status-text {
+    color: var(--status-inactive);
+}
+
+.no-tables-message {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-muted);
+    background-color: #ffffff;
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+}
+
+/* ==========================================================================
+   Panel Chi tiết Phiên chơi (Cột phải theo wireframe)
+   ========================================================================== */
+.detail-panel-container {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    padding: 1.25rem;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.panel-card-box {
+    border: 2px solid var(--border-dark);
+    padding: 0.85rem 1rem;
+    border-radius: 4px;
+    background-color: #ffffff;
+}
+
+.detail-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.3rem 0;
+    font-size: 0.95rem;
+}
+
+.detail-data-row:not(:last-child) {
+    border-bottom: 1px dashed #e2e8f0;
+}
+
+.detail-key {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.detail-val {
+    font-weight: 600;
+    color: var(--bg-dark);
+}
+
+.duration-val {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 1.05rem;
+    color: var(--primary);
+}
+
+.action-single-btn-wrapper {
+    margin-top: 0.75rem;
+}
+
+/* ==========================================================================
+   Các nút hành động (Action Buttons theo wireframe)
+   ========================================================================== */
+.action-buttons-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.action-btn-row {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.btn-action-main {
+    flex: 1;
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 0.65rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: 2px solid transparent;
+}
+
+.btn-primary-bms {
+    background-color: var(--primary-green);
+    border-color: var(--primary-green-dark);
+    color: #ffffff;
+}
+.btn-primary-bms:hover:not(:disabled) {
+    background-color: var(--primary-green-dark);
+    color: #ffffff;
+}
+
+.btn-danger-bms {
+    background-color: var(--status-inuse);
+    border-color: var(--primary-dark);
+    color: #ffffff;
+}
+.btn-danger-bms:hover:not(:disabled) {
+    background-color: var(--primary-dark);
+    color: #ffffff;
+}
+
+.btn-wireframe {
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0.55rem 0.5rem;
+    border-radius: 4px;
+    border: 2px solid var(--border-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-main);
+    background-color: transparent;
+}
+
+.btn-wireframe:hover:not(:disabled) {
+    background-color: #f1f5f9;
+    color: var(--bg-dark);
+    border-color: var(--border-dark);
+}
+
+/* Style cho nút disabled và tooltip wrapper */
+button:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.5;
+}
+
+.tooltip-wrapper {
+    cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+@media (max-width: 992px) {
+    .table-management-wrapper {
+        flex-direction: column;
+    }
+    
+    .table-detail-aside {
+        width: 100%;
+    }
+}
