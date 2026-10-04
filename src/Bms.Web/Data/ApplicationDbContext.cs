@@ -1,6 +1,7 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Bms.Web.Data.Entities;
 
 namespace Bms.Web.Data;
 
@@ -8,6 +9,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options) { }
+
+    public DbSet<TableType> TableTypes => Set<TableType>();
+    public DbSet<BilliardTable> BilliardTables => Set<BilliardTable>();
+    public DbSet<PlaySession> PlaySessions => Set<PlaySession>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
