@@ -370,6 +370,16 @@ body.staff-layout-body {
     color: var(--primary);
 }
 
+#detail-playtime-amount {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 1.05rem;
+    color: #198754;
+}
+
+.panel-card-box .detail-data-row:has(+ #detail-playtime-row.d-none) {
+    border-bottom: none;
+}
+
 .action-single-btn-wrapper {
     margin-top: 0.75rem;
 }
@@ -460,3 +470,17 @@ button:disabled {
         width: 100%;
     }
 }
+
+/* ==========================================================================
+   Toast Notification Styles
+   ========================================================================== */
+.toast-container {
+    z-index: 1090;
+}
+
+#bms-toast {
+    min-width: 300px;
+    font-size: 0.95rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+

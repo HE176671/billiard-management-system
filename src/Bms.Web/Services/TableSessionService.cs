@@ -92,6 +92,48 @@ public class TableSessionService : ITableSessionService
             return null;
         }
 
+        DateTime? startAtUtc = raw.StartAtUtc.HasValue
+            ? DateTime.SpecifyKind(raw.StartAtUtc.Value, DateTimeKind.Utc)
+            : null;
+        DateTime? endAtUtc = raw.EndAtUtc.HasValue
+            ? DateTime.SpecifyKind(raw.EndAtUtc.Value, DateTimeKind.Utc)
+            : null;
+        decimal? hourlyRateSnapshot = raw.HourlyRateSnapshot;
+        decimal? playtimeAmount = null;
+        string? customerFullName = raw.CustomerFullName;
+        int? sessionId = raw.SessionId;
+
+        if (raw.Status == "AwaitingPayment")
+        {
+            var latestClosed = await (from s in _context.PlaySessions.AsNoTracking()
+                                      where s.TableId == tableId && s.Status == "Closed"
+                                      orderby s.EndAtUtc descending, s.Id descending
+                                      join user in _context.Users.AsNoTracking()
+                                          on s.CustomerId equals user.Id into userGroup
+                                      from customerUser in userGroup.DefaultIfEmpty()
+                                      select new
+                                      {
+                                          s.StartAtUtc,
+                                          s.EndAtUtc,
+                                          s.HourlyRateSnapshot,
+                                          s.PlaytimeAmount,
+                                          CustomerFullName = customerUser != null ? customerUser.FullName : null
+                                      }).FirstOrDefaultAsync();
+
+            if (latestClosed != null)
+            {
+                startAtUtc = DateTime.SpecifyKind(latestClosed.StartAtUtc, DateTimeKind.Utc);
+                endAtUtc = latestClosed.EndAtUtc.HasValue
+                    ? DateTime.SpecifyKind(latestClosed.EndAtUtc.Value, DateTimeKind.Utc)
+                    : null;
+                hourlyRateSnapshot = latestClosed.HourlyRateSnapshot;
+                playtimeAmount = latestClosed.PlaytimeAmount;
+                customerFullName = latestClosed.CustomerFullName;
+            }
+
+            sessionId = null;
+        }
+
         return new TableDetailViewModel
         {
             TableId = raw.TableId,
@@ -100,15 +142,12 @@ public class TableSessionService : ITableSessionService
             HourlyRate = raw.HourlyRate,
             Status = raw.Status,
             DisplayStatus = MapDisplayStatus(raw.Status),
-            SessionId = raw.SessionId,
-            StartAtUtc = raw.StartAtUtc.HasValue
-                ? DateTime.SpecifyKind(raw.StartAtUtc.Value, DateTimeKind.Utc)
-                : null,
-            EndAtUtc = raw.EndAtUtc.HasValue
-                ? DateTime.SpecifyKind(raw.EndAtUtc.Value, DateTimeKind.Utc)
-                : null,
-            HourlyRateSnapshot = raw.HourlyRateSnapshot,
-            CustomerFullName = raw.CustomerFullName,
+            SessionId = sessionId,
+            StartAtUtc = startAtUtc,
+            EndAtUtc = endAtUtc,
+            HourlyRateSnapshot = hourlyRateSnapshot,
+            PlaytimeAmount = playtimeAmount,
+            CustomerFullName = customerFullName,
             ServerTimeUtc = serverTimeUtc
         };
     }

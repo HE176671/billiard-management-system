@@ -33,6 +33,7 @@ public class TableDetailViewModel
     public DateTime? StartAtUtc { get; set; }
     public DateTime? EndAtUtc { get; set; }
     public decimal? HourlyRateSnapshot { get; set; }
+    public decimal? PlaytimeAmount { get; set; }
     public string? CustomerFullName { get; set; }
     public DateTime ServerTimeUtc { get; set; }
 }
