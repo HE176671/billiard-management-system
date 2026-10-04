@@ -2,7 +2,7 @@
 
 ## Software Design Specification — Phân hệ Quản lý Bàn & Phiên chơi
 
-**Ngày cập nhật:** 04/10/2026. **Phiên bản:** 1.1. **Người phụ trách theo phân công:** Đoan (Thành viên 1).
+**Ngày cập nhật:** 04/10/2026. **Phiên bản:** 1.2. **Người phụ trách theo phân công:** Đoan (Thành viên 1).
 
 Tài liệu cung cấp thiết kế kiến trúc, package, ba bảng dữ liệu và thiết kế chi tiết cho màn hình Quản lý bàn, luồng mở bàn (khách vãng lai) và đóng phiên chơi. Cấu trúc đánh số tương ứng mẫu SDS của nhóm; các mục I, II và III có thể ghép vào báo cáo chung. Nội dung giải thích bằng tiếng Việt; tên lớp, bảng, phương thức và stored procedure giữ nguyên tiếng Anh theo C# và SQL Server.
 
@@ -16,6 +16,7 @@ Nguồn đối chiếu: `BMS_Database_Starter/BilliardDB_Full.sql` (dòng 128–
 |---|---|---|---|
 | 04/10/2026 | A | Đoan | Khởi tạo SDS phân hệ Quản lý Bàn & Phiên chơi theo khung SDS_HUNG.md, 9 điểm thiết kế và 7 sơ đồ Mermaid |
 | 04/10/2026 | M | Đoan | Cập nhật v1.1: Đổi TableOperationResult sang Ok/Fail; bỏ BookingId ở v1 (chỉ mở vãng lai); chuẩn hóa 2 khóa UPDLOCK và hàm SYSUTCDATETIME() từ SQL thật; bổ sung 4 trường cho TableDetailViewModel; xóa mục OnModelCreating trong phụ lục; chuẩn hóa test D05/D06/D07; xác minh link tham khảo |
+| 04/10/2026 | M | Đoan | Chốt Phương án A cho đường vào màn hình: sửa StaffController.Index() chuyển hướng sang TableController.Index(); cập nhật mục III.1.7 và phụ lục A1 |
 
 ---
 
@@ -911,18 +912,16 @@ function startPolling() {
 2. Màn hình POS cần layout full-width không sidebar để tối đa diện tích lưới bàn.
 3. Tách layout tránh xung đột khi merge code với Hùng (TV5).
 
-### 1.7 Đường vào màn hình — CẦN XÁC NHẬN
+### 1.7 Đường vào màn hình — Đã chốt
 
-> [!CAUTION]
-> **CẦN XÁC NHẬN với nhóm:** Màn hình Quản lý bàn (`/Table/Index`) cần được kết nối vào luồng đăng nhập. Có 2 phương án:
+> [!NOTE]
+> **Quyết định thiết kế (Đã chốt):** Chọn **Phương án A — StaffController chuyển hướng**.
 >
-> **Phương án A — StaffController chuyển hướng:**
-> Sửa `StaffController.Index()` để redirect sang `TableController.Index()`. Không đổi logic đăng nhập. File cần sửa: `Controllers/StaffController.cs` (1 dòng return).
->
-> **Phương án B — Đổi trang đích sau đăng nhập cho Staff:**
-> Sửa `AccountController` — sau khi `SignInResult.Succeeded`, nếu role là `Staff` thì redirect sang `/Table` thay vì `/Staff`. File cần sửa: `Controllers/AccountController.cs` (thêm 1 nhánh điều kiện).
->
-> **Không tự quyết.** Phương án nào chọn ảnh hưởng đến flow của TV5 (Hùng — AccountController). Cần thống nhất với Hùng trước khi code.
+> **Chi tiết triển khai:**
+> - Sau khi nhân viên (role `Staff`) đăng nhập thành công, luồng điều hướng mặc định của hệ thống Identity chuyển về route `/Staff` (tương ứng `StaffController.Index()`).
+> - Action `StaffController.Index()` thực hiện chuyển hướng (`RedirectToAction("Index", "Table")`) sang màn hình Quản lý bàn (`TableController.Index()`).
+> - **Tập tin cần sửa:** `Controllers/StaffController.cs` (sửa 1 dòng trong action `Index()`).
+> - **Lý do lựa chọn:** Giữ nguyên vẹn logic đăng nhập trong `AccountController.cs` của TV5 (Hùng), không can thiệp vào mã điều phối tài khoản chung, loại bỏ hoàn toàn rủi ro xung đột mã nguồn khi tích hợp giữa các thành viên.
 
 ---
 
@@ -954,7 +953,7 @@ function startPolling() {
 
 | # | Mức độ | Vấn đề | Hành động cần thực hiện |
 |---|---|---|---|
-| **A1** | **CẦN XÁC NHẬN** | **Đường vào màn hình** (`/Table`): Phương án A (sửa `StaffController`) hay B (sửa `AccountController`) | Thống nhất với Hùng (TV5) trước khi code. File liên quan: `StaffController.cs` hoặc `AccountController.cs` |
+| **A1** | **Đã chốt** | **Đường vào màn hình** (`/Table`): Chọn **Phương án A** | Sửa `StaffController.Index()` chuyển hướng sang `TableController.Index()`. File sửa: `Controllers/StaffController.cs` (không sửa `AccountController.cs` của TV5) |
 | **A2** | **CẦN XÁC NHẬN** | **Hiển thị trạng thái "Đã đặt"** (bàn `Available` có booking giữ chỗ) và **luồng mở bàn theo booking** (`@BookingId != null`): Cần TV2 cung cấp API hoặc thống nhất luồng check-in | Thống nhất với TV2 trước khi bổ sung. Ở v1: chỉ mở vãng lai (`@BookingId = NULL, @CustomerId = NULL`), bàn giữ chỗ ném 51407 và hiện thông báo tiếng Việt |
 | **A3** | **CẦN XÁC NHẬN** | **`Booking Time` trên panel chi tiết:** Hiện hiển thị `--` ở v1. Khi TV2 sẵn sàng, cần bổ sung query `Bookings` để hiển thị giờ booking cho khách | Bổ sung sau khi TV2 hoàn thành `Bookings` logic |
 | **A4** | Thiết kế cần bổ sung | `CloseSession` trả `PlaytimeAmount` cho browser nhưng chưa có màn hình hóa đơn | Thuộc TV3; Đoan chỉ hiển thị số tiền trong toast và không tự tạo `Invoice` |
