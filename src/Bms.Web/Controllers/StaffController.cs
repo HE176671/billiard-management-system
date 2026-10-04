@@ -14,7 +14,6 @@ public class StaffController : Controller
     // GET /Staff
     public IActionResult Index()
     {
-        ViewData["Title"] = "Staff Dashboard";
-        return View();
+        return RedirectToAction("Index", "Table");
     }
 }
