@@ -367,7 +367,7 @@ body.staff-layout-body {
 .duration-val {
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 1.05rem;
-    color: var(--primary);
+    color: var(--bg-dark);
 }
 
 #detail-playtime-amount {
