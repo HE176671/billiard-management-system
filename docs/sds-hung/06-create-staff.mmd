@@ -5,35 +5,39 @@ sequenceDiagram
     participant CTX as ApplicationDbContext
     participant UM as UserManager
     participant DB as SQL Server
-    A->>C: POST /Employee/Create + form + token
-    Note over A,C: Authorize Admin và anti-forgery phải hợp lệ
-    alt Dữ liệu form không hợp lệ
-        C-->>A: Trả form với lỗi validation
-    else Dữ liệu hợp lệ
-        C->>C: Trim dữ liệu, chuẩn hóa mã, tạo ApplicationUser
-        C->>CTX: BeginTransactionAsync()
+
+    A->>C: Gửi form thêm nhân viên
+    Note over A,C: Chỉ Admin mới vào được, token form phải hợp lệ
+
+    alt Form bị lỗi (thiếu / sai thông tin)
+        C-->>A: Trả lại form, hiện lỗi
+    else Form hợp lệ
+        C->>C: Chuẩn bị dữ liệu nhân viên mới
+        C->>CTX: Bắt đầu giao dịch DB
         CTX->>DB: BEGIN TRANSACTION
-        C->>UM: CreateAsync(user, password)
-        UM->>DB: Qua EF store cùng context: INSERT user có hash
+        C->>UM: Tạo tài khoản (user + mật khẩu)
+        UM->>DB: Lưu tài khoản vào database
         DB-->>UM: Thành công hoặc lỗi
-        UM-->>C: IdentityResult hoặc exception
-        alt Tạo user thất bại
-            C->>CTX: RollbackAsync()
+        UM-->>C: Kết quả tạo tài khoản
+
+        alt Tạo tài khoản thất bại
+            C->>CTX: Hủy giao dịch
             CTX->>DB: ROLLBACK
-            C-->>A: Báo lỗi hợp lệ / lỗi hệ thống đã được che chi tiết
-        else Tạo user thành công
-            C->>UM: AddToRoleAsync(user, Staff)
-            UM->>DB: INSERT AspNetUserRoles
+            C-->>A: Báo lỗi (trùng tên, trùng email, v.v.)
+        else Tạo tài khoản thành công
+            C->>UM: Gán quyền Staff
+            UM->>DB: Lưu quyền vào database
             DB-->>UM: Thành công hoặc lỗi
-            UM-->>C: IdentityResult hoặc exception
-            alt Gán role thất bại
-                C->>CTX: RollbackAsync()
-                CTX->>DB: ROLLBACK cả user và role link
+            UM-->>C: Kết quả gán quyền
+
+            alt Gán quyền thất bại
+                C->>CTX: Hủy giao dịch (xóa cả tài khoản vừa tạo)
+                CTX->>DB: ROLLBACK
                 C-->>A: Báo không tạo được nhân viên
-            else Gán role thành công
-                C->>CTX: CommitAsync()
+            else Gán quyền thành công
+                C->>CTX: Xác nhận giao dịch
                 CTX->>DB: COMMIT
-                C-->>A: Thông báo thành công và redirect /Employee
+                C-->>A: Thông báo thành công, về danh sách nhân viên
             end
         end
     end
