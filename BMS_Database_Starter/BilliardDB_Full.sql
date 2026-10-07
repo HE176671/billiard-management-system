@@ -1,4 +1,4 @@
-﻿/* BMS Starter v1 - SQL Server 2019+.
+/* BMS Starter v1 - SQL Server 2019+.
    Expanded 2026-10-01: 24 business tables, 5 procedures.
    Run the WHOLE file in SSMS only for a NEW database BilliardDB.
    No DROP/TRUNCATE; refuses to initialize a database that already has user tables.
@@ -30,9 +30,11 @@ BEGIN TRY
         CREATE TABLE dbo.MembershipTiers (
         Id int IDENTITY NOT NULL CONSTRAINT PK_MembershipTiers PRIMARY KEY,
         TierName nvarchar(50) NOT NULL CONSTRAINT UQ_MembershipTiers_Name UNIQUE,
+        MinPoints int NOT NULL CONSTRAINT DF_MembershipTiers_MinPoints DEFAULT 0,
         DiscountPercent decimal(5,2) NOT NULL CONSTRAINT DF_MembershipTiers_Discount DEFAULT 0,
         CONSTRAINT CK_MembershipTiers_Name CHECK (LEN(LTRIM(RTRIM(TierName))) > 0),
-        CONSTRAINT CK_MembershipTiers_Discount CHECK (DiscountPercent >= 0 AND DiscountPercent <= 100)
+        CONSTRAINT CK_MembershipTiers_Discount CHECK (DiscountPercent >= 0 AND DiscountPercent <= 100),
+        CONSTRAINT CK_MembershipTiers_MinPoints CHECK (MinPoints >= 0)
     );
 
     CREATE TABLE dbo.AspNetRoles (
@@ -364,8 +366,32 @@ BEGIN TRY
         CONSTRAINT CK_Shift_Status CHECK (Status IN ('Active', 'Closed')),
         CONSTRAINT CK_Shift_Time CHECK (EndTimeUtc IS NULL OR EndTimeUtc >= StartTimeUtc)
     );
+
+    -- Bảng đánh giá dịch vụ sau phiên chơi (UC17)
+    CREATE TABLE dbo.Reviews (
+        Id           int IDENTITY NOT NULL CONSTRAINT PK_Reviews PRIMARY KEY,
+        SessionId    int NOT NULL CONSTRAINT UQ_Review_Session UNIQUE,
+        CustomerId   nvarchar(450) NOT NULL,
+        Rating       tinyint NOT NULL,
+        Comment      nvarchar(500) NULL,
+        CreatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_Review_Created DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_Review_Session  FOREIGN KEY (SessionId)  REFERENCES dbo.PlaySessions(Id),
+        CONSTRAINT FK_Review_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.AspNetUsers(Id),
+        CONSTRAINT CK_Review_Rating   CHECK (Rating BETWEEN 1 AND 5)
+    );
+    CREATE INDEX IX_Reviews_Customer ON dbo.Reviews(CustomerId);
+
+    -- Seed dữ liệu hạng thành viên mặc định
+    SET IDENTITY_INSERT dbo.MembershipTiers ON;
+    INSERT INTO dbo.MembershipTiers (Id, TierName, MinPoints, DiscountPercent) VALUES
+        (1, N'Đồng',       0,    0.00),
+        (2, N'Bạc',        500,  5.00),
+        (3, N'Vàng',       2000, 10.00),
+        (4, N'Kim Cương',  5000, 15.00);
+    SET IDENTITY_INSERT dbo.MembershipTiers OFF;
+
     COMMIT;
-    PRINT N'Created full 24 tables successfully. Procedures follow in this file.';
+    PRINT N'Created full 26 tables + seeded MembershipTiers successfully. Procedures follow in this file.';
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK;
