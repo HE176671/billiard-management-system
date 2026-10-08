@@ -1,48 +1,87 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#ffffff',
+    'primaryTextColor': '#000000',
+    'primaryBorderColor': '#000000',
+    'lineColor': '#000000',
+    'textColor': '#000000',
+    'actorBkg': '#ffffff',
+    'actorBorder': '#000000',
+    'actorTextColor': '#000000',
+    'actorLineColor': '#000000',
+    'signalColor': '#000000',
+    'signalTextColor': '#000000',
+    'labelBoxBkgColor': '#ffffff',
+    'labelBoxBorderColor': '#000000',
+    'labelTextColor': '#000000',
+    'noteBkgColor': '#ffffff',
+    'noteBorderColor': '#000000',
+    'noteTextColor': '#000000',
+    'activationBkgColor': '#ffffff',
+    'activationBorderColor': '#000000',
+    'fontFamily': 'Arial'
+  },
+  'sequence': {
+    'mirrorActors': false,
+    'showSequenceNumbers': false,
+    'actorMargin': 50,
+    'messageMargin': 35
+  }
+}}%%
 sequenceDiagram
-    autonumber
-    actor S as Thu ngân (Staff/Admin)
-    participant B as Browser / _StaffLayout
-    participant C as TableController
-    participant Svc as TableSessionService
-    participant EF as ApplicationDbContext
-    participant DB as SQL Server / BilliardDB
+    actor Staff as Staff
+    participant View as View (table-management.js)
+    participant TableController as TableController
+    participant Auth as Auth pipeline
+    participant TableSessionService as TableSessionService
+    participant ApplicationDbContext as ApplicationDbContext
+    participant DB as SQL Server (BilliardDB)
 
-    S->>B: Truy cập /Table (GET)
-    Note over B,C: [Authorize(Roles = "Staff,Admin")] kiểm tra cookie trước action
-    B->>C: GET /Table/Index
-    C->>Svc: GetTableCardsAsync()
-    Svc->>EF: LINQ query BilliardTables JOIN TableTypes<br/>LEFT JOIN PlaySessions WHERE ps.Status = 'Active'
-    EF->>DB: SELECT tbl.*, tt.Name, tt.HourlyRate,<br/>ps.Id AS SessionId, ps.StartAtUtc<br/>FROM BilliardTables tbl<br/>JOIN TableTypes tt ON ...<br/>LEFT JOIN PlaySessions ps ON ps.TableId = tbl.Id AND ps.Status = 'Active'<br/>ORDER BY tbl.TableCode
-    DB-->>EF: Result rows (5 cột trạng thái)
-    EF-->>Svc: List of anonymous objects
-    Svc->>Svc: Map sang List<TableCardViewModel><br/>Gắn ServerTimeUtc = DateTime.UtcNow<br/>SpecifyKind(StartAtUtc, DateTimeKind.Utc)
-    Svc-->>C: List<TableCardViewModel> + ServerTimeUtc
-    C-->>B: View("Index", TableManagementViewModel)
-    B->>S: Render sơ đồ bàn (cột trái)<br/>+ Panel chi tiết trống (cột phải)
+    Staff->>View: 1 : Truy cập /Table
+    activate View
+    View->>TableController: 2 : GET /Table/Index
+    activate TableController
+    TableController->>Auth: 3 : Authorize(Roles = "Staff,Admin")
+    activate Auth
+    Auth--)Staff: 4 : [Chưa đăng nhập] 302 Redirect /Account/Login
+    Auth--)Staff: 5 : [Sai vai trò] 302 Redirect /Account/AccessDenied
+    Auth--)TableController: 6 : [Hợp lệ] Tiếp tục xử lý request
+    deactivate Auth
+    TableController->>TableSessionService: 7 : GetTableCardsAsync()
+    activate TableSessionService
+    TableSessionService->>ApplicationDbContext: 8 : LINQ query BilliardTables, TableTypes, PlaySessions
+    activate ApplicationDbContext
+    ApplicationDbContext->>DB: 9 : SELECT dữ liệu bàn và phiên Active
+    activate DB
+    DB--)TableSessionService: 10 : Trả về dữ liệu bàn và phiên Active
+    deactivate DB
+    deactivate ApplicationDbContext
+    TableSessionService--)TableController: 11 : List TableCardViewModel kèm ServerTimeUtc
+    deactivate TableSessionService
+    TableController--)View: 12 : View("Index", TableManagementViewModel)
+    deactivate TableController
+    View--)Staff: 13 : Hiển thị sơ đồ bàn và chạy đồng hồ thời gian thực
+    deactivate View
 
-    Note over B: JavaScript khởi động:
-    Note over B: 1) Tính deltaOffset = Date.now() - serverTimeUtc
-    Note over B: 2) setInterval mỗi 1s → cập nhật đồng hồ đếm giờ mỗi bàn
-    Note over B: 3) Polling: setInterval mỗi 10s → gọi /Table/GetTableCardsPartial
+    Note over View,TableController: JavaScript định kỳ gọi GET /Table/GetTableCardsPartial mỗi 10 giây (pollTableGrid) để cập nhật lưới bàn
 
-    loop Mỗi 10 giây (Polling)
-        B->>C: GET /Table/GetTableCardsPartial
-        Note over B,C: Dừng poll nếu document.hidden = true (Page Visibility API)
-        C->>Svc: GetTableCardsAsync()
-        Svc->>DB: SELECT như trên
-        DB-->>Svc: Danh sách cập nhật
-        Svc-->>C: List<TableCardViewModel> + ServerTimeUtc mới
-        C-->>B: Partial HTML (_TableGridPartial)
-        B->>B: innerHTML cập nhật lưới bàn<br/>Tái tính deltaOffset từ ServerTimeUtc mới<br/>Giữ nguyên bàn đang chọn (nếu còn tồn tại)
-    end
-
-    S->>B: Click vào thẻ bàn (ví dụ Bàn 01 "Đang chơi")
-    B->>C: GET /Table/GetTableDetail?tableId=1
-    C->>Svc: GetTableDetailAsync(tableId=1)
-    Svc->>EF: Query BilliardTable + PlaySession Active + AspNetUsers (FullName của Customer)
-    EF->>DB: SELECT ... JOIN AspNetUsers ON ps.CustomerId
-    DB-->>EF: Chi tiết bàn và phiên
-    EF-->>Svc: TableDetailViewModel (gồm CustomerFullName)
-    Svc-->>C: TableDetailViewModel
-    C-->>B: JSON TableDetailViewModel
-    B->>S: Cập nhật Panel chi tiết (cột phải):<br/>TableCode, Status, Customer, StartTime, Duration (đồng hồ chạy)
+    Staff->>View: 14 : Click chọn thẻ bàn (handleTableSelect)
+    activate View
+    View->>TableController: 15 : GET /Table/GetTableDetail?tableId=id
+    activate TableController
+    TableController->>TableSessionService: 16 : GetTableDetailAsync(tableId)
+    activate TableSessionService
+    TableSessionService->>ApplicationDbContext: 17 : LINQ query BilliardTable, PlaySession, User
+    activate ApplicationDbContext
+    ApplicationDbContext->>DB: 18 : SELECT chi tiết bàn và thông tin khách
+    activate DB
+    DB--)TableSessionService: 19 : Trả về dữ liệu chi tiết bàn
+    deactivate DB
+    deactivate ApplicationDbContext
+    TableSessionService--)TableController: 20 : TableDetailViewModel
+    deactivate TableSessionService
+    TableController--)View: 21 : Json(detail)
+    deactivate TableController
+    View--)Staff: 22 : Hiển thị panel chi tiết bên phải
+    deactivate View

@@ -1,0 +1,88 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#ffffff',
+    'primaryTextColor': '#000000',
+    'primaryBorderColor': '#000000',
+    'lineColor': '#000000',
+    'textColor': '#000000',
+    'actorBkg': '#ffffff',
+    'actorBorder': '#000000',
+    'actorTextColor': '#000000',
+    'actorLineColor': '#000000',
+    'signalColor': '#000000',
+    'signalTextColor': '#000000',
+    'labelBoxBkgColor': '#ffffff',
+    'labelBoxBorderColor': '#000000',
+    'labelTextColor': '#000000',
+    'noteBkgColor': '#ffffff',
+    'noteBorderColor': '#000000',
+    'noteTextColor': '#000000',
+    'activationBkgColor': '#ffffff',
+    'activationBorderColor': '#000000',
+    'fontFamily': 'Arial'
+  },
+  'sequence': {
+    'mirrorActors': false,
+    'showSequenceNumbers': false,
+    'actorMargin': 50,
+    'messageMargin': 35
+  }
+}}%%
+sequenceDiagram
+    actor Staff as Staff
+    participant View as View (table-management.js)
+    participant TableController as TableController
+    participant Auth as Auth pipeline
+    participant TableSessionService as TableSessionService
+    participant ApplicationDbContext as ApplicationDbContext
+    participant DB as SQL Server (BilliardDB)
+
+    Note over Staff,View: OPEN: Bấm OPEN TABLE (handleOpenTable). CLOSE: Bấm CLOSE TABLE và xác nhận dialog confirm (handleCloseTable)
+
+    Staff->>View: 1 : Bấm OPEN TABLE hoặc CLOSE TABLE
+    activate View
+    View->>View: 2 : getVerificationToken()
+    View->>TableController: 3 : POST /Table/OpenSession hoặc CloseSession
+    activate TableController
+    TableController->>Auth: 4 : Kiểm tra AntiForgeryToken và Authorize
+    activate Auth
+    Auth--)View: 5 : [Thiếu hoặc sai token] HTTP 400 Bad Request
+    Auth--)Staff: 6 : [Chưa đăng nhập hoặc hết phiên] 302 Redirect /Account/Login
+    Auth--)Staff: 7 : [Sai vai trò] 302 Redirect /Account/AccessDenied
+    Auth--)TableController: 8 : [Hợp lệ] Tiếp tục xử lý request
+    deactivate Auth
+    TableController->>TableController: 9 : staffId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+    TableController--)View: 10 : [StaffId rỗng] HTTP 401 Unauthorized
+    TableController->>TableSessionService: 11 : OpenSessionAsync(tableId, staffId) hoặc CloseSessionAsync(sessionId, staffId)
+    activate TableSessionService
+    TableSessionService->>ApplicationDbContext: 12 : Database.GetDbConnection()
+    activate ApplicationDbContext
+    ApplicationDbContext--)TableSessionService: 13 : Trả về SqlConnection
+    deactivate ApplicationDbContext
+    TableSessionService->>DB: 14 : EXEC dbo.usp_OpenSession hoặc dbo.usp_CloseSession
+    activate DB
+
+    Note over TableSessionService,DB: OPEN: Khóa UPDLOCK/HOLDLOCK bàn trống, chèn PlaySession Active, trả về SessionId. CLOSE: Khóa bàn và phiên, tính tiền giờ làm tròn giây, chuyển AwaitingPayment, trả về PlaytimeAmount
+
+    DB--)TableSessionService: 15 : [Thành công] ResultSet (SessionId hoặc PlaytimeAmount)
+    TableSessionService--)TableController: 16 : [Thành công] TableOperationResult.Ok(data)
+    TableController--)View: 17 : [Thành công] HTTP 200 Json(result)
+    View->>TableController: 18 : reloadTableGrid() gọi GET /Table/GetTableCardsPartial
+    activate TableController
+    TableController--)View: 19 : Trả về PartialView cập nhật lưới bàn
+    deactivate TableController
+    View--)Staff: 20 : [Thành công] Hiện toast xanh showToast và cập nhật lưới bàn
+
+    DB--)TableSessionService: 21 : [Lỗi nghiệp vụ 51402/51407/51502] Ném SqlException
+    deactivate DB
+    TableSessionService->>TableSessionService: 22 : HandleSqlException ghi LogWarning và MapErrorCode dịch lỗi
+    TableSessionService->>TableSessionService: 23 : [Lỗi hệ thống] LogError ghi log lỗi hệ thống
+    TableSessionService--)TableController: 24 : [Lỗi] TableOperationResult.Fail(code, msg, autoReload)
+    deactivate TableSessionService
+    TableController--)View: 25 : [Lỗi] HTTP 200 Json(result)
+    deactivate TableController
+    View--)Staff: 26 : [Lỗi] Hiện toast đỏ showToast (tải lại lưới nếu autoReload=true)
+    deactivate View
+
+    Note over View,DB: Mã lỗi nghiệp vụ tiêu biểu: 51402 (bàn không trống), 51407 (bàn giữ chỗ booking), 51502 (phiên đã đóng bởi người khác)

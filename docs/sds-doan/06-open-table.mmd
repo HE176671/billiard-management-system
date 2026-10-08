@@ -1,38 +1,39 @@
 sequenceDiagram
     autonumber
-    actor S as Thu ngân (Staff/Admin)
-    participant B as Browser / Table/Index.cshtml
-    participant C as TableController
-    participant Svc as TableSessionService
-    participant DB as SQL Server / BilliardDB
+    actor Staff as Nhân viên (Staff/Admin)
+    participant Browser as Browser (table-management.js)
+    participant TableController as TableController
+    participant TableSessionService as TableSessionService
+    participant ApplicationDbContext as ApplicationDbContext
+    participant DB as SQL Server (BilliardDB)
 
-    S->>B: Bấm nút "OPEN TABLE" (bàn ở trạng thái Available)
-    Note over B: Nút OPEN TABLE chỉ được bật khi bàn đang ở trạng thái Available
-    B->>C: POST /Table/OpenSession<br/>{ tableId: 1 }<br/>+ Anti-forgery token (RequestVerificationToken header)
-    Note over B,C: Framework từ chối request nếu anti-forgery token không hợp lệ
-    Note over C: [ValidateAntiForgeryToken] + [Authorize(Roles = "Staff,Admin")]
-    C->>C: staffId = User.FindFirstValue(ClaimTypes.NameIdentifier)<br/>Lấy từ ClaimsPrincipal - KHÔNG nhận từ client
-    alt staffId null (cookie hết hạn)
-        C-->>B: HTTP 401 Unauthorized → redirect Login
-    else staffId hợp lệ
-        C->>Svc: OpenSessionAsync(tableId=1, staffId)
-        Svc->>DB: Mở connection qua GetDbConnection() và OpenAsync()
-        Svc->>DB: EXEC dbo.usp_OpenSession<br/>@TableId=1, @StaffId='...', @BookingId=NULL, @CustomerId=NULL
-        Note over DB: Procedure thực hiện trong BEGIN TRANSACTION:<br/>1) Kiểm tra @StaffId IsActive và Role Staff/Admin<br/>2) Khóa bàn WITH (UPDLOCK, HOLDLOCK)<br/>3) Kiểm tra Status = 'Available' → THROW 51402 nếu không<br/>4) Kiểm tra không có phiên Active → THROW 51403 nếu có<br/>5) Kiểm tra booking giữ chỗ → THROW 51407 nếu có<br/>6) INSERT PlaySessions, UPDATE BilliardTables SET Status='InUse'<br/>7) COMMIT → SELECT SessionId
+    Staff->>Browser: Bấm OPEN TABLE (handleOpenTable)
+    Browser->>TableController: POST /Table/OpenSession (form-encoded: TableId và __RequestVerificationToken)
+    Note over TableController: ValidateAntiForgeryToken kiểm tra CSRF token và Authorize kiểm tra quyền Staff/Admin
+    TableController->>TableController: staffId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+    TableController->>TableSessionService: OpenSessionAsync(request.TableId, staffId)
+    TableSessionService->>ApplicationDbContext: _context.Database.GetDbConnection()
+    ApplicationDbContext-->>TableSessionService: Trả về SqlConnection
+    TableSessionService->>DB: OpenAsync và EXEC dbo.usp_OpenSession @TableId, @StaffId, NULL, NULL
+    Note over DB: Khóa bàn (UPDLOCK, HOLDLOCK), kiểm tra Status=Available, kiểm tra booking giữ chỗ
 
-        alt Procedure thành công → trả SessionId
-            DB-->>Svc: ResultSet { SessionId: 42 }
-            Svc->>DB: CloseAsync() connection
-            Svc-->>C: TableOperationResult.Ok({ SessionId: 42 })
-            C-->>B: HTTP 200 JSON { success: true, sessionId: 42 }
-            B->>B: Toast xanh "Đã mở bàn thành công"<br/>Gọi ngay reloadTableGrid()<br/>Cập nhật Panel chi tiết với StartTime
-        else SqlException (bắt lỗi THROW từ procedure)
-            DB-->>Svc: SqlException { Number: 51402 } hoặc 51403, 51407...
-            Svc->>DB: CloseAsync() connection
-            Svc->>Svc: MapErrorCode(ex.Number) → chuỗi tiếng Việt
-            Svc-->>C: TableOperationResult.Fail(code, message, autoReload: true)
-            C-->>B: HTTP 200 JSON { success: false, errorCode: 51402, message: "Bàn hiện không ở trạng thái Trống...", autoReload: true }
-            B->>B: Toast đỏ hiển thị thông báo tiếng Việt
-            B->>B: autoReload=true → gọi reloadTableGrid()
-        end
+    alt Mở bàn thành công
+        DB-->>TableSessionService: Trả về ResultSet { SessionId }
+        TableSessionService-->>TableController: TableOperationResult.Ok({ SessionId })
+        TableController-->>Browser: HTTP 200 Json(result)
+        Browser->>Browser: Hiện toast thành công showToast(successMsg, 'success')
+        Browser->>TableController: reloadTableGrid() gọi GET /Table/GetTableCardsPartial
+        TableController-->>Browser: Trả về PartialView cập nhật lưới bàn
+    else Lỗi nghiệp vụ CSDL (mã 51402 hoặc 51407)
+        DB-->>TableSessionService: SqlException (51402: Bàn không trống / 51407: Giữ chỗ booking)
+        TableSessionService->>TableSessionService: HandleSqlException ghi LogWarning, MapErrorCode dịch thông báo, autoReload = true
+        TableSessionService-->>TableController: TableOperationResult.Fail(ex.Number, message, autoReload: true)
+        TableController-->>Browser: HTTP 200 Json(result)
+        Browser->>Browser: Hiện toast lỗi showToast(errorMsg, 'danger')
+        Browser->>TableController: autoReload là true gọi reloadTableGrid()
+    else Lỗi hệ thống không xác định (Exception)
+        TableSessionService->>TableSessionService: LogError ghi log lỗi hệ thống, autoReload = false
+        TableSessionService-->>TableController: TableOperationResult.Fail(null, message, autoReload: false)
+        TableController-->>Browser: HTTP 200 Json(result)
+        Browser->>Browser: Hiện toast lỗi, không tải lại lưới
     end

@@ -1,46 +1,40 @@
 sequenceDiagram
     autonumber
-    actor S as Thu ngân (Staff/Admin)
-    participant B as Browser / Table/Index.cshtml
-    participant C as TableController
-    participant Svc as TableSessionService
-    participant DB as SQL Server / BilliardDB
+    actor Staff as Nhân viên (Staff/Admin)
+    participant Browser as Browser (table-management.js)
+    participant TableController as TableController
+    participant TableSessionService as TableSessionService
+    participant ApplicationDbContext as ApplicationDbContext
+    participant DB as SQL Server (BilliardDB)
 
-    S->>B: Bấm nút "CLOSE TABLE" (bàn ở trạng thái InUse)
-    Note over B: Nút CLOSE TABLE chỉ được bật khi bàn đang ở trạng thái InUse
-    Note over B: Có xác nhận confirm dialog trước khi gửi request
-    B->>C: POST /Table/CloseSession<br/>{ sessionId: 42 }<br/>+ Anti-forgery token (RequestVerificationToken header)
-    Note over B,C: Framework từ chối request nếu anti-forgery token không hợp lệ
-    Note over C: [ValidateAntiForgeryToken] + [Authorize(Roles = "Staff,Admin")]
-    C->>C: staffId = User.FindFirstValue(ClaimTypes.NameIdentifier)<br/>Lấy từ ClaimsPrincipal - KHÔNG nhận từ client
-    alt staffId null (cookie hết hạn)
-        C-->>B: HTTP 401 Unauthorized → redirect Login
-    else staffId hợp lệ
-        C->>Svc: CloseSessionAsync(sessionId=42, staffId)
-        Svc->>DB: Mở connection qua GetDbConnection() và OpenAsync()
-        Svc->>DB: EXEC dbo.usp_CloseSession<br/>@SessionId=42, @StaffId='...'
-        Note over DB: Procedure thực hiện trong BEGIN TRANSACTION:<br/>1) Kiểm tra @StaffId IsActive và Role Staff/Admin<br/>2) Khóa BilliardTables WITH (UPDLOCK, HOLDLOCK)<br/>3) Khóa PlaySessions WITH (UPDLOCK)<br/>4) Kiểm tra PlaySessions.Status = 'Active' → THROW 51502 nếu không<br/>5) @Now = SYSUTCDATETIME()<br/>6) PlaytimeAmount = ROUND(DATEDIFF_BIG(second,@Start,@Now)*@Rate/3600.0, 0)<br/>7) UPDATE PlaySessions SET EndAtUtc=@Now, ClosedById, Status='Closed', PlaytimeAmount<br/>8) UPDATE BilliardTables SET Status='AwaitingPayment'<br/>9) Nếu BookingId khác NULL thì UPDATE Bookings SET Status='Completed'<br/>10) COMMIT → SELECT Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status
+    Staff->>Browser: Bấm CLOSE TABLE và xác nhận dialog (handleCloseTable)
+    Browser->>TableController: POST /Table/CloseSession (form-encoded: SessionId và __RequestVerificationToken)
+    Note over TableController: ValidateAntiForgeryToken kiểm tra CSRF token và Authorize kiểm tra quyền Staff/Admin
+    TableController->>TableController: staffId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+    TableController->>TableSessionService: CloseSessionAsync(request.SessionId, staffId)
+    TableSessionService->>ApplicationDbContext: _context.Database.GetDbConnection()
+    ApplicationDbContext-->>TableSessionService: Trả về SqlConnection
+    TableSessionService->>DB: OpenAsync và EXEC dbo.usp_CloseSession @SessionId, @StaffId
+    Note over DB: Khóa bàn (UPDLOCK, HOLDLOCK) và phiên (UPDLOCK), tính tiền giờ làm tròn, chuyển bàn sang AwaitingPayment
 
-        alt Procedure thành công → trả thông tin phiên đã đóng
-            DB-->>Svc: ResultSet { Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status:'Closed' }
-            Svc->>DB: CloseAsync() connection
-            Svc->>Svc: SpecifyKind StartAtUtc và EndAtUtc sang Utc
-            Svc-->>C: TableOperationResult.Ok({ sessionId, startUtc, endUtc, rateSnapshot, playtimeAmount })
-            C-->>B: HTTP 200 JSON { success: true, data: { playtimeAmount, ... } }
-            B->>B: Toast xanh "Đã đóng phiên — Tổng tiền: 150.000 VND"<br/>Gọi ngay reloadTableGrid()<br/>Reset Panel chi tiết về rỗng
-        else SqlException 51502 (Phiên đã bị đóng bởi người khác)
-            DB-->>Svc: SqlException { Number: 51502 }
-            Svc->>DB: CloseAsync() connection
-            Svc->>Svc: MapErrorCode(51502) → "Phiên chơi không còn ở trạng thái Hoạt động..."
-            Svc-->>C: TableOperationResult.Fail(51502, message, autoReload: true)
-            C-->>B: HTTP 200 JSON { success: false, errorCode: 51502, message: "...", autoReload: true }
-            B->>B: Toast đỏ hiển thị thông báo tiếng Việt
-            B->>B: autoReload=true → gọi reloadTableGrid() ngay
-        else SqlException 51501 (Quyền không hợp lệ)
-            DB-->>Svc: SqlException { Number: 51501 }
-            Svc->>DB: CloseAsync() connection
-            Svc-->>C: TableOperationResult.Fail(51501, message, autoReload: false)
-            C-->>B: HTTP 200 JSON { success: false, errorCode: 51501, message: "..." }
-            B->>B: Toast đỏ, không tải lại (lỗi logic nghiêm trọng)
-        end
+    alt Đóng phiên thành công
+        DB-->>TableSessionService: Trả về ResultSet { Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status }
+        TableSessionService->>TableSessionService: SpecifyKind Utc cho thời gian, đóng gói TableOperationResult.Ok
+        TableSessionService-->>TableController: TableOperationResult.Ok(data)
+        TableController-->>Browser: HTTP 200 Json(result)
+        Browser->>Browser: formatVnCurrency định dạng tiền giờ và hiện toast thành công
+        Browser->>TableController: reloadTableGrid() gọi GET /Table/GetTableCardsPartial
+        TableController-->>Browser: Trả về PartialView cập nhật lưới bàn (bàn sang AwaitingPayment)
+    else Phiên đã đóng bởi người khác (mã 51502)
+        DB-->>TableSessionService: SqlException (51502: Phiên không còn Active)
+        TableSessionService->>TableSessionService: HandleSqlException ghi LogWarning, MapErrorCode dịch thông báo, autoReload = true
+        TableSessionService-->>TableController: TableOperationResult.Fail(51502, message, autoReload: true)
+        TableController-->>Browser: HTTP 200 Json(result)
+        Browser->>Browser: Hiện toast lỗi showToast(errorMsg, 'danger')
+        Browser->>TableController: autoReload là true gọi reloadTableGrid()
+    else Lỗi quyền (51501) hoặc lỗi hệ thống
+        TableSessionService->>TableSessionService: Ghi log cảnh báo hoặc lỗi hệ thống, autoReload = false
+        TableSessionService-->>TableController: TableOperationResult.Fail(code, message, autoReload: false)
+        TableController-->>Browser: HTTP 200 Json(result)
+        Browser->>Browser: Hiện toast lỗi, không tải lại lưới
     end

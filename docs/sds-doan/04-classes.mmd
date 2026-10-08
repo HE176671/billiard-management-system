@@ -1,36 +1,72 @@
 classDiagram
+    class TableController {
+        -ITableSessionService _tableSessionService
+        +Index() Task~IActionResult~
+        +GetTableCardsPartial() Task~IActionResult~
+        +GetTableDetail(int tableId) Task~IActionResult~
+        +OpenSession(OpenSessionRequest request) Task~IActionResult~
+        +CloseSession(CloseSessionRequest request) Task~IActionResult~
+    }
+    class StaffController {
+        +Index() IActionResult
+    }
+    class ITableSessionService {
+        <<interface>>
+        +GetTableCardsAsync() Task~List~TableCardViewModel~~
+        +GetTableDetailAsync(int tableId) Task~TableDetailViewModel?~
+        +OpenSessionAsync(int tableId, string staffId) Task~TableOperationResult~
+        +CloseSessionAsync(int sessionId, string staffId) Task~TableOperationResult~
+    }
+    class TableSessionService {
+        -ApplicationDbContext _context
+        -ILogger _logger
+        +GetTableCardsAsync() Task~List~TableCardViewModel~~
+        +GetTableDetailAsync(int tableId) Task~TableDetailViewModel?~
+        +OpenSessionAsync(int tableId, string staffId) Task~TableOperationResult~
+        +CloseSessionAsync(int sessionId, string staffId) Task~TableOperationResult~
+        +MapDisplayStatus(string status)$ string
+        -HandleSqlException(SqlException ex, string operationName, int targetId) TableOperationResult
+        -MapErrorCode(int errorNumber)$ string
+    }
+    class ApplicationDbContext {
+        +DbSet~TableType~ TableTypes
+        +DbSet~BilliardTable~ BilliardTables
+        +DbSet~PlaySession~ PlaySessions
+    }
+    class ILogger {
+        <<interface>>
+    }
     class TableType {
         +int Id
         +string Name
         +decimal HourlyRate
+        +ICollection~BilliardTable~ BilliardTables
     }
     class BilliardTable {
         +int Id
         +string TableCode
         +int TableTypeId
-        +int FloorNumber
         +string Status
-        +byte[] RowVersion
+        +TableType TableType
+        +ICollection~PlaySession~ PlaySessions
     }
     class PlaySession {
         +int Id
         +int TableId
+        +string Status
+        +DateTime StartAtUtc
+        +DateTime? EndAtUtc
+        +decimal? PlaytimeAmount
+        +decimal HourlyRateSnapshot
         +int? BookingId
         +string? CustomerId
         +string OpenedById
         +string? ClosedById
-        +DateTime StartAtUtc
-        +DateTime? EndAtUtc
-        +decimal HourlyRateSnapshot
-        +decimal? PlaytimeAmount
-        +string Status
-        +byte[] RowVersion
+        +BilliardTable BilliardTable
     }
     class TableCardViewModel {
         +int Id
         +string TableCode
-        +string TableTypeName
-        +int FloorNumber
         +string Status
         +string DisplayStatus
         +int? ActiveSessionId
@@ -40,14 +76,12 @@ classDiagram
     class TableDetailViewModel {
         +int TableId
         +string TableCode
-        +string TableTypeName
-        +decimal HourlyRate
         +string Status
         +string DisplayStatus
         +int? SessionId
         +DateTime? StartAtUtc
         +DateTime? EndAtUtc
-        +decimal? HourlyRateSnapshot
+        +decimal? PlaytimeAmount
         +string? CustomerFullName
         +DateTime ServerTimeUtc
     }
@@ -63,52 +97,23 @@ classDiagram
         +string? Message
         +bool AutoReload
         +object? Data
-        +static Ok(data) TableOperationResult
-        +static Fail(code, msg, reload) TableOperationResult
-    }
-    class ITableSessionService {
-        <<interface>>
-        +GetTableCardsAsync() Task~List~TableCardViewModel~~
-        +GetTableDetailAsync(tableId) Task~TableDetailViewModel~
-        +OpenSessionAsync(tableId, staffId) Task~TableOperationResult~
-        +CloseSessionAsync(sessionId, staffId) Task~TableOperationResult~
-    }
-    class TableSessionService {
-        -ApplicationDbContext _context
-        +GetTableCardsAsync() Task~List~TableCardViewModel~~
-        +GetTableDetailAsync(tableId) Task~TableDetailViewModel~
-        +OpenSessionAsync(tableId, staffId) Task~TableOperationResult~
-        +CloseSessionAsync(sessionId, staffId) Task~TableOperationResult~
-        -ExecuteOpenSessionAsync(conn, tableId, staffId) Task~int~
-        -ExecuteCloseSessionAsync(conn, sessionId, staffId) Task~CloseSessionResult~
-        -MapErrorCode(sqlErrorNumber) string
-    }
-    class TableController {
-        -ITableSessionService _service
-        +Index() Task~IActionResult~
-        +GetTableCardsPartial() Task~IActionResult~
-        +GetTableDetail(tableId) Task~IActionResult~
-        +OpenSession(OpenSessionRequest) Task~IActionResult~
-        +CloseSession(CloseSessionRequest) Task~IActionResult~
-    }
-    class ApplicationDbContext {
-        +DbSet~TableType~ TableTypes
-        +DbSet~BilliardTable~ BilliardTables
-        +DbSet~PlaySession~ PlaySessions
-        +OnModelCreating(builder)
+        +Ok(object? data, string? message)$ TableOperationResult
+        +Fail(int? errorCode, string? message, bool autoReload)$ TableOperationResult
     }
 
-    TableType "1" --> "0..*" BilliardTable : TableTypeId
-    BilliardTable "1" --> "0..*" PlaySession : TableId
-    TableController --> ITableSessionService : DI
+    StaffController ..> TableController : redirects
+    TableController --> ITableSessionService : _tableSessionService
     TableController ..> OpenSessionRequest : input
     TableController ..> CloseSessionRequest : input
     TableController ..> TableOperationResult : output JSON
     ITableSessionService <|.. TableSessionService : implements
-    TableSessionService --> ApplicationDbContext : DI
+    TableSessionService --> ApplicationDbContext : _context
+    TableSessionService --> ILogger : _logger
     TableSessionService ..> TableCardViewModel : produces
     TableSessionService ..> TableDetailViewModel : produces
     TableSessionService ..> TableOperationResult : produces
+    TableType "1" <-- "0..*" BilliardTable : TableType / BilliardTables
+    BilliardTable "1" <-- "0..*" PlaySession : BilliardTable / PlaySessions
     ApplicationDbContext ..> TableType : DbSet
     ApplicationDbContext ..> BilliardTable : DbSet
     ApplicationDbContext ..> PlaySession : DbSet

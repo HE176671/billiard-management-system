@@ -5,13 +5,16 @@
 - Tài liệu: docs/sds-doan/ (của Doan, được tạo/sửa), docs/sds-hung/ và docs/SDS_HUNG.md
   (của Hung, CHỈ ĐỌC). Khi tài liệu và code thật khác nhau, code thật là chuẩn.
 
-## Cơ sở dữ liệu
-- Cấu trúc DB nằm trong BMS_Database_Starter/*.sql. KHÔNG sửa file .sql,
-  KHÔNG tạo EF migration, KHÔNG chạy lệnh làm thay đổi database
-- Mở/đóng phiên đã có trong stored procedure usp_OpenSession, usp_CloseSession:
-  phải GỌI các procedure này, không viết lại logic bằng C#
-- Entity C# phải khớp từng cột với bảng trong DB (kể cả RowVersion)
-- Dùng tham số hóa khi gọi SQL, không nối chuỗi
+## Cơ sở dữ liệu (cập nhật cho V2)
+- Cấu trúc DB gốc nằm trong BMS_Database_Starter/BilliardDB_Full.sql. KHÔNG sửa các file .sql đã có.
+- Được TẠO MỚI duy nhất: BMS_Database_Starter/06_PlaySessionEnhancements.sql và file kiểm thử
+  BMS_Database_Starter/tests/06_PlaySessionEnhancements_tests.sql. Mọi thay đổi database của V2 nằm
+  trong file 06. File phải chạy lại nhiều lần không lỗi, tương thích ngược, bắt đầu bằng
+  SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON.
+- TUYỆT ĐỐI KHÔNG chạy bất kỳ file .sql hay câu lệnh nào lên database (không sqlcmd, không
+  dotnet ef). Người dùng tự chạy file bằng SSMS.
+- KHÔNG tạo EF migration. Entity C# phải khớp từng cột với DB sau khi chạy file 06.
+- Tiền giờ chỉ tính trên SQL Server (hàm trong file 06), không tính ở JavaScript hay C#.
 
 ## Phạm vi sửa file
 - Được tạo/sửa tự do: file mới thuộc chức năng phiên chơi (entity, service, controller,
