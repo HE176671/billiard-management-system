@@ -37,7 +37,9 @@ public class TableSessionService : ITableSessionService
                         table.FloorNumber,
                         table.Status,
                         ActiveSessionId = (int?)activeSession.Id,
-                        SessionStartUtc = (DateTime?)activeSession.StartAtUtc
+                        SessionStartUtc = (DateTime?)activeSession.StartAtUtc,
+                        SessionMode = activeSession != null ? activeSession.SessionMode : null,
+                        PlannedEndAtUtc = (DateTime?)activeSession.PlannedEndAtUtc
                     };
 
         var items = await query.ToListAsync();
@@ -54,6 +56,10 @@ public class TableSessionService : ITableSessionService
             ActiveSessionId = x.ActiveSessionId,
             SessionStartUtc = x.SessionStartUtc.HasValue
                 ? DateTime.SpecifyKind(x.SessionStartUtc.Value, DateTimeKind.Utc)
+                : null,
+            SessionMode = x.SessionMode,
+            PlannedEndAtUtc = x.PlannedEndAtUtc.HasValue
+                ? DateTime.SpecifyKind(x.PlannedEndAtUtc.Value, DateTimeKind.Utc)
                 : null,
             ServerTimeUtc = serverTimeUtc
         }).ToList();
@@ -83,7 +89,11 @@ public class TableSessionService : ITableSessionService
                         StartAtUtc = (DateTime?)activeSession.StartAtUtc,
                         EndAtUtc = (DateTime?)activeSession.EndAtUtc,
                         HourlyRateSnapshot = (decimal?)activeSession.HourlyRateSnapshot,
-                        CustomerFullName = customerUser != null ? customerUser.FullName : null
+                        CustomerFullName = customerUser != null ? customerUser.FullName : null,
+                        SessionMode = activeSession != null ? activeSession.SessionMode : null,
+                        PlannedEndAtUtc = (DateTime?)activeSession.PlannedEndAtUtc,
+                        BillingStartAtUtc = (DateTime?)activeSession.BillingStartAtUtc,
+                        BillingEndAtUtc = (DateTime?)activeSession.BillingEndAtUtc
                     };
 
         var raw = await query.FirstOrDefaultAsync();
@@ -100,10 +110,45 @@ public class TableSessionService : ITableSessionService
             : null;
         decimal? hourlyRateSnapshot = raw.HourlyRateSnapshot;
         decimal? playtimeAmount = null;
+        decimal? estimatedAmount = null;
         string? customerFullName = raw.CustomerFullName;
         int? sessionId = raw.SessionId;
+        string? sessionMode = raw.SessionMode;
+        DateTime? plannedEndAtUtc = raw.PlannedEndAtUtc.HasValue
+            ? DateTime.SpecifyKind(raw.PlannedEndAtUtc.Value, DateTimeKind.Utc)
+            : null;
+        DateTime? billingStartAtUtc = raw.BillingStartAtUtc.HasValue
+            ? DateTime.SpecifyKind(raw.BillingStartAtUtc.Value, DateTimeKind.Utc)
+            : null;
+        DateTime? billingEndAtUtc = raw.BillingEndAtUtc.HasValue
+            ? DateTime.SpecifyKind(raw.BillingEndAtUtc.Value, DateTimeKind.Utc)
+            : null;
+        List<SessionSegmentViewModel> segments = new();
 
-        if (raw.Status == "AwaitingPayment")
+        if (raw.Status == "InUse" && raw.SessionId.HasValue)
+        {
+            var activeSessionId = raw.SessionId.Value;
+            estimatedAmount = await _context.Database
+                .SqlQuery<decimal?>($"SELECT dbo.fn_CalcPlaytimeAmount({activeSessionId}, CAST(SYSUTCDATETIME() AS datetime2(0))) AS [Value]")
+                .FirstOrDefaultAsync();
+
+            segments = await (from seg in _context.PlaySessionTableSegments.AsNoTracking()
+                              where seg.SessionId == activeSessionId
+                              join t in _context.BilliardTables.AsNoTracking() on seg.TableId equals t.Id
+                              join ty in _context.TableTypes.AsNoTracking() on t.TableTypeId equals ty.Id
+                              orderby seg.StartAtUtc, seg.Id
+                              select new SessionSegmentViewModel
+                              {
+                                  TableCode = t.TableCode,
+                                  TableTypeName = ty.Name,
+                                  HourlyRate = seg.HourlyRateSnapshot,
+                                  StartAtUtc = DateTime.SpecifyKind(seg.StartAtUtc, DateTimeKind.Utc),
+                                  EndAtUtc = seg.EndAtUtc.HasValue
+                                      ? DateTime.SpecifyKind(seg.EndAtUtc.Value, DateTimeKind.Utc)
+                                      : null
+                              }).ToListAsync();
+        }
+        else if (raw.Status == "AwaitingPayment")
         {
             var latestClosed = await (from s in _context.PlaySessions.AsNoTracking()
                                       where s.TableId == tableId && s.Status == "Closed"
@@ -113,10 +158,15 @@ public class TableSessionService : ITableSessionService
                                       from customerUser in userGroup.DefaultIfEmpty()
                                       select new
                                       {
+                                          s.Id,
                                           s.StartAtUtc,
                                           s.EndAtUtc,
                                           s.HourlyRateSnapshot,
                                           s.PlaytimeAmount,
+                                          s.SessionMode,
+                                          s.PlannedEndAtUtc,
+                                          s.BillingStartAtUtc,
+                                          s.BillingEndAtUtc,
                                           CustomerFullName = customerUser != null ? customerUser.FullName : null
                                       }).FirstOrDefaultAsync();
 
@@ -128,7 +178,32 @@ public class TableSessionService : ITableSessionService
                     : null;
                 hourlyRateSnapshot = latestClosed.HourlyRateSnapshot;
                 playtimeAmount = latestClosed.PlaytimeAmount;
+                estimatedAmount = latestClosed.PlaytimeAmount;
                 customerFullName = latestClosed.CustomerFullName;
+                sessionMode = latestClosed.SessionMode;
+                plannedEndAtUtc = latestClosed.PlannedEndAtUtc.HasValue
+                    ? DateTime.SpecifyKind(latestClosed.PlannedEndAtUtc.Value, DateTimeKind.Utc)
+                    : null;
+                billingStartAtUtc = DateTime.SpecifyKind(latestClosed.BillingStartAtUtc, DateTimeKind.Utc);
+                billingEndAtUtc = latestClosed.BillingEndAtUtc.HasValue
+                    ? DateTime.SpecifyKind(latestClosed.BillingEndAtUtc.Value, DateTimeKind.Utc)
+                    : null;
+
+                segments = await (from seg in _context.PlaySessionTableSegments.AsNoTracking()
+                                  where seg.SessionId == latestClosed.Id
+                                  join t in _context.BilliardTables.AsNoTracking() on seg.TableId equals t.Id
+                                  join ty in _context.TableTypes.AsNoTracking() on t.TableTypeId equals ty.Id
+                                  orderby seg.StartAtUtc, seg.Id
+                                  select new SessionSegmentViewModel
+                                  {
+                                      TableCode = t.TableCode,
+                                      TableTypeName = ty.Name,
+                                      HourlyRate = seg.HourlyRateSnapshot,
+                                      StartAtUtc = DateTime.SpecifyKind(seg.StartAtUtc, DateTimeKind.Utc),
+                                      EndAtUtc = seg.EndAtUtc.HasValue
+                                          ? DateTime.SpecifyKind(seg.EndAtUtc.Value, DateTimeKind.Utc)
+                                          : null
+                                  }).ToListAsync();
             }
 
             sessionId = null;
@@ -143,11 +218,17 @@ public class TableSessionService : ITableSessionService
             Status = raw.Status,
             DisplayStatus = MapDisplayStatus(raw.Status),
             SessionId = sessionId,
+            SessionMode = sessionMode,
             StartAtUtc = startAtUtc,
             EndAtUtc = endAtUtc,
+            PlannedEndAtUtc = plannedEndAtUtc,
+            BillingStartAtUtc = billingStartAtUtc,
+            BillingEndAtUtc = billingEndAtUtc,
             HourlyRateSnapshot = hourlyRateSnapshot,
             PlaytimeAmount = playtimeAmount,
+            EstimatedAmount = estimatedAmount,
             CustomerFullName = customerFullName,
+            Segments = segments,
             ServerTimeUtc = serverTimeUtc
         };
     }

@@ -43,6 +43,23 @@ public class PlaySession
     [Column(TypeName = "varchar(20)")]
     public string Status { get; set; } = "Active";
 
+    [Required]
+    [MaxLength(10)]
+    [Column(TypeName = "varchar(10)")]
+    public string SessionMode { get; set; } = "Open";
+
+    [Column(TypeName = "datetime2(0)")]
+    public DateTime? PlannedEndAtUtc { get; set; }
+
+    [Column(TypeName = "datetime2(0)")]
+    public DateTime BillingStartAtUtc { get; set; }
+
+    [Column(TypeName = "datetime2(0)")]
+    public DateTime? BillingEndAtUtc { get; set; }
+
     [Timestamp]
     public byte[] RowVersion { get; set; } = [];
+
+    [InverseProperty(nameof(PlaySessionTableSegment.PlaySession))]
+    public ICollection<PlaySessionTableSegment> Segments { get; set; } = [];
 }

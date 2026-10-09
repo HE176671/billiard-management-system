@@ -18,6 +18,8 @@ public class TableCardViewModel
     public string DisplayStatus { get; set; } = string.Empty;
     public int? ActiveSessionId { get; set; }
     public DateTime? SessionStartUtc { get; set; }
+    public string? SessionMode { get; set; }
+    public DateTime? PlannedEndAtUtc { get; set; }
     public DateTime ServerTimeUtc { get; set; }
 }
 
@@ -30,12 +32,27 @@ public class TableDetailViewModel
     public string Status { get; set; } = string.Empty;
     public string DisplayStatus { get; set; } = string.Empty;
     public int? SessionId { get; set; }
+    public string? SessionMode { get; set; }
     public DateTime? StartAtUtc { get; set; }
     public DateTime? EndAtUtc { get; set; }
+    public DateTime? PlannedEndAtUtc { get; set; }
+    public DateTime? BillingStartAtUtc { get; set; }
+    public DateTime? BillingEndAtUtc { get; set; }
     public decimal? HourlyRateSnapshot { get; set; }
     public decimal? PlaytimeAmount { get; set; }
+    public decimal? EstimatedAmount { get; set; }
     public string? CustomerFullName { get; set; }
+    public List<SessionSegmentViewModel> Segments { get; set; } = new();
     public DateTime ServerTimeUtc { get; set; }
+}
+
+public class SessionSegmentViewModel
+{
+    public string TableCode { get; set; } = string.Empty;
+    public string TableTypeName { get; set; } = string.Empty;
+    public decimal HourlyRate { get; set; }
+    public DateTime StartAtUtc { get; set; }
+    public DateTime? EndAtUtc { get; set; }
 }
 
 public class OpenSessionRequest
