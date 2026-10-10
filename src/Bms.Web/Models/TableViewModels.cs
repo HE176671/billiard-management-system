@@ -58,6 +58,8 @@ public class SessionSegmentViewModel
 public class OpenSessionRequest
 {
     public int TableId { get; set; }
+    public string? SessionMode { get; set; } = "Open";
+    public int? PlannedMinutes { get; set; }
 }
 
 public class CloseSessionRequest

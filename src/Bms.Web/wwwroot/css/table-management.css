@@ -596,3 +596,61 @@ button:disabled {
     font-size: 0.95rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+
+/* ==========================================================================
+   Form Mở bàn (Open Session Form)
+   ========================================================================== */
+.open-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.open-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.open-session-form .form-check-input:checked {
+    background-color: var(--primary-green);
+    border-color: var(--primary-green-dark);
+}
+
+.preset-buttons-group .btn-preset-minutes {
+    flex: 1;
+    min-width: 60px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: #f8fafc;
+    color: var(--text-main);
+    transition: all 0.15s ease-in-out;
+}
+
+.preset-buttons-group .btn-preset-minutes:hover {
+    background-color: #e2e8f0;
+    border-color: #94a3b8;
+}
+
+.preset-buttons-group .btn-preset-minutes.active {
+    background-color: var(--bg-dark);
+    color: #ffffff;
+    border-color: var(--bg-dark);
+}
+
+.time-preview-box {
+    background-color: #f8fafc !important;
+    border: 1px dashed var(--border-color) !important;
+}
+
+.time-preview-box strong {
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--bg-dark);
+    font-size: 0.95rem;
+}

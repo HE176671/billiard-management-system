@@ -74,12 +74,24 @@
             <!-- Khung 3: Thời gian chơi -->
             <div class="panel-card-box">
                 <div class="detail-data-row">
+                    <span class="detail-key">Hình thức:</span>
+                    <span class="detail-val" id="detail-session-mode">--</span>
+                </div>
+                <div class="detail-data-row">
                     <span class="detail-key">Start Time:</span>
                     <span class="detail-val" id="detail-start-time">--</span>
                 </div>
                 <div class="detail-data-row">
                     <span class="detail-key">End Time:</span>
                     <span class="detail-val" id="detail-end-time">--</span>
+                </div>
+                <div class="detail-data-row">
+                    <span class="detail-key">Tính giờ từ:</span>
+                    <span class="detail-val" id="detail-billing-start">--</span>
+                </div>
+                <div class="detail-data-row">
+                    <span class="detail-key">Dự kiến kết thúc:</span>
+                    <span class="detail-val" id="detail-planned-end">--</span>
                 </div>
                 <div class="detail-data-row">
                     <span class="detail-key">Duration:</span>
@@ -91,8 +103,57 @@
                 </div>
             </div>
 
-            <!-- Khung 4: Các nút hành động theo wireframe -->
-            <div class="panel-card-box action-buttons-container">
+            <!-- Khung 4: Form Mở bàn (mặc định d-none, hiện khi bấm OPEN TABLE) -->
+            <div class="panel-card-box open-session-form d-none" id="open-session-form">
+                <div class="form-section-title mb-2 fw-bold">Mở bàn mới</div>
+                <div class="mb-3">
+                    <label class="form-label d-block text-muted small fw-bold mb-1">Hình thức:</label>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="sessionModeRadio" id="radio-mode-open" value="Open" checked>
+                        <label class="form-check-label" for="radio-mode-open">Không giới hạn</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="sessionModeRadio" id="radio-mode-timed" value="Timed">
+                        <label class="form-check-label" for="radio-mode-timed">Đăng ký thời gian</label>
+                    </div>
+                </div>
+
+                <div id="timed-options-container" class="mb-3 d-none">
+                    <label class="form-label d-block text-muted small fw-bold mb-1">Thời gian đăng ký:</label>
+                    <div class="preset-buttons-group mb-2 d-flex gap-1 flex-wrap" id="preset-buttons-group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset-minutes" data-minutes="30">30 phút</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset-minutes" data-minutes="60">60 phút</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset-minutes" data-minutes="90">90 phút</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset-minutes" data-minutes="120">120 phút</button>
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <input type="number" class="form-control" id="input-planned-minutes" min="15" max="720" step="15" placeholder="Nhập số phút (15 - 720)">
+                        <span class="input-group-text">phút</span>
+                    </div>
+                    <div id="open-form-error" class="form-text text-danger mt-1 small d-none"></div>
+                </div>
+
+                <div class="time-preview-box p-2 mb-3 rounded bg-light border">
+                    <div class="small text-muted" id="preview-billing-start-row">
+                        Tính giờ từ <strong id="preview-billing-start">--:--</strong> (dự kiến)
+                    </div>
+                    <div class="small text-muted d-none" id="preview-planned-end-row">
+                        Dự kiến kết thúc <strong id="preview-planned-end">--:--</strong>
+                    </div>
+                </div>
+
+                <div class="action-btn-row">
+                    <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-confirm-open">
+                        Xác nhận mở bàn
+                    </button>
+                    <button type="button" class="btn btn-wireframe btn-action-main" id="btn-cancel-open">
+                        Hủy
+                    </button>
+                </div>
+            </div>
+
+            <!-- Khung 5: Các nút hành động theo wireframe -->
+            <div class="panel-card-box action-buttons-container" id="action-buttons-box">
                 <div class="action-btn-row">
                     <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-open-table" disabled>
                         OPEN TABLE

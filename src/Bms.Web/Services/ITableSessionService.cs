@@ -6,6 +6,6 @@ public interface ITableSessionService
 {
     Task<List<TableCardViewModel>> GetTableCardsAsync();
     Task<TableDetailViewModel?> GetTableDetailAsync(int tableId);
-    Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId);
+    Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string sessionMode = "Open", int? plannedMinutes = null);
     Task<TableOperationResult> CloseSessionAsync(int sessionId, string staffId);
 }

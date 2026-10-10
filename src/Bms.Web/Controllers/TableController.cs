@@ -56,13 +56,36 @@ public class TableController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> OpenSession([FromForm] OpenSessionRequest request)
     {
+        if (!ModelState.IsValid)
+        {
+            return Json(TableOperationResult.Fail(null, "Dữ liệu gửi lên không hợp lệ.", false));
+        }
+
         var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(staffId))
         {
             return Unauthorized();
         }
 
-        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId);
+        string sessionMode = "Open";
+        if (!string.IsNullOrWhiteSpace(request.SessionMode))
+        {
+            var trimmed = request.SessionMode.Trim();
+            if (string.Equals(trimmed, "Open", StringComparison.OrdinalIgnoreCase))
+            {
+                sessionMode = "Open";
+            }
+            else if (string.Equals(trimmed, "Timed", StringComparison.OrdinalIgnoreCase))
+            {
+                sessionMode = "Timed";
+            }
+            else
+            {
+                sessionMode = trimmed;
+            }
+        }
+
+        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, sessionMode, request.PlannedMinutes);
         return Json(result);
     }
 

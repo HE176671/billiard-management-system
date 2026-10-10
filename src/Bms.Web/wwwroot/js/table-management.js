@@ -28,6 +28,13 @@
     let detailAbortController = null;  // Hủy request chi tiết cũ khi click chọn bàn mới
     let detailRequestId = 0;           // Bộ đếm thế hệ request chi tiết
 
+    // Trạng thái form mở bàn
+    let isOpenFormVisible = false;     // Đang hiển thị form cấu hình mở bàn
+    let openFormState = {
+        mode: 'Open',                  // 'Open' hoặc 'Timed'
+        minutes: 60                    // Mặc định 60 phút khi chọn Timed
+    };
+
     // Cấu hình & Trạng thái đồng hồ thời gian thực
     let clockTimerId = null;           // Bộ đếm 1 giây duy nhất (chống tạo trùng)
     let deltaOffset = 0;               // ms lệch giữa client browser và server (Clock Skew)
@@ -55,6 +62,13 @@
         hour12: false
     });
 
+    const vnHourMinuteFormatter = new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+
     const vnCurrencyFormatter = new Intl.NumberFormat('vi-VN', {
         style: 'currency',
         currency: 'VND'
@@ -68,6 +82,17 @@
             return vnDateTimeFormatter.format(date);
         } catch {
             return '--';
+        }
+    }
+
+    function formatVnTimeOnly(utcDateOrMs) {
+        if (!utcDateOrMs) return '--:--';
+        try {
+            const date = typeof utcDateOrMs === 'number' ? new Date(utcDateOrMs) : new Date(utcDateOrMs);
+            if (isNaN(date.getTime())) return '--:--';
+            return vnHourMinuteFormatter.format(date);
+        } catch {
+            return '--:--';
         }
     }
 
@@ -198,6 +223,13 @@
         if (btnTransfer) btnTransfer.disabled = true;
         if (btnSplitMerge) btnSplitMerge.disabled = true;
 
+        // Nếu form mở bàn đang hiện thì vô hiệu hóa OPEN và CLOSE
+        if (isOpenFormVisible) {
+            if (btnOpen) btnOpen.disabled = true;
+            if (btnClose) btnClose.disabled = true;
+            return;
+        }
+
         // Nếu đang xử lý (mở/đóng) hoặc đang tải dữ liệu chi tiết thì vô hiệu hóa cả OPEN và CLOSE
         if (isProcessing || isDetailLoading) {
             if (btnOpen) btnOpen.disabled = true;
@@ -254,6 +286,7 @@
      * Cập nhật đồng hồ mỗi giây:
      * - Truy vấn lại DOM trên thẻ bàn: tính thời gian chơi từ data-session-start và deltaOffset
      * - Cập nhật dòng Duration của panel phải nếu bàn đang chọn có phiên Active và panel đang hiển thị
+     * - Cập nhật dòng xem trước của form mở bàn nếu đang hiển thị
      */
     function updateClocks() {
         const cards = document.querySelectorAll('#table-grid-container .table-card');
@@ -304,6 +337,11 @@
                 }
             }
         }
+
+        // Cập nhật xem trước thời gian mở bàn nếu form đang mở
+        if (isOpenFormVisible) {
+            updateOpenFormPreview();
+        }
     }
 
     /**
@@ -345,8 +383,11 @@
         const elStatus = document.getElementById('detail-status');
         const elCustomer = document.getElementById('detail-customer');
         const elBookingTime = document.getElementById('detail-booking-time');
+        const elSessionMode = document.getElementById('detail-session-mode');
         const elStartTime = document.getElementById('detail-start-time');
         const elEndTime = document.getElementById('detail-end-time');
+        const elBillingStart = document.getElementById('detail-billing-start');
+        const elPlannedEnd = document.getElementById('detail-planned-end');
         const elDuration = document.getElementById('detail-duration');
 
         if (elTableName) elTableName.textContent = currentSelectedTable.code || '--';
@@ -355,6 +396,27 @@
         const customerName = detail.customerFullName ?? detail.CustomerFullName;
         if (elCustomer) elCustomer.textContent = customerName ? customerName : '--';
         if (elBookingTime) elBookingTime.textContent = '--';
+
+        const sessionMode = detail.sessionMode ?? detail.SessionMode;
+        if (elSessionMode) {
+            if (sessionMode === 'Open') {
+                elSessionMode.textContent = 'Không giới hạn';
+            } else if (sessionMode === 'Timed') {
+                elSessionMode.textContent = 'Đăng ký thời gian';
+            } else {
+                elSessionMode.textContent = sessionMode || '--';
+            }
+        }
+
+        const billingStartUtc = detail.billingStartAtUtc ?? detail.BillingStartAtUtc;
+        if (elBillingStart) {
+            elBillingStart.textContent = billingStartUtc ? formatVnDateTime(billingStartUtc) : '--';
+        }
+
+        const plannedEndUtc = detail.plannedEndAtUtc ?? detail.PlannedEndAtUtc;
+        if (elPlannedEnd) {
+            elPlannedEnd.textContent = plannedEndUtc ? formatVnDateTime(plannedEndUtc) : '--';
+        }
 
         // Xử lý hiển thị thời gian Start Time, End Time, Duration
         if (startUtc && !endUtc) {
@@ -403,16 +465,22 @@
         const elStatus = document.getElementById('detail-status');
         const elCustomer = document.getElementById('detail-customer');
         const elBookingTime = document.getElementById('detail-booking-time');
+        const elSessionMode = document.getElementById('detail-session-mode');
         const elStartTime = document.getElementById('detail-start-time');
         const elEndTime = document.getElementById('detail-end-time');
+        const elBillingStart = document.getElementById('detail-billing-start');
+        const elPlannedEnd = document.getElementById('detail-planned-end');
         const elDuration = document.getElementById('detail-duration');
 
         if (elTableName) elTableName.textContent = '--';
         if (elStatus) elStatus.textContent = '--';
         if (elCustomer) elCustomer.textContent = '--';
         if (elBookingTime) elBookingTime.textContent = '--';
+        if (elSessionMode) elSessionMode.textContent = '--';
         if (elStartTime) elStartTime.textContent = '--';
         if (elEndTime) elEndTime.textContent = '--';
+        if (elBillingStart) elBillingStart.textContent = '--';
+        if (elPlannedEnd) elPlannedEnd.textContent = '--';
         if (elDuration) elDuration.textContent = '--';
 
         const elPlaytimeRow = document.getElementById('detail-playtime-row');
@@ -425,6 +493,10 @@
     // Đóng panel chi tiết (✕ hoặc Esc hoặc khi bàn biến mất)
     // =========================================================================
     function closeDetailPanel(returnFocus = true) {
+        if (isOpenFormVisible) {
+            hideOpenForm();
+        }
+
         const panel = document.getElementById('table-detail-panel');
         if (panel) {
             panel.classList.add('d-none');
@@ -468,6 +540,9 @@
 
     // resetDetailPanel: khi bàn đang chọn biến mất sau polling -> ẩn panel
     function resetDetailPanel() {
+        if (isOpenFormVisible) {
+            hideOpenForm();
+        }
         closeDetailPanel(false);
     }
 
@@ -476,6 +551,10 @@
     // =========================================================================
     async function handleTableSelect(tableId) {
         if (!tableId) return;
+
+        if (isOpenFormVisible) {
+            hideOpenForm();
+        }
 
         lastSelectedCardId = tableId;
 
@@ -641,6 +720,10 @@
         const card = container.querySelector(`.table-card[data-table-id="${selectedId}"]`);
         if (!card) {
             // Bàn đang chọn không còn trên lưới -> ẩn panel và xóa thông tin
+            if (isOpenFormVisible) {
+                hideOpenForm();
+                showToast(`Bàn ${currentSelectedTable.code} không còn ở trạng thái Trống.`, 'danger');
+            }
             resetDetailPanel();
             return;
         }
@@ -651,9 +734,21 @@
         const newCardStatus = card.getAttribute('data-status') || '';
         const newCardSessionStart = card.getAttribute('data-session-start') || '';
 
+        // Nếu form đang mở mà trạng thái bàn trên lưới chuyển sang không còn là "Available"
+        if (isOpenFormVisible && newCardStatus !== 'Available') {
+            hideOpenForm();
+            showToast(`Bàn ${currentSelectedTable.code} không còn ở trạng thái Trống.`, 'danger');
+        }
+
         // Chỉ gọi lại GetTableDetail khi data-status hoặc data-session-start đổi
         if (newCardStatus !== prevCardStatus || newCardSessionStart !== prevCardSessionStart) {
-            await handleTableSelect(selectedId);
+            if (isOpenFormVisible && newCardStatus === 'Available') {
+                currentSelectedTable.cardStatus = newCardStatus;
+                currentSelectedTable.cardSessionStart = newCardSessionStart;
+                updateButtons();
+            } else {
+                await handleTableSelect(selectedId);
+            }
         } else {
             updateButtons();
         }
@@ -794,9 +889,178 @@
     }
 
     // =========================================================================
+    // Quản lý Form MỞ BÀN (Open Session Form)
+    // =========================================================================
+    function showOpenForm() {
+        if (currentSelectedTable.status !== 'Available') return;
+
+        isOpenFormVisible = true;
+        openFormState.mode = 'Open';
+        openFormState.minutes = 60;
+
+        const formEl = document.getElementById('open-session-form');
+        const actionsBox = document.getElementById('action-buttons-box');
+        if (formEl) formEl.classList.remove('d-none');
+        if (actionsBox) actionsBox.classList.add('d-none');
+
+        // Reset radio buttons
+        const radioOpen = document.getElementById('radio-mode-open');
+        if (radioOpen) radioOpen.checked = true;
+
+        // Reset timed options container
+        const timedContainer = document.getElementById('timed-options-container');
+        if (timedContainer) timedContainer.classList.add('d-none');
+
+        // Reset ô nhập
+        const inputMinutes = document.getElementById('input-planned-minutes');
+        if (inputMinutes) {
+            inputMinutes.value = '60';
+            inputMinutes.classList.remove('is-invalid');
+        }
+
+        // Đánh dấu nút 60 phút
+        const presetButtons = document.querySelectorAll('.btn-preset-minutes');
+        presetButtons.forEach(btn => {
+            if (btn.getAttribute('data-minutes') === '60') {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        const errorEl = document.getElementById('open-form-error');
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.classList.add('d-none');
+        }
+
+        updateOpenFormPreview();
+        validateOpenForm();
+        updateButtons();
+
+        if (formEl && typeof formEl.scrollIntoView === 'function') {
+            formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    function hideOpenForm() {
+        isOpenFormVisible = false;
+        const formEl = document.getElementById('open-session-form');
+        const actionsBox = document.getElementById('action-buttons-box');
+        if (formEl) formEl.classList.add('d-none');
+        if (actionsBox) actionsBox.classList.remove('d-none');
+
+        updateButtons();
+    }
+
+    function validateOpenForm() {
+        const btnConfirm = document.getElementById('btn-confirm-open');
+        const errorEl = document.getElementById('open-form-error');
+        const inputMinutes = document.getElementById('input-planned-minutes');
+
+        if (!btnConfirm) return;
+
+        if (isProcessing) {
+            btnConfirm.disabled = true;
+            return;
+        }
+
+        if (openFormState.mode === 'Open') {
+            btnConfirm.disabled = false;
+            if (errorEl) {
+                errorEl.textContent = '';
+                errorEl.classList.add('d-none');
+            }
+            if (inputMinutes) inputMinutes.classList.remove('is-invalid');
+            return;
+        }
+
+        const rawValue = inputMinutes ? inputMinutes.value.trim() : '';
+        if (!rawValue || !/^\d+$/.test(rawValue)) {
+            btnConfirm.disabled = true;
+            if (errorEl) {
+                errorEl.textContent = 'Vui lòng nhập số phút hợp lệ (bội số của 15, từ 15 đến 720).';
+                errorEl.classList.remove('d-none');
+            }
+            if (inputMinutes) inputMinutes.classList.add('is-invalid');
+            return;
+        }
+
+        const num = Number(rawValue);
+        if (!Number.isInteger(num) || num < 15 || num > 720 || num % 15 !== 0) {
+            btnConfirm.disabled = true;
+            if (errorEl) {
+                errorEl.textContent = 'Thời gian đăng ký phải là bội số của 15 phút, từ 15 đến 720 phút.';
+                errorEl.classList.remove('d-none');
+            }
+            if (inputMinutes) inputMinutes.classList.add('is-invalid');
+            return;
+        }
+
+        openFormState.minutes = num;
+        btnConfirm.disabled = false;
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.classList.add('d-none');
+        }
+        if (inputMinutes) inputMinutes.classList.remove('is-invalid');
+    }
+
+    function updateOpenFormPreview() {
+        if (!isOpenFormVisible) return;
+
+        const previewBillingEl = document.getElementById('preview-billing-start');
+        const previewPlannedEndEl = document.getElementById('preview-planned-end');
+        const previewPlannedEndRow = document.getElementById('preview-planned-end-row');
+
+        const nowServerMs = Date.now() - deltaOffset;
+        const ceil15Ms = Math.ceil(nowServerMs / 900000) * 900000;
+        const billingStartStr = formatVnTimeOnly(ceil15Ms);
+
+        if (previewBillingEl) {
+            previewBillingEl.textContent = billingStartStr;
+        }
+
+        if (openFormState.mode === 'Timed') {
+            const inputMinutes = document.getElementById('input-planned-minutes');
+            const rawValue = inputMinutes ? inputMinutes.value.trim() : '';
+            const num = Number(rawValue);
+
+            if (Number.isInteger(num) && num >= 15 && num <= 720 && num % 15 === 0) {
+                const plannedEndMs = nowServerMs + num * 60000;
+                const plannedEndStr = formatVnTimeOnly(plannedEndMs);
+                if (previewPlannedEndEl) {
+                    previewPlannedEndEl.textContent = plannedEndStr;
+                }
+                if (previewPlannedEndRow) {
+                    previewPlannedEndRow.classList.remove('d-none');
+                }
+            } else {
+                if (previewPlannedEndEl) {
+                    previewPlannedEndEl.textContent = '--:--';
+                }
+                if (previewPlannedEndRow) {
+                    previewPlannedEndRow.classList.remove('d-none');
+                }
+            }
+        } else {
+            if (previewPlannedEndRow) {
+                previewPlannedEndRow.classList.add('d-none');
+            }
+        }
+    }
+
+    // =========================================================================
     // Thao tác MỞ BÀN (OpenSession)
     // =========================================================================
-    async function handleOpenTable() {
+    function handleOpenTable() {
+        if (isProcessing) return;
+        if (!currentSelectedTable.id || currentSelectedTable.status !== 'Available') return;
+
+        showOpenForm();
+    }
+
+    async function handleConfirmOpenSession() {
         if (isProcessing) return;
         if (!currentSelectedTable.id || currentSelectedTable.status !== 'Available') return;
 
@@ -804,6 +1068,20 @@
         if (!token) {
             showToast('Thiếu mã xác thực bảo mật (Anti-forgery token).', 'danger');
             return;
+        }
+
+        const mode = openFormState.mode;
+        let plannedMinutes = null;
+
+        if (mode === 'Timed') {
+            const inputMinutes = document.getElementById('input-planned-minutes');
+            const rawValue = inputMinutes ? inputMinutes.value.trim() : '';
+            const num = Number(rawValue);
+            if (!Number.isInteger(num) || num < 15 || num > 720 || num % 15 !== 0) {
+                validateOpenForm();
+                return;
+            }
+            plannedMinutes = num;
         }
 
         if (pollingAbortController) {
@@ -815,6 +1093,7 @@
 
         isProcessing = true;
         updateButtons();
+        validateOpenForm();
 
         const targetTableId = currentSelectedTable.id;
         const targetTableCode = currentSelectedTable.code;
@@ -822,6 +1101,10 @@
         try {
             const params = new URLSearchParams();
             params.append('TableId', targetTableId);
+            params.append('SessionMode', mode);
+            if (mode === 'Timed' && plannedMinutes !== null) {
+                params.append('PlannedMinutes', plannedMinutes);
+            }
             params.append('__RequestVerificationToken', token);
 
             const response = await fetch('/Table/OpenSession', {
@@ -857,13 +1140,28 @@
             const serverMessage = result.message ?? result.Message;
 
             if (isSuccess) {
-                const successMsg = serverMessage || `Đã mở bàn ${targetTableCode} thành công.`;
+                hideOpenForm();
+
+                const data = result.data ?? result.Data;
+                const billingStartUtc = data?.billingStartAtUtc ?? data?.BillingStartAtUtc;
+                const plannedEndUtc = data?.plannedEndAtUtc ?? data?.PlannedEndAtUtc;
+                const respMode = data?.sessionMode ?? data?.SessionMode ?? mode;
+
+                const formattedBillingStart = billingStartUtc ? formatVnTimeOnly(billingStartUtc) : '--:--';
+                let successMsg = `Đã mở bàn ${targetTableCode}. Tính giờ từ ${formattedBillingStart}`;
+                if (respMode === 'Timed' && plannedEndUtc) {
+                    const formattedPlannedEnd = formatVnTimeOnly(plannedEndUtc);
+                    successMsg += ` - Dự kiến kết thúc ${formattedPlannedEnd}`;
+                }
+
                 showToast(successMsg, 'success');
                 await reloadTableGrid();
+                await handleTableSelect(targetTableId);
             } else {
                 const errorMsg = serverMessage || 'Thao tác không thành công. Vui lòng thử lại.';
                 showToast(errorMsg, 'danger');
                 if (autoReload) {
+                    hideOpenForm();
                     await reloadTableGrid();
                 }
             }
@@ -871,6 +1169,7 @@
             showToast('Không kết nối được máy chủ.', 'danger');
         } finally {
             isProcessing = false;
+            validateOpenForm();
             updateButtons();
         }
     }
@@ -1003,15 +1302,89 @@
             });
         }
 
-        // Phím Escape: chỉ đóng panel khi panel đang hiển thị
+        // Phím Escape: nếu form đang mở thì đóng form trước, lần sau mới đóng panel
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' || e.key === 'Esc') {
+                if (isOpenFormVisible) {
+                    hideOpenForm();
+                    e.preventDefault();
+                    return;
+                }
                 const panel = document.getElementById('table-detail-panel');
                 if (panel && !panel.classList.contains('d-none')) {
                     closeDetailPanel(true);
                 }
             }
         });
+
+        // Sự kiện cho Form Mở bàn
+        const radioOpen = document.getElementById('radio-mode-open');
+        const radioTimed = document.getElementById('radio-mode-timed');
+        const timedContainer = document.getElementById('timed-options-container');
+
+        if (radioOpen) {
+            radioOpen.addEventListener('change', () => {
+                if (radioOpen.checked) {
+                    openFormState.mode = 'Open';
+                    if (timedContainer) timedContainer.classList.add('d-none');
+                    validateOpenForm();
+                    updateOpenFormPreview();
+                }
+            });
+        }
+
+        if (radioTimed) {
+            radioTimed.addEventListener('change', () => {
+                if (radioTimed.checked) {
+                    openFormState.mode = 'Timed';
+                    if (timedContainer) timedContainer.classList.remove('d-none');
+                    validateOpenForm();
+                    updateOpenFormPreview();
+                }
+            });
+        }
+
+        const presetButtons = document.querySelectorAll('.btn-preset-minutes');
+        presetButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const minutes = btn.getAttribute('data-minutes');
+                const inputMinutes = document.getElementById('input-planned-minutes');
+                if (inputMinutes && minutes) {
+                    inputMinutes.value = minutes;
+                    presetButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    validateOpenForm();
+                    updateOpenFormPreview();
+                }
+            });
+        });
+
+        const inputMinutes = document.getElementById('input-planned-minutes');
+        if (inputMinutes) {
+            inputMinutes.addEventListener('input', () => {
+                const val = inputMinutes.value.trim();
+                const presetButtons = document.querySelectorAll('.btn-preset-minutes');
+                presetButtons.forEach(b => {
+                    if (b.getAttribute('data-minutes') === val) {
+                        b.classList.add('active');
+                    } else {
+                        b.classList.remove('active');
+                    }
+                });
+                validateOpenForm();
+                updateOpenFormPreview();
+            });
+        }
+
+        const btnConfirmOpen = document.getElementById('btn-confirm-open');
+        if (btnConfirmOpen) {
+            btnConfirmOpen.addEventListener('click', handleConfirmOpenSession);
+        }
+
+        const btnCancelOpen = document.getElementById('btn-cancel-open');
+        if (btnCancelOpen) {
+            btnCancelOpen.addEventListener('click', hideOpenForm);
+        }
 
         const btnOpen = document.getElementById('btn-open-table');
         if (btnOpen) {

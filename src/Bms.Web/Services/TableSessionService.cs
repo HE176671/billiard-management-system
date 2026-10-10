@@ -243,7 +243,7 @@ public class TableSessionService : ITableSessionService
         _ => status
     };
 
-    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId)
+    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string sessionMode = "Open", int? plannedMinutes = null)
     {
         if (tableId <= 0)
         {
@@ -273,14 +273,31 @@ public class TableSessionService : ITableSessionService
             cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
             cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = DBNull.Value });
             cmd.Parameters.Add(new SqlParameter("@CustomerId", SqlDbType.NVarChar, 450) { Value = DBNull.Value });
+            cmd.Parameters.Add(new SqlParameter("@SessionMode", SqlDbType.VarChar, 10) { Value = (object?)sessionMode ?? DBNull.Value });
+            cmd.Parameters.Add(new SqlParameter("@PlannedMinutes", SqlDbType.Int) { Value = (object?)plannedMinutes ?? DBNull.Value });
 
             using var reader = await cmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
                 int sessionIdOrdinal = reader.GetOrdinal("SessionId");
-                int sessionId = reader.GetInt32(sessionIdOrdinal);
+                int billingStartOrdinal = reader.GetOrdinal("BillingStartAtUtc");
+                int plannedEndOrdinal = reader.GetOrdinal("PlannedEndAtUtc");
+                int sessionModeOrdinal = reader.GetOrdinal("SessionMode");
 
-                return TableOperationResult.Ok(new { SessionId = sessionId });
+                int sessionId = reader.GetInt32(sessionIdOrdinal);
+                DateTime billingStartAtUtc = DateTime.SpecifyKind(reader.GetDateTime(billingStartOrdinal), DateTimeKind.Utc);
+                DateTime? plannedEndAtUtc = reader.IsDBNull(plannedEndOrdinal)
+                    ? null
+                    : DateTime.SpecifyKind(reader.GetDateTime(plannedEndOrdinal), DateTimeKind.Utc);
+                string sessionModeResult = reader.GetString(sessionModeOrdinal);
+
+                return TableOperationResult.Ok(new
+                {
+                    SessionId = sessionId,
+                    SessionMode = sessionModeResult,
+                    BillingStartAtUtc = billingStartAtUtc,
+                    PlannedEndAtUtc = plannedEndAtUtc
+                });
             }
 
             return TableOperationResult.Fail(null, "Không nhận được phản hồi từ hệ thống cơ sở dữ liệu khi mở phiên.", autoReload: true);
@@ -399,7 +416,7 @@ public class TableSessionService : ITableSessionService
 
     private static bool IsKnownDomainError(int errorNumber) => errorNumber switch
     {
-        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51501 or 51502 => true,
+        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51409 or 51410 or 51501 or 51502 => true,
         _ => false
     };
 
@@ -419,6 +436,8 @@ public class TableSessionService : ITableSessionService
         51406 => "Lượt đặt bàn này đã được mở phiên chơi trước đó.",
         51407 => "Bàn đang được giữ chỗ cho khách đặt trước trong khung giờ này.",
         51408 => "Tài khoản hội viên của khách hàng không tồn tại hoặc đang bị khóa.",
+        51409 => "Hình thức mở bàn không hợp lệ.",
+        51410 => "Thời gian đăng ký không hợp lệ: phải là bội số của 15 phút, từ 15 đến 720 phút, và phiên không giới hạn thì không được kèm số phút.",
         51501 => "Thao tác đóng phiên yêu cầu quyền Nhân viên hoặc Quản trị viên đang hoạt động.",
         51502 => "Phiên chơi không còn ở trạng thái Hoạt động (có thể đã được nhân viên khác đóng).",
         _ => "Đã xảy ra lỗi khi kết nối hoặc xử lý cơ sở dữ liệu. Vui lòng thử lại sau."
