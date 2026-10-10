@@ -1027,7 +1027,8 @@
             const num = Number(rawValue);
 
             if (Number.isInteger(num) && num >= 15 && num <= 720 && num % 15 === 0) {
-                const plannedEndMs = nowServerMs + num * 60000;
+                // Dự kiến kết thúc = Giờ tính tiền (làm tròn lên 15 phút) + số phút đăng ký
+                const plannedEndMs = ceil15Ms + num * 60000;
                 const plannedEndStr = formatVnTimeOnly(plannedEndMs);
                 if (previewPlannedEndEl) {
                     previewPlannedEndEl.textContent = plannedEndStr;

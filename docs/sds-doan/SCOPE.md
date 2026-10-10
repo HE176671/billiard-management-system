@@ -126,7 +126,7 @@ Các quyết định V2 dưới đây trích ngắn từ `PLAN_V2.md` mục 2 (n
 
 - [x] **D1:** giờ đóng làm tròn LÊN mốc 15 phút (giờ đã đúng mốc thì giữ nguyên).
 - [x] **D2:** thời gian tính tiền bằng 0 thì tính tối thiểu 1 block theo đơn giá của đoạn bàn cuối cùng.
-- [x] **D3:** phiên `Timed` tính tiền theo thời gian thực chơi tính theo block; giờ dự kiến kết thúc chỉ để đếm ngược và nhắc.
+- [x] **D3:** phiên `Timed` tính tiền theo thời gian thực chơi tính theo block; giờ dự kiến kết thúc = `BillingStartAtUtc` + số phút đăng ký, dùng để đếm ngược và nhắc.
 - [x] **D4:** gói giới hạn cứng: không làm, chỉ chừa chỗ để thêm sau.
 - [x] **D5:** còn 10 phút thì cảnh báo; hết giờ thì báo "Hết giờ" và đếm thời gian quá hạn; KHÔNG tự đóng bàn.
 - [x] **D6:** giờ chuyển bàn làm tròn LÊN mốc 15 phút khi tính tiền (giờ thực vẫn lưu nguyên).

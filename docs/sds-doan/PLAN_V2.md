@@ -1,4 +1,4 @@
-﻿# Kế hoạch nâng cấp V2: Quản lý phiên chơi (Doan)
+# Kế hoạch nâng cấp V2: Quản lý phiên chơi (Doan)
 
 > Đặt tại `docs/sds-doan/PLAN_V2.md`. Đây là nguồn quyết định cho đợt nâng cấp V2.
 > Nếu tài liệu khác (SCOPE.md, SDS_DOAN.md) mâu thuẫn với file này về V2 thì file này thắng,
@@ -29,7 +29,7 @@ trạng thái "dọn dẹp" sau chuyển bàn, đưa bàn từ AwaitingPayment v
 | D7 | Bàn cũ sau chuyển | Về `Available` |
 | D8 | "Đăng ký thời gian" | Chọn số phút: 30, 60, 90, 120 hoặc tự nhập (bội số của 15, từ 15 đến 720) |
 
-Giờ dự kiến kết thúc của phiên `Timed` = giờ mở bàn thực tế + số phút đăng ký.
+Giờ dự kiến kết thúc của phiên `Timed` = `BillingStartAtUtc` + số phút đăng ký (ví dụ: mở 09:37, đăng ký 90 phút thì tính giờ từ 09:45, dự kiến kết thúc 11:15; lý do: khớp mốc tính tiền, 8 phút đầu 09:37 - 09:45 miễn phí theo quy tắc làm tròn lên).
 
 ## 3. Quy tắc tính tiền
 
@@ -53,7 +53,7 @@ Ví dụ bàn Pool 100.000 ₫/giờ (25.000 ₫ một block):
 | 09:00 | 10:00 | 09:00 | 10:00 | 100.000 |
 | 08:50 | 10:07 | 09:00 | 10:15 | 125.000 |
 | 09:07 | 09:40 | 09:15 | 09:45 | 50.000 |
-| 09:07 | 09:10 | 09:15 | 09:15 | 25.000 (tối thiểu 1 block) |
+| 09:07 | 09:10 | 09:15 | 09:30 (áp mức tối thiểu) | 25.000 (tối thiểu 1 block) |
 | 09:00 mở bàn Pool, 09:30 chuyển sang Carom (120.000), 10:00 đóng | | | | 50.000 + 60.000 = 110.000 |
 
 ## 4. Thiết kế database (file mới, KHÔNG sửa file .sql cũ)

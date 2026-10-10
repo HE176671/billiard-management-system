@@ -398,11 +398,12 @@ BEGIN TRY
     DECLARE @OutTimed TABLE (SessionId int, BillingStartAtUtc datetime2(0), PlannedEndAtUtc datetime2(0), SessionMode varchar(10));
     INSERT INTO @OutTimed EXEC dbo.usp_OpenSession @TableId = @T_32, @StaffId = @TestStaffId, @SessionMode = 'Timed', @PlannedMinutes = 60;
 
-    DECLARE @S_32 int, @Mode_32 varchar(10), @Planned_32 datetime2(0);
-    SELECT @S_32 = SessionId, @Mode_32 = SessionMode, @Planned_32 = PlannedEndAtUtc FROM @OutTimed;
+    DECLARE @S_32 int, @Mode_32 varchar(10), @Planned_32 datetime2(0), @BillStart_32 datetime2(0);
+    SELECT @S_32 = SessionId, @Mode_32 = SessionMode, @Planned_32 = PlannedEndAtUtc, @BillStart_32 = BillingStartAtUtc FROM @OutTimed;
 
     IF @S_32 IS NOT NULL AND @Mode_32 = 'Timed' AND @Planned_32 IS NOT NULL
-       AND EXISTS (SELECT 1 FROM dbo.PlaySessions WHERE Id = @S_32 AND PlannedEndAtUtc = @Planned_32)
+       AND @Planned_32 = DATEADD(minute, 60, @BillStart_32)
+       AND EXISTS (SELECT 1 FROM dbo.PlaySessions WHERE Id = @S_32 AND PlannedEndAtUtc = @Planned_32 AND BillingStartAtUtc = @BillStart_32)
         INSERT INTO @Results (Category, TestName, Status, Expected, Actual, Details)
         VALUES ('usp_OpenSession', N'Mở phiên Timed thành công', 'PASS', 'Timed / PlannedEnd != NULL', 'Timed / PlannedEnd != NULL', N'Tạo phiên Timed, PlannedEndAtUtc chính xác');
     ELSE
@@ -884,6 +885,76 @@ BEGIN CATCH
             END);
 END CATCH;
 
+-- 3.15: Mở Timed 60 phút: PlannedEndAtUtc = BillingStartAtUtc + 60m và DATEDIFF(MINUTE, BillingStartAtUtc, PlannedEndAtUtc) = 60
+BEGIN TRY
+    BEGIN TRANSACTION;
+    INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Pool_315', 100000);
+    DECLARE @TT_315 int = SCOPE_IDENTITY();
+    INSERT INTO dbo.BilliardTables (TableCode, TableTypeId, Status) VALUES (N'ZZ-315', @TT_315, 'Available');
+    DECLARE @T_315 int = SCOPE_IDENTITY();
+
+    DECLARE @OutTimed315 TABLE (SessionId int, BillingStartAtUtc datetime2(0), PlannedEndAtUtc datetime2(0), SessionMode varchar(10));
+    INSERT INTO @OutTimed315 EXEC dbo.usp_OpenSession @TableId = @T_315, @StaffId = @TestStaffId, @SessionMode = 'Timed', @PlannedMinutes = 60;
+
+    DECLARE @S_315 int, @BillStart_315 datetime2(0), @Planned_315 datetime2(0);
+    SELECT @S_315 = SessionId, @BillStart_315 = BillingStartAtUtc, @Planned_315 = PlannedEndAtUtc FROM @OutTimed315;
+
+    IF @S_315 IS NOT NULL
+       AND @Planned_315 = DATEADD(minute, 60, @BillStart_315)
+       AND DATEDIFF(minute, @BillStart_315, @Planned_315) = 60
+        INSERT INTO @Results (Category, TestName, Status, Expected, Actual, Details)
+        VALUES ('usp_OpenSession', N'Timed 60 phút: PlannedEnd = BillingStart + 60m', 'PASS', 'Diff = 60m', 'Diff = 60m', N'PlannedEndAtUtc bằng BillingStartAtUtc + 60 phút và khoảng cách đúng 60 phút');
+    ELSE
+        INSERT INTO @Results (Category, TestName, Status, Expected, Actual, Details)
+        VALUES ('usp_OpenSession', N'Timed 60 phút: PlannedEnd = BillingStart + 60m', 'FAIL', 'Diff = 60m', 'Mismatch', N'PlannedEndAtUtc không khớp BillingStartAtUtc + 60 phút');
+
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    INSERT INTO @Results (Category, TestName, Status, Expected, Actual, Details)
+    VALUES ('usp_OpenSession', N'Timed 60 phút: PlannedEnd = BillingStart + 60m', 'FAIL', 'Diff = 60m', CAST(ERROR_NUMBER() AS varchar(20)),
+            CASE WHEN ERROR_NUMBER() = 3915
+                 THEN N'Lỗi 3915: Có thể procedure đã ném lỗi bị che bởi INSERT-EXEC, hãy gọi bằng EXEC thường để xem lỗi thật'
+                 ELSE N'Lỗi: [' + CAST(ERROR_NUMBER() AS nvarchar(20)) + N'] ' + ERROR_MESSAGE() + N' (Dòng ' + CAST(ERROR_LINE() AS nvarchar(20)) + N')'
+            END);
+END CATCH;
+
+-- 3.16: PlannedEndAtUtc luôn nằm đúng mốc 15 phút (bằng fn_CeilTo15Min của chính nó)
+BEGIN TRY
+    BEGIN TRANSACTION;
+    INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Pool_316', 100000);
+    DECLARE @TT_316 int = SCOPE_IDENTITY();
+    INSERT INTO dbo.BilliardTables (TableCode, TableTypeId, Status) VALUES (N'ZZ-316', @TT_316, 'Available');
+    DECLARE @T_316 int = SCOPE_IDENTITY();
+
+    DECLARE @OutTimed316 TABLE (SessionId int, BillingStartAtUtc datetime2(0), PlannedEndAtUtc datetime2(0), SessionMode varchar(10));
+    INSERT INTO @OutTimed316 EXEC dbo.usp_OpenSession @TableId = @T_316, @StaffId = @TestStaffId, @SessionMode = 'Timed', @PlannedMinutes = 45;
+
+    DECLARE @S_316 int, @Planned_316 datetime2(0);
+    SELECT @S_316 = SessionId, @Planned_316 = PlannedEndAtUtc FROM @OutTimed316;
+
+    IF @S_316 IS NOT NULL
+       AND @Planned_316 IS NOT NULL
+       AND @Planned_316 = dbo.fn_CeilTo15Min(@Planned_316)
+        INSERT INTO @Results (Category, TestName, Status, Expected, Actual, Details)
+        VALUES ('usp_OpenSession', N'PlannedEndAtUtc luôn đúng mốc 15 phút', 'PASS', 'On 15m mark', 'On 15m mark', N'PlannedEndAtUtc bằng fn_CeilTo15Min của chính nó');
+    ELSE
+        INSERT INTO @Results (Category, TestName, Status, Expected, Actual, Details)
+        VALUES ('usp_OpenSession', N'PlannedEndAtUtc luôn đúng mốc 15 phút', 'FAIL', 'On 15m mark', 'Mismatch', N'PlannedEndAtUtc không nằm trên mốc 15 phút');
+
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    INSERT INTO @Results (Category, TestName, Status, Expected, Actual, Details)
+    VALUES ('usp_OpenSession', N'PlannedEndAtUtc luôn đúng mốc 15 phút', 'FAIL', 'On 15m mark', CAST(ERROR_NUMBER() AS varchar(20)),
+            CASE WHEN ERROR_NUMBER() = 3915
+                 THEN N'Lỗi 3915: Có thể procedure đã ném lỗi bị che bởi INSERT-EXEC, hãy gọi bằng EXEC thường để xem lỗi thật'
+                 ELSE N'Lỗi: [' + CAST(ERROR_NUMBER() AS nvarchar(20)) + N'] ' + ERROR_MESSAGE() + N' (Dòng ' + CAST(ERROR_LINE() AS nvarchar(20)) + N')'
+            END);
+END CATCH;
+
 -------------------------------------------------------------------------------
 -- PART 2: SUMMARY REPORT & DATA INTEGRITY VERIFICATION
 -------------------------------------------------------------------------------
@@ -994,20 +1065,21 @@ KỊCH BẢN B: Hai cửa sổ cùng chuyển 2 phiên khác nhau vào CÙNG 1 b
 -------------------------------------------------------------------------------
 KỊCH BẢN C: Hai cửa sổ cùng gia hạn 1 phiên Timed
 -------------------------------------------------------------------------------
-1. Phiên Timed S1 có PlannedEndAtUtc = T0.
+1. Phiên Timed S1 có PlannedEndAtUtc ban đầu = T0 (= BillingStartAtUtc + số phút đăng ký ban đầu).
 2. Cửa sổ A:
    BEGIN TRANSACTION;
    EXEC usp_ExtendSession @SessionId = <S1>, @AddMinutes = 30, @StaffId = @Staff;
    -- Giữ chưa COMMIT.
 
 3. Cửa sổ B:
-   EXEC usp_ExtendSession @SessionId = <S1>, @AddMinutes = 15, @StaffId = @Staff;
+   EXEC usp_ExtendSession @SessionId = <S1>, @AddMinutes = 30, @StaffId = @Staff;
    -- B bị block chờ A.
 
 4. Cửa sổ A:
    COMMIT TRANSACTION;
-   -- Kết quả mong đợi: A tăng thêm 30 phút. B tiếp tục chạy sau A và tăng thêm 15 phút nữa
-   -- Tổng cộng PlannedEndAtUtc tăng 45 phút, không bị mất cập nhật (lost update).
+   -- Kết quả mong đợi: A tăng thêm 30 phút. B tiếp tục chạy sau A và tăng thêm 30 phút nữa.
+   -- Sau hai lần gia hạn 30 phút, tổng cộng PlannedEndAtUtc tăng đúng 60 phút so với ban đầu
+   -- (= BillingStartAtUtc + số phút ban đầu + 60 phút), không bị mất cập nhật (lost update).
 
 -------------------------------------------------------------------------------
 DỌN DẸP DỮ LIỆU SAU KIỂM THỬ BẰNG TAY (Chạy ở Window A):

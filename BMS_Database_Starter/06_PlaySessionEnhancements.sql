@@ -418,7 +418,7 @@ BEGIN
             THROW 51408, N'Customer account is inactive or invalid.', 1;
         DECLARE @BillingStart datetime2(0) = dbo.fn_CeilTo15Min(@Now);
         DECLARE @PlannedEnd datetime2(0) =
-            CASE WHEN @SessionMode = 'Timed' THEN DATEADD(minute, @PlannedMinutes, @Now) ELSE NULL END;
+            CASE WHEN @SessionMode = 'Timed' THEN DATEADD(minute, @PlannedMinutes, @BillingStart) ELSE NULL END;
         INSERT dbo.PlaySessions(TableId, BookingId, CustomerId, OpenedById, StartAtUtc, HourlyRateSnapshot,
                                 SessionMode, PlannedEndAtUtc, BillingStartAtUtc)
             VALUES (@TableId, @BookingId, @CustomerId, @StaffId, @Now, @Rate,
