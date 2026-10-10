@@ -142,4 +142,24 @@ public class TableController : Controller
         var result = await _tableSessionService.ExtendSessionAsync(request.SessionId, request.AddMinutes, staffId);
         return Json(result);
     }
+
+    // POST: /Table/TransferSession
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TransferSession([FromForm] TransferSessionRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return Json(TableOperationResult.Fail(null, "Dữ liệu gửi lên không hợp lệ.", false));
+        }
+
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(staffId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _tableSessionService.TransferSessionAsync(request.SessionId, request.NewTableId, staffId);
+        return Json(result);
+    }
 }

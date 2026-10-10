@@ -43,6 +43,7 @@ public class TableDetailViewModel
     public decimal? PlaytimeAmount { get; set; }
     public decimal? EstimatedAmount { get; set; }
     public string? CustomerFullName { get; set; }
+    public bool IsBookingSession { get; set; }
     public List<SessionSegmentViewModel> Segments { get; set; } = new();
     public DateTime ServerTimeUtc { get; set; }
 }
@@ -72,6 +73,12 @@ public class ExtendSessionRequest
 {
     public int SessionId { get; set; }
     public int AddMinutes { get; set; }
+}
+
+public class TransferSessionRequest
+{
+    public int SessionId { get; set; }
+    public int NewTableId { get; set; }
 }
 
 public class TableOperationResult

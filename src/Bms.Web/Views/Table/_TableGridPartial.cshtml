@@ -62,6 +62,9 @@
                  aria-label="Bàn @table.TableCode, @table.DisplayStatus"
                  data-table-id="@table.Id"
                  data-table-code="@table.TableCode"
+                 data-table-type="@table.TableTypeName"
+                 data-floor="@table.FloorNumber"
+                 data-hourly-rate="@table.HourlyRate.ToString(CultureInfo.InvariantCulture)"
                  data-status="@table.Status"
                  data-display-status="@table.DisplayStatus"
                  @if (!string.IsNullOrEmpty(sessionStartIso)) { <text>data-session-start="@sessionStartIso"</text> }

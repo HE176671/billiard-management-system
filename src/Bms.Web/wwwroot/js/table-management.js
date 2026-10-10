@@ -23,7 +23,10 @@
         cardStatus: '',
         cardSessionStart: '',
         cardBillingStart: '',
-        cardPlannedEnd: ''
+        cardPlannedEnd: '',
+        isBookingSession: false,
+        segments: [],
+        hourlyRate: 0
     };
 
     let lastSelectedCardId = null;     // Lưu ID thẻ bàn vừa chọn để trả focus khi đóng panel
@@ -52,6 +55,11 @@
     let isCloseSummaryLoading = false; // Đang gửi request GetCloseSummary
     let closeSummaryRequestId = 0;     // Bộ đếm thế hệ request tóm tắt đóng bàn
     let closeSummaryTimerSeconds = 0;  // Bộ đếm giây làm mới tóm tắt đóng bàn (10s)
+
+    // Trạng thái form chuyển bàn
+    let isTransferFormVisible = false; // Đang hiển thị form chuyển bàn
+    let isTransferring = false;        // Cờ đang trong tiến trình chuyển bàn (chống toast thừa bàn cũ)
+    let lastAvailableSignature = '';   // Chữ ký chuỗi danh sách bàn trống (mã và đơn giá)
 
     // Làm mới tiền tạm tính của bàn InUse trong panel chi tiết
     let detailEstimatedAmountSeconds = 0; // Bộ đếm giây làm mới tiền tạm tính (30s)
@@ -427,31 +435,33 @@
         const btnClose = document.getElementById('btn-close-table');
         const btnConfirmBooking = document.getElementById('btn-confirm-booking');
         const btnTransfer = document.getElementById('btn-transfer');
+        const wrapperTransfer = document.getElementById('wrapper-btn-transfer');
         const btnSplitMerge = document.getElementById('btn-split-merge');
 
-        // 3 nút theo wireframe chưa có logic: luôn vô hiệu hóa
+        // Các nút wireframe chưa có logic: luôn vô hiệu hóa
         if (btnConfirmBooking) btnConfirmBooking.disabled = true;
-        if (btnTransfer) btnTransfer.disabled = true;
         if (btnSplitMerge) btnSplitMerge.disabled = true;
 
-        // Nếu bất kỳ form inline nào đang hiện thì vô hiệu hóa OPEN, EXTEND và CLOSE
-        if (isOpenFormVisible || isExtendFormVisible || isCloseFormVisible) {
+        // Nếu bất kỳ form inline nào đang hiện thì vô hiệu hóa OPEN, EXTEND, CLOSE và TRANSFER
+        if (isOpenFormVisible || isExtendFormVisible || isCloseFormVisible || isTransferFormVisible) {
             if (btnOpen) btnOpen.disabled = true;
             if (btnExtend) btnExtend.disabled = true;
             if (btnClose) btnClose.disabled = true;
+            if (btnTransfer) btnTransfer.disabled = true;
             return;
         }
 
-        // Nếu đang xử lý (mở/đóng/gia hạn) hoặc đang tải dữ liệu chi tiết thì vô hiệu hóa các nút
+        // Nếu đang xử lý hoặc đang tải dữ liệu chi tiết thì vô hiệu hóa các nút
         if (isProcessing || isDetailLoading) {
             if (btnOpen) btnOpen.disabled = true;
             if (btnExtend) btnExtend.disabled = true;
             if (btnClose) btnClose.disabled = true;
+            if (btnTransfer) btnTransfer.disabled = true;
             return;
         }
 
         // Tính trạng thái dựa trên bàn đang chọn
-        const { status, sessionId, sessionMode } = currentSelectedTable;
+        const { status, sessionId, sessionMode, isBookingSession } = currentSelectedTable;
 
         // Nút OPEN TABLE chỉ bật khi Status = "Available"
         if (btnOpen) {
@@ -467,6 +477,26 @@
         // Nút CLOSE TABLE chỉ bật khi Status = "InUse" và có SessionId
         if (btnClose) {
             btnClose.disabled = !(status === 'InUse' && sessionId);
+        }
+
+        // Nút CHUYỂN BÀN bật khi Status = "InUse", có sessionId và isBookingSession = false
+        if (btnTransfer) {
+            const isBooking = Boolean(isBookingSession);
+            const canTransfer = (status === 'InUse' && sessionId && !isBooking);
+            btnTransfer.disabled = !canTransfer;
+
+            if (wrapperTransfer) {
+                if (isBooking) {
+                    wrapperTransfer.setAttribute('title', 'Phiên mở theo đặt bàn chưa hỗ trợ chuyển bàn');
+                    wrapperTransfer.setAttribute('data-bs-original-title', 'Phiên mở theo đặt bàn chưa hỗ trợ chuyển bàn');
+                } else if (canTransfer) {
+                    wrapperTransfer.removeAttribute('title');
+                    wrapperTransfer.removeAttribute('data-bs-original-title');
+                } else {
+                    wrapperTransfer.setAttribute('title', 'Chưa hỗ trợ');
+                    wrapperTransfer.setAttribute('data-bs-original-title', 'Chưa hỗ trợ');
+                }
+            }
         }
     }
 
@@ -807,6 +837,11 @@
             updateExtendFormPreview();
         }
 
+        // 5b. Cập nhật xem trước form chuyển bàn
+        if (isTransferFormVisible) {
+            updateTransferFormPreview();
+        }
+
         // 6. Quét cảnh báo thời gian
         checkTimeAlerts(cards);
 
@@ -827,7 +862,7 @@
         last15MinMark = current15MinMark;
 
         if (isPanelVisible && currentSelectedTable.id && currentSelectedTable.status === 'InUse' &&
-            !isOpenFormVisible && !isExtendFormVisible && !isCloseFormVisible) {
+            !isOpenFormVisible && !isExtendFormVisible && !isCloseFormVisible && !isTransferFormVisible) {
             detailEstimatedAmountSeconds++;
             if (detailEstimatedAmountSeconds >= 30 || is15MinMarkCrossed) {
                 detailEstimatedAmountSeconds = 0;
@@ -1090,8 +1125,77 @@
             if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
         }
 
+        // Lưu thông tin bổ sung
+        currentSelectedTable.isBookingSession = Boolean(detail.isBookingSession ?? detail.IsBookingSession);
+        currentSelectedTable.hourlyRate = detail.hourlyRate ?? detail.HourlyRate ?? 0;
+        currentSelectedTable.segments = detail.segments ?? detail.Segments ?? [];
+
+        // Hiển thị lịch sử bàn nếu có từ 2 đoạn trở lên
+        renderTableSegments(currentSelectedTable.segments);
+
         isDetailLoading = false;
         updateButtons();
+    }
+
+    /**
+     * Hiển thị danh sách các đoạn bàn (Lịch sử bàn) khi có từ 2 đoạn trở lên
+     */
+    function renderTableSegments(segments) {
+        const boxEl = document.getElementById('detail-segments-box');
+        const listEl = document.getElementById('detail-segments-list');
+        if (!boxEl || !listEl) return;
+
+        listEl.replaceChildren();
+
+        if (!segments || segments.length < 2) {
+            boxEl.classList.add('d-none');
+            return;
+        }
+
+        boxEl.classList.remove('d-none');
+
+        segments.forEach(seg => {
+            const row = document.createElement('div');
+            row.className = 'segment-item-row';
+
+            const leftDiv = document.createElement('div');
+            leftDiv.className = 'segment-item-left';
+
+            const tableSpan = document.createElement('span');
+            tableSpan.className = 'segment-item-table';
+            tableSpan.textContent = seg.tableCode ?? seg.TableCode ?? '--';
+
+            const typeSpan = document.createElement('span');
+            typeSpan.className = 'segment-item-type';
+            typeSpan.textContent = seg.tableTypeName ?? seg.TableTypeName ?? '';
+
+            leftDiv.appendChild(tableSpan);
+            if (typeSpan.textContent) leftDiv.appendChild(typeSpan);
+
+            const rightDiv = document.createElement('div');
+            rightDiv.className = 'segment-item-right';
+
+            const startUtc = seg.startAtUtc ?? seg.StartAtUtc;
+            const endUtc = seg.endAtUtc ?? seg.EndAtUtc;
+            const startTimeStr = startUtc ? formatVnTimeOnly(startUtc) : '--:--';
+            const endTimeStr = endUtc ? formatVnTimeOnly(endUtc) : 'đang chơi';
+
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'segment-item-time';
+            timeSpan.textContent = `${startTimeStr} - ${endTimeStr}`;
+
+            const rate = seg.hourlyRate ?? seg.HourlyRate ?? 0;
+            const rateSpan = document.createElement('span');
+            rateSpan.className = 'segment-item-rate';
+            rateSpan.textContent = `${formatVnCurrency(rate)}/giờ`;
+
+            rightDiv.appendChild(timeSpan);
+            rightDiv.appendChild(rateSpan);
+
+            row.appendChild(leftDiv);
+            row.appendChild(rightDiv);
+            listEl.appendChild(row);
+        });
     }
 
     // =========================================================================
@@ -1128,6 +1232,8 @@
         if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
         if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
         if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
+
+        renderTableSegments([]);
     }
 
     // =========================================================================
@@ -1142,6 +1248,9 @@
         }
         if (isCloseFormVisible) {
             hideCloseForm(false);
+        }
+        if (isTransferFormVisible) {
+            hideTransferForm(false);
         }
 
         const panel = document.getElementById('table-detail-panel');
@@ -1175,7 +1284,10 @@
             cardStatus: '',
             cardSessionStart: '',
             cardBillingStart: '',
-            cardPlannedEnd: ''
+            cardPlannedEnd: '',
+            isBookingSession: false,
+            segments: [],
+            hourlyRate: 0
         };
 
         isDetailLoading = false;
@@ -1202,6 +1314,9 @@
         if (isCloseFormVisible) {
             hideCloseForm(false);
         }
+        if (isTransferFormVisible) {
+            hideTransferForm(false);
+        }
         closeDetailPanel(false);
     }
 
@@ -1219,6 +1334,9 @@
         }
         if (isCloseFormVisible) {
             hideCloseForm(false);
+        }
+        if (isTransferFormVisible) {
+            hideTransferForm(false);
         }
 
         lastSelectedCardId = tableId;
@@ -1401,6 +1519,12 @@
                 hideCloseForm(false);
                 showToast(`Bàn ${currentSelectedTable.code} không còn tồn tại.`, 'danger');
             }
+            if (isTransferFormVisible) {
+                hideTransferForm(false);
+                if (!isTransferring) {
+                    showToast(`Bàn ${currentSelectedTable.code} không còn tồn tại.`, 'danger');
+                }
+            }
             resetDetailPanel();
             return;
         }
@@ -1432,6 +1556,18 @@
             showToast(`Bàn ${currentSelectedTable.code} không còn ở trạng thái đang chơi.`, 'danger');
         }
 
+        // Nếu form chuyển bàn đang mở mà bàn không còn InUse
+        if (isTransferFormVisible) {
+            if (newCardStatus !== 'InUse') {
+                hideTransferForm(false);
+                if (!isTransferring) {
+                    showToast(`Bàn ${currentSelectedTable.code} không còn ở trạng thái đang chơi.`, 'danger');
+                }
+            } else {
+                buildAvailableTableOptions(true);
+            }
+        }
+
         // Nếu plannedEnd thay đổi (người khác vừa gia hạn) trong lúc form gia hạn đang mở
         if (isExtendFormVisible && newCardPlannedEnd !== prevCardPlannedEnd) {
             currentSelectedTable.plannedEndAtUtc = newCardPlannedEnd;
@@ -1454,6 +1590,12 @@
                 currentSelectedTable.cardPlannedEnd = newCardPlannedEnd;
                 updateButtons();
             } else if (isCloseFormVisible && newCardStatus === 'InUse') {
+                currentSelectedTable.cardStatus = newCardStatus;
+                currentSelectedTable.cardSessionStart = newCardSessionStart;
+                currentSelectedTable.cardBillingStart = newCardBillingStart;
+                currentSelectedTable.cardPlannedEnd = newCardPlannedEnd;
+                updateButtons();
+            } else if (isTransferFormVisible && newCardStatus === 'InUse') {
                 currentSelectedTable.cardStatus = newCardStatus;
                 currentSelectedTable.cardSessionStart = newCardSessionStart;
                 currentSelectedTable.cardBillingStart = newCardBillingStart;
@@ -2373,6 +2515,28 @@
                 else elMinNote.classList.add('d-none');
             }
 
+            // Ghi chú chuyển bàn nếu phiên có từ 2 đoạn trở lên (Bổ sung 5)
+            const elTransferNote = document.getElementById('close-summary-transfer-note');
+            const elTransferText = document.getElementById('close-summary-transfer-text');
+            if (currentSelectedTable.segments && currentSelectedTable.segments.length >= 2) {
+                const segmentCodes = [];
+                currentSelectedTable.segments.forEach(seg => {
+                    const c = seg.tableCode ?? seg.TableCode;
+                    if (c && (segmentCodes.length === 0 || segmentCodes[segmentCodes.length - 1] !== c)) {
+                        segmentCodes.push(c);
+                    }
+                });
+                if (segmentCodes.length >= 2) {
+                    const chain = segmentCodes.join(' → ');
+                    if (elTransferText) elTransferText.textContent = `Phiên đã chuyển bàn: ${chain}. Tiền tính theo đơn giá từng bàn.`;
+                    if (elTransferNote) elTransferNote.classList.remove('d-none');
+                } else if (elTransferNote) {
+                    elTransferNote.classList.add('d-none');
+                }
+            } else if (elTransferNote) {
+                elTransferNote.classList.add('d-none');
+            }
+
             if (elLoading) elLoading.classList.add('d-none');
             if (elError) elError.classList.add('d-none');
             if (elContent) elContent.classList.remove('d-none');
@@ -2517,6 +2681,388 @@
     }
 
     // =========================================================================
+    // Quản lý Form CHUYỂN BÀN (Transfer Session Form)
+    // =========================================================================
+    function getAvailableTablesFromGrid() {
+        const grid = document.getElementById('table-grid-container');
+        if (!grid) return [];
+
+        const currentId = currentSelectedTable.id ? String(currentSelectedTable.id) : null;
+        const availableCards = grid.querySelectorAll('.table-card[data-status="Available"]');
+        const tables = [];
+
+        availableCards.forEach(card => {
+            const tableIdStr = card.getAttribute('data-table-id');
+            if (!tableIdStr || tableIdStr === currentId) return;
+
+            const tableId = parseInt(tableIdStr, 10);
+            const tableCode = card.getAttribute('data-table-code') || '';
+            const tableType = card.getAttribute('data-table-type') || '';
+            const floor = card.getAttribute('data-floor') || '';
+            const hourlyRate = parseFloat(card.getAttribute('data-hourly-rate')) || 0;
+
+            tables.push({
+                id: tableId,
+                code: tableCode,
+                type: tableType,
+                floor: floor,
+                hourlyRate: hourlyRate
+            });
+        });
+
+        tables.sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true }));
+        return tables;
+    }
+
+    function getCurrentOpenSegmentRate() {
+        if (currentSelectedTable.segments && currentSelectedTable.segments.length > 0) {
+            const openSeg = currentSelectedTable.segments.find(s => !(s.endAtUtc ?? s.EndAtUtc));
+            if (openSeg) {
+                return openSeg.hourlyRate ?? openSeg.HourlyRate ?? 0;
+            }
+            const lastSeg = currentSelectedTable.segments[currentSelectedTable.segments.length - 1];
+            if (lastSeg) {
+                return lastSeg.hourlyRate ?? lastSeg.HourlyRate ?? 0;
+            }
+        }
+        if (currentSelectedTable.hourlyRate) {
+            return currentSelectedTable.hourlyRate;
+        }
+        const card = document.querySelector(`.table-card[data-table-id="${currentSelectedTable.id}"]`);
+        if (card) {
+            return parseFloat(card.getAttribute('data-hourly-rate')) || 0;
+        }
+        return 0;
+    }
+
+    function buildAvailableTableOptions(isFromPolling = false) {
+        const tables = getAvailableTablesFromGrid();
+        // Chữ ký gồm cả mã bàn và đơn giá (Bổ sung 6)
+        const signature = tables.map(t => `${t.code}:${t.hourlyRate}`).join('|');
+
+        if (isFromPolling && signature === lastAvailableSignature) {
+            return;
+        }
+
+        lastAvailableSignature = signature;
+
+        const selectEl = document.getElementById('select-target-table');
+        const noTablesMsg = document.getElementById('transfer-no-tables-msg');
+        const btnConfirm = document.getElementById('btn-confirm-transfer');
+        if (!selectEl) return;
+
+        const prevValue = selectEl.value;
+        selectEl.replaceChildren();
+
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Chọn bàn đích...';
+        selectEl.appendChild(defaultOption);
+
+        if (tables.length === 0) {
+            if (noTablesMsg) noTablesMsg.classList.remove('d-none');
+            selectEl.disabled = true;
+            if (btnConfirm) btnConfirm.disabled = true;
+            updateTransferFormPreview();
+            return;
+        }
+
+        if (noTablesMsg) noTablesMsg.classList.add('d-none');
+        selectEl.disabled = false;
+
+        let hasPrevValueInNewList = false;
+
+        tables.forEach(t => {
+            const option = document.createElement('option');
+            option.value = String(t.id);
+            const floorText = t.floor ? `Tầng ${t.floor}` : '';
+            const parts = [t.code, t.type, floorText, `${formatVnCurrency(t.hourlyRate)}/giờ`].filter(Boolean);
+            option.textContent = parts.join(' · ');
+            selectEl.appendChild(option);
+
+            if (String(t.id) === prevValue) {
+                hasPrevValueInNewList = true;
+            }
+        });
+
+        if (hasPrevValueInNewList) {
+            selectEl.value = prevValue;
+        } else {
+            selectEl.value = '';
+            if (isFromPolling && prevValue) {
+                showToast('Bàn đích vừa được sử dụng, hãy chọn bàn khác.', 'warning');
+            }
+        }
+
+        updateTransferFormPreview();
+    }
+
+    function updateTransferFormPreview() {
+        if (!isTransferFormVisible) return;
+
+        const selectEl = document.getElementById('select-target-table');
+        const previewCurrentRateEl = document.getElementById('preview-transfer-rate-current');
+        const previewTargetRateEl = document.getElementById('preview-transfer-rate-target');
+        const previewDiffNoteEl = document.getElementById('preview-transfer-rate-diff-note');
+        const previewDiffTextEl = document.getElementById('preview-transfer-rate-diff-text');
+        const previewBillingStartEl = document.getElementById('preview-transfer-billing-start');
+        const previewPendingNoteEl = document.getElementById('preview-transfer-pending-note');
+        const btnConfirm = document.getElementById('btn-confirm-transfer');
+
+        const currentRate = getCurrentOpenSegmentRate();
+        if (previewCurrentRateEl) {
+            previewCurrentRateEl.textContent = `${formatVnCurrency(currentRate)}/giờ`;
+        }
+
+        const nowServerMs = Date.now() - deltaOffset;
+        const ceil15Ms = Math.ceil(nowServerMs / 900000) * 900000;
+        if (previewBillingStartEl) {
+            previewBillingStartEl.textContent = formatVnTimeOnly(ceil15Ms);
+        }
+
+        // Kiểm tra pha tính tiền bằng getBillingPhase có sẵn (Bổ sung 3)
+        if (previewPendingNoteEl) {
+            if (currentSelectedTable.billingStartAtUtc) {
+                const bStartMs = Date.parse(currentSelectedTable.billingStartAtUtc);
+                if (!isNaN(bStartMs)) {
+                    const phaseInfo = getBillingPhase(bStartMs, nowServerMs);
+                    if (phaseInfo.phase === 'pending') {
+                        previewPendingNoteEl.classList.remove('d-none');
+                    } else {
+                        previewPendingNoteEl.classList.add('d-none');
+                    }
+                } else {
+                    previewPendingNoteEl.classList.add('d-none');
+                }
+            } else {
+                previewPendingNoteEl.classList.add('d-none');
+            }
+        }
+
+        const selectedTargetId = selectEl ? selectEl.value : '';
+        if (selectedTargetId) {
+            const card = document.querySelector(`.table-card[data-table-id="${selectedTargetId}"]`);
+            const targetRate = card ? (parseFloat(card.getAttribute('data-hourly-rate')) || 0) : 0;
+
+            if (previewTargetRateEl) {
+                previewTargetRateEl.textContent = `${formatVnCurrency(targetRate)}/giờ`;
+            }
+
+            // So sánh đơn giá bằng cách làm tròn 2 chữ số thập phân (Bổ sung 4)
+            const roundedCurrentRate = Math.round(currentRate * 100) / 100;
+            const roundedTargetRate = Math.round(targetRate * 100) / 100;
+
+            if (roundedCurrentRate !== roundedTargetRate) {
+                if (previewDiffTextEl) {
+                    previewDiffTextEl.textContent = `Khác đơn giá: từ ${formatVnCurrency(currentRate)}/giờ sang ${formatVnCurrency(targetRate)}/giờ. Tiền giờ tính theo đơn giá từng bàn.`;
+                }
+                if (previewDiffNoteEl) previewDiffNoteEl.classList.remove('d-none');
+            } else {
+                if (previewDiffNoteEl) previewDiffNoteEl.classList.add('d-none');
+            }
+
+            if (btnConfirm) btnConfirm.disabled = isProcessing;
+        } else {
+            if (previewTargetRateEl) previewTargetRateEl.textContent = '--';
+            if (previewDiffNoteEl) previewDiffNoteEl.classList.add('d-none');
+            if (btnConfirm) btnConfirm.disabled = true;
+        }
+    }
+
+    function showTransferForm() {
+        const isBooking = Boolean(currentSelectedTable.isBookingSession);
+        if (currentSelectedTable.status !== 'InUse' || !currentSelectedTable.sessionId || isBooking) return;
+
+        if (isOpenFormVisible) {
+            hideOpenForm(false);
+        }
+        if (isExtendFormVisible) {
+            hideExtendForm(false);
+        }
+        if (isCloseFormVisible) {
+            hideCloseForm(false);
+        }
+
+        isTransferFormVisible = true;
+        lastAvailableSignature = '';
+
+        const formEl = document.getElementById('transfer-session-form');
+        const actionsBox = document.getElementById('action-buttons-box');
+        if (formEl) formEl.classList.remove('d-none');
+        if (actionsBox) actionsBox.classList.add('d-none');
+
+        const errorEl = document.getElementById('transfer-form-error');
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.classList.add('d-none');
+        }
+
+        buildAvailableTableOptions(false);
+        updateButtons();
+
+        const selectEl = document.getElementById('select-target-table');
+        if (selectEl && !selectEl.disabled && typeof selectEl.focus === 'function') {
+            selectEl.focus();
+        } else if (formEl && typeof formEl.scrollIntoView === 'function') {
+            formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    function hideTransferForm(returnFocus = true) {
+        isTransferFormVisible = false;
+        const formEl = document.getElementById('transfer-session-form');
+        const actionsBox = document.getElementById('action-buttons-box');
+        if (formEl) formEl.classList.add('d-none');
+        if (actionsBox) actionsBox.classList.remove('d-none');
+
+        const selectEl = document.getElementById('select-target-table');
+        if (selectEl) selectEl.value = '';
+
+        const errorEl = document.getElementById('transfer-form-error');
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.classList.add('d-none');
+        }
+
+        updateButtons();
+
+        if (returnFocus) {
+            const btnTransfer = document.getElementById('btn-transfer');
+            if (btnTransfer && !btnTransfer.disabled && typeof btnTransfer.focus === 'function') {
+                btnTransfer.focus();
+            }
+        }
+    }
+
+    function handleTransferTable() {
+        if (isProcessing) return;
+        const isBooking = Boolean(currentSelectedTable.isBookingSession);
+        if (currentSelectedTable.status !== 'InUse' || !currentSelectedTable.sessionId || isBooking) return;
+
+        showTransferForm();
+    }
+
+    async function handleConfirmTransferSession() {
+        if (isProcessing) return;
+        const isBooking = Boolean(currentSelectedTable.isBookingSession);
+        if (currentSelectedTable.status !== 'InUse' || !currentSelectedTable.sessionId || isBooking) return;
+
+        const selectEl = document.getElementById('select-target-table');
+        const targetTableId = selectEl ? parseInt(selectEl.value, 10) : 0;
+        if (!targetTableId || targetTableId <= 0) {
+            const errorEl = document.getElementById('transfer-form-error');
+            if (errorEl) {
+                errorEl.textContent = 'Vui lòng chọn bàn đích.';
+                errorEl.classList.remove('d-none');
+            }
+            return;
+        }
+
+        const token = getVerificationToken();
+        if (!token) {
+            showToast('Thiếu mã xác thực bảo mật (Anti-forgery token).', 'danger');
+            return;
+        }
+
+        if (pollingAbortController) {
+            pollingAbortController.abort();
+            pollingAbortController = null;
+        }
+        pollingRequestId++;
+        isPolling = false;
+
+        isProcessing = true;
+        updateButtons();
+        const btnConfirm = document.getElementById('btn-confirm-transfer');
+        if (btnConfirm) btnConfirm.disabled = true;
+
+        const targetSessionId = currentSelectedTable.sessionId;
+        const oldTableCode = currentSelectedTable.code;
+        const currentTableId = currentSelectedTable.id;
+
+        try {
+            const params = new URLSearchParams();
+            params.append('SessionId', targetSessionId);
+            params.append('NewTableId', targetTableId);
+            params.append('__RequestVerificationToken', token);
+
+            const response = await fetch('/Table/TransferSession', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: params,
+                credentials: 'same-origin'
+            });
+
+            const isRedirectToLogin = response.redirected && (
+                response.url.includes('/Account/Login') ||
+                response.url.includes('/AccessDenied') ||
+                response.url.includes('/Account/AccessDenied')
+            );
+            if (isRedirectToLogin || response.status === 401 || response.status === 403) {
+                showToast('Phiên đăng nhập đã hết hạn, vui lòng tải lại trang.', 'danger');
+                stopPolling();
+                return;
+            }
+
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                showToast('Phiên đăng nhập đã hết hạn, vui lòng tải lại trang.', 'danger');
+                stopPolling();
+                return;
+            }
+
+            const result = await response.json();
+            const isSuccess = Boolean(result.success ?? result.Success);
+            const autoReload = Boolean(result.autoReload ?? result.AutoReload);
+            const serverMessage = result.message ?? result.Message;
+            const errorCode = result.errorCode ?? result.ErrorCode;
+
+            if (isSuccess) {
+                isTransferring = true; // Chặn toast thừa cho bàn cũ khi reset (Bổ sung 1)
+                hideTransferForm(false);
+
+                const data = result.data ?? result.Data;
+                const newTableCode = data?.newTableCode ?? data?.NewTableCode ?? '';
+                const newHourlyRate = data?.newHourlyRate ?? data?.NewHourlyRate ?? 0;
+                const newTableId = data?.newTableId ?? data?.NewTableId ?? targetTableId;
+
+                showToast(`Đã chuyển bàn ${oldTableCode} sang ${newTableCode}. Đơn giá mới: ${formatVnCurrency(newHourlyRate)}/giờ`, 'success');
+
+                // Xóa/đặt lại bàn đang chọn TRƯỚC khi tải lại lưới (Bổ sung 1)
+                currentSelectedTable.id = null;
+                highlightSelectedCard(null);
+
+                await reloadTableGrid();
+                await handleTableSelect(newTableId);
+                isTransferring = false;
+            } else {
+                const errorMsg = serverMessage || 'Chuyển bàn không thành công. Vui lòng thử lại.';
+                showToast(errorMsg, 'danger');
+
+                // Xử lý lỗi theo Bổ sung 2
+                if (errorCode === 51612 || errorCode === 51613 || errorCode === 51615 || autoReload) {
+                    hideTransferForm(false);
+                    await reloadTableGrid();
+                } else if (errorCode === 51616 || errorCode === 51614) {
+                    hideTransferForm(false);
+                    await handleTableSelect(currentTableId);
+                }
+            }
+        } catch {
+            showToast('Không kết nối được máy chủ.', 'danger');
+        } finally {
+            isProcessing = false;
+            updateButtons();
+            if (isTransferFormVisible && btnConfirm) {
+                const selectElCheck = document.getElementById('select-target-table');
+                btnConfirm.disabled = !(selectElCheck && selectElCheck.value);
+            }
+        }
+    }
+
+    // =========================================================================
     // Khởi tạo các sự kiện giao diện (Event Delegation & Keyboard Navigation)
     // =========================================================================
     function initEvents() {
@@ -2569,6 +3115,17 @@
                 }
                 if (isCloseFormVisible) {
                     hideCloseForm(true);
+                    e.preventDefault();
+                    return;
+                }
+                if (isTransferFormVisible) {
+                    const selectTarget = document.getElementById('select-target-table');
+                    if (document.activeElement === selectTarget) {
+                        selectTarget.blur();
+                        e.preventDefault();
+                        return;
+                    }
+                    hideTransferForm(true);
                     e.preventDefault();
                     return;
                 }
@@ -2718,6 +3275,26 @@
         }
 
         // ---------------------------------------------------------------------
+        // Sự kiện cho Form Chuyển bàn
+        // ---------------------------------------------------------------------
+        const selectTargetTable = document.getElementById('select-target-table');
+        if (selectTargetTable) {
+            selectTargetTable.addEventListener('change', () => {
+                updateTransferFormPreview();
+            });
+        }
+
+        const btnConfirmTransfer = document.getElementById('btn-confirm-transfer');
+        if (btnConfirmTransfer) {
+            btnConfirmTransfer.addEventListener('click', handleConfirmTransferSession);
+        }
+
+        const btnCancelTransfer = document.getElementById('btn-cancel-transfer');
+        if (btnCancelTransfer) {
+            btnCancelTransfer.addEventListener('click', () => hideTransferForm(true));
+        }
+
+        // ---------------------------------------------------------------------
         // Nút hành động chính
         // ---------------------------------------------------------------------
         const btnOpen = document.getElementById('btn-open-table');
@@ -2733,6 +3310,11 @@
         const btnClose = document.getElementById('btn-close-table');
         if (btnClose) {
             btnClose.addEventListener('click', handleCloseTable);
+        }
+
+        const btnTransfer = document.getElementById('btn-transfer');
+        if (btnTransfer) {
+            btnTransfer.addEventListener('click', handleTransferTable);
         }
 
         // Page Visibility API: Dừng khi ẩn, cập nhật ngay khi tab hiển thị lại

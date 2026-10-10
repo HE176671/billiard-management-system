@@ -97,7 +97,8 @@ public class TableSessionService : ITableSessionService
                         SessionMode = activeSession != null ? activeSession.SessionMode : null,
                         PlannedEndAtUtc = (DateTime?)activeSession.PlannedEndAtUtc,
                         BillingStartAtUtc = (DateTime?)activeSession.BillingStartAtUtc,
-                        BillingEndAtUtc = (DateTime?)activeSession.BillingEndAtUtc
+                        BillingEndAtUtc = (DateTime?)activeSession.BillingEndAtUtc,
+                        BookingId = (int?)activeSession.BookingId
                     };
 
         var raw = await query.FirstOrDefaultAsync();
@@ -232,6 +233,7 @@ public class TableSessionService : ITableSessionService
             PlaytimeAmount = playtimeAmount,
             EstimatedAmount = estimatedAmount,
             CustomerFullName = customerFullName,
+            IsBookingSession = (raw.Status == "InUse" && raw.BookingId.HasValue),
             Segments = segments,
             ServerTimeUtc = serverTimeUtc
         };
@@ -578,6 +580,89 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         }
     }
 
+    public async Task<TableOperationResult> TransferSessionAsync(int sessionId, int newTableId, string staffId)
+    {
+        if (sessionId <= 0)
+        {
+            return TableOperationResult.Fail(null, "Mã phiên chơi không hợp lệ.", autoReload: false);
+        }
+
+        if (newTableId <= 0)
+        {
+            return TableOperationResult.Fail(null, "Mã bàn đích không hợp lệ.", autoReload: false);
+        }
+
+        if (string.IsNullOrWhiteSpace(staffId))
+        {
+            return TableOperationResult.Fail(null, "Thông tin nhân viên thực hiện không hợp lệ.", autoReload: false);
+        }
+
+        var conn = (SqlConnection)_context.Database.GetDbConnection();
+        var openedHere = conn.State == ConnectionState.Closed;
+
+        try
+        {
+            if (openedHere)
+            {
+                await conn.OpenAsync();
+            }
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "dbo.usp_TransferSession";
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            cmd.Parameters.Add(new SqlParameter("@SessionId", SqlDbType.Int) { Value = sessionId });
+            cmd.Parameters.Add(new SqlParameter("@NewTableId", SqlDbType.Int) { Value = newTableId });
+            cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                int sessionIdOrdinal = reader.GetOrdinal("SessionId");
+                int oldTableIdOrdinal = reader.GetOrdinal("OldTableId");
+                int newTableIdOrdinal = reader.GetOrdinal("NewTableId");
+                int newTableCodeOrdinal = reader.GetOrdinal("NewTableCode");
+                int newHourlyRateOrdinal = reader.GetOrdinal("NewHourlyRate");
+                int transferAtUtcOrdinal = reader.GetOrdinal("TransferAtUtc");
+
+                int resSessionId = reader.GetInt32(sessionIdOrdinal);
+                int oldTableId = reader.GetInt32(oldTableIdOrdinal);
+                int resNewTableId = reader.GetInt32(newTableIdOrdinal);
+                string newTableCode = reader.GetString(newTableCodeOrdinal);
+                decimal newHourlyRate = reader.GetDecimal(newHourlyRateOrdinal);
+                DateTime transferAtUtc = DateTime.SpecifyKind(reader.GetDateTime(transferAtUtcOrdinal), DateTimeKind.Utc);
+
+                return TableOperationResult.Ok(new
+                {
+                    SessionId = resSessionId,
+                    OldTableId = oldTableId,
+                    NewTableId = resNewTableId,
+                    NewTableCode = newTableCode,
+                    NewHourlyRate = newHourlyRate,
+                    TransferAtUtc = transferAtUtc
+                });
+            }
+
+            return TableOperationResult.Fail(null, "Không nhận được phản hồi từ hệ thống cơ sở dữ liệu khi chuyển bàn.", autoReload: true);
+        }
+        catch (SqlException ex)
+        {
+            return HandleSqlException(ex, "TransferSessionAsync", sessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi không xác định khi thực hiện TransferSessionAsync cho phiên {SessionId} sang bàn {NewTableId} bởi nhân viên {StaffId}.", sessionId, newTableId, staffId);
+            return TableOperationResult.Fail(null, "Đã xảy ra lỗi không xác định trên hệ thống. Vui lòng thử lại sau.", autoReload: false);
+        }
+        finally
+        {
+            if (openedHere && conn.State == ConnectionState.Open)
+            {
+                await conn.CloseAsync();
+            }
+        }
+    }
+
     private TableOperationResult HandleSqlException(SqlException ex, string operationName, int targetId)
     {
         if (ex.Number == 51699)
@@ -607,13 +692,13 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
 
     private static bool IsKnownDomainError(int errorNumber) => errorNumber switch
     {
-        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51409 or 51410 or 51501 or 51502 or 51601 or 51602 or 51603 or 51699 => true,
+        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51409 or 51410 or 51501 or 51502 or 51601 or 51602 or 51603 or 51611 or 51612 or 51613 or 51614 or 51615 or 51616 or 51699 => true,
         _ => false
     };
 
     private static bool IsAutoReloadError(int errorNumber) => errorNumber switch
     {
-        51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51502 or 51602 or 51699 => true,
+        51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51502 or 51602 or 51612 or 51613 or 51615 or 51699 => true,
         _ => false
     };
 
@@ -634,6 +719,12 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         51601 => "Thao tác gia hạn yêu cầu tài khoản Nhân viên hoặc Quản trị viên đang hoạt động.",
         51602 => "Chỉ gia hạn được phiên đăng ký thời gian đang chơi (có thể phiên đã được đóng hoặc không phải loại đăng ký thời gian).",
         51603 => "Thời gian gia hạn không hợp lệ: phải là bội số của 15 phút, từ 15 đến 240 phút.",
+        51611 => "Thao tác chuyển bàn yêu cầu tài khoản Nhân viên hoặc Quản trị viên đang hoạt động.",
+        51612 => "Chỉ chuyển bàn được khi phiên đang chơi (phiên có thể đã được đóng).",
+        51613 => "Bàn đích không tồn tại hoặc không còn ở trạng thái Trống.",
+        51614 => "Bàn đích trùng với bàn hiện tại của phiên.",
+        51615 => "Bàn đích đang được giữ chỗ cho khách đặt trước.",
+        51616 => "Phiên mở theo đặt bàn chưa hỗ trợ chuyển bàn.",
         51699 => "Dữ liệu phiên chơi không nhất quán (không có đoạn bàn đang mở). Vui lòng báo quản trị viên.",
         _ => "Đã xảy ra lỗi khi kết nối hoặc xử lý cơ sở dữ liệu. Vui lòng thử lại sau."
     };

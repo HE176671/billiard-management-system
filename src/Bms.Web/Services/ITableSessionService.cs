@@ -10,4 +10,5 @@ public interface ITableSessionService
     Task<TableOperationResult> CloseSessionAsync(int sessionId, string staffId);
     Task<CloseSummaryViewModel?> GetCloseSummaryAsync(int sessionId);
     Task<TableOperationResult> ExtendSessionAsync(int sessionId, int addMinutes, string staffId);
+    Task<TableOperationResult> TransferSessionAsync(int sessionId, int newTableId, string staffId);
 }

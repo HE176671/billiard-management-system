@@ -834,3 +834,76 @@ button:disabled {
     font-family: 'Consolas', 'Monaco', monospace;
 }
 
+/* ==========================================================================
+   Form Chuyển bàn (Transfer Session Form)
+   ========================================================================== */
+.transfer-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.transfer-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+/* ==========================================================================
+   Lịch sử các đoạn bàn (Table Segments History)
+   ========================================================================== */
+.detail-segments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.segment-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0.5rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.segment-item-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.segment-item-table {
+    font-weight: 700;
+    color: var(--bg-dark);
+}
+
+.segment-item-type {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.segment-item-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.1rem;
+}
+
+.segment-item-time {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.segment-item-rate {
+    font-size: 0.75rem;
+    color: var(--primary-green-dark);
+    font-weight: 600;
+}
+
