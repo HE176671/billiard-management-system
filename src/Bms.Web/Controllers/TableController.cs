@@ -103,4 +103,24 @@ public class TableController : Controller
         var result = await _tableSessionService.CloseSessionAsync(request.SessionId, staffId);
         return Json(result);
     }
+
+    // POST: /Table/ExtendSession
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ExtendSession([FromForm] ExtendSessionRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return Json(TableOperationResult.Fail(null, "Dữ liệu gửi lên không hợp lệ.", false));
+        }
+
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(staffId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _tableSessionService.ExtendSessionAsync(request.SessionId, request.AddMinutes, staffId);
+        return Json(result);
+    }
 }

@@ -423,6 +423,20 @@ body.staff-layout-body {
     color: var(--status-inactive);
 }
 
+/* Pha Chờ tính giờ (Pending Billing Phase) - Màu xanh dương nhạt phân biệt */
+.table-card[data-billing-phase="pending"] {
+    border-left: 6px solid #0284c7;
+    background-color: #f0f9ff;
+}
+.table-card[data-billing-phase="pending"] .status-text {
+    color: #0284c7;
+    font-weight: 600;
+}
+.table-card[data-billing-phase="pending"] .table-clock {
+    color: #0369a1;
+    font-size: 0.9rem;
+}
+
 .no-tables-message {
     padding: 2rem;
     text-align: center;
@@ -653,4 +667,113 @@ button:disabled {
     font-family: 'Consolas', 'Monaco', monospace;
     color: var(--bg-dark);
     font-size: 0.95rem;
+}
+
+/* ==========================================================================
+   Thời gian cảnh báo & quá hạn trên thẻ bàn (data-time-state)
+   ========================================================================== */
+.table-remaining {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 700;
+    font-size: 0.95rem;
+    min-height: 1.25rem;
+    display: inline-block;
+}
+
+/* Khi bình thường: giữ nguyên màu chữ & viền trạng thái bàn */
+.table-card[data-time-state="normal"] .table-remaining {
+    color: #0f172a;
+}
+
+/* Cảnh báo (warning): <= 10 phút */
+.table-card[data-time-state="warning"] {
+    border-color: #d97706;
+    background-color: #fffbeb;
+}
+.table-card[data-time-state="warning"] .table-remaining {
+    color: #b45309;
+    font-weight: 700;
+}
+.table-card[data-time-state="warning"] .remaining-label {
+    color: #b45309;
+    font-weight: 600;
+}
+
+/* Quá hạn (overdue): <= 0 */
+.table-card[data-time-state="overdue"] {
+    border-color: #dc2626;
+    background-color: #fef2f2;
+    animation: pulse-overdue 2s infinite ease-in-out;
+}
+.table-card[data-time-state="overdue"] .table-remaining {
+    color: #b91c1c;
+    font-weight: 800;
+}
+.table-card[data-time-state="overdue"] .remaining-label {
+    color: #b91c1c;
+    font-weight: 700;
+}
+
+@keyframes pulse-overdue {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.2);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .table-card[data-time-state="overdue"] {
+        animation: none;
+    }
+}
+
+/* ==========================================================================
+   Nút & Form Gia hạn (Extend Session)
+   ========================================================================== */
+.btn-warning-bms {
+    background-color: #f59e0b;
+    border-color: #d97706;
+    color: #ffffff;
+}
+.btn-warning-bms:hover:not(:disabled) {
+    background-color: #d97706;
+    color: #ffffff;
+}
+
+.extend-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.extend-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.preset-buttons-group .btn-preset-extend-minutes {
+    flex: 1;
+    min-width: 60px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: #f8fafc;
+    color: var(--text-main);
+    transition: all 0.15s ease-in-out;
+}
+.preset-buttons-group .btn-preset-extend-minutes:hover {
+    background-color: #e2e8f0;
+    border-color: #94a3b8;
+}
+.preset-buttons-group .btn-preset-extend-minutes.active {
+    background-color: var(--bg-dark);
+    color: #ffffff;
+    border-color: var(--bg-dark);
 }

@@ -18,6 +18,7 @@ public class TableCardViewModel
     public string DisplayStatus { get; set; } = string.Empty;
     public int? ActiveSessionId { get; set; }
     public DateTime? SessionStartUtc { get; set; }
+    public DateTime? BillingStartAtUtc { get; set; }
     public string? SessionMode { get; set; }
     public DateTime? PlannedEndAtUtc { get; set; }
     public DateTime ServerTimeUtc { get; set; }
@@ -65,6 +66,12 @@ public class OpenSessionRequest
 public class CloseSessionRequest
 {
     public int SessionId { get; set; }
+}
+
+public class ExtendSessionRequest
+{
+    public int SessionId { get; set; }
+    public int AddMinutes { get; set; }
 }
 
 public class TableOperationResult

@@ -47,6 +47,15 @@
                 plannedEndIso = plannedEndUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
             }
 
+            string? billingStartIso = null;
+            if (table.BillingStartAtUtc.HasValue)
+            {
+                var billingStartUtc = table.BillingStartAtUtc.Value.Kind == DateTimeKind.Utc
+                    ? table.BillingStartAtUtc.Value
+                    : DateTime.SpecifyKind(table.BillingStartAtUtc.Value, DateTimeKind.Utc);
+                billingStartIso = billingStartUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+            }
+
             <div class="table-card @statusClass"
                  tabindex="0"
                  role="button"
@@ -56,6 +65,7 @@
                  data-status="@table.Status"
                  data-display-status="@table.DisplayStatus"
                  @if (!string.IsNullOrEmpty(sessionStartIso)) { <text>data-session-start="@sessionStartIso"</text> }
+                 @if (!string.IsNullOrEmpty(billingStartIso)) { <text>data-billing-start="@billingStartIso"</text> }
                  @if (!string.IsNullOrEmpty(table.SessionMode)) { <text>data-session-mode="@table.SessionMode"</text> }
                  @if (!string.IsNullOrEmpty(plannedEndIso)) { <text>data-planned-end="@plannedEndIso"</text> }>
                 <div class="table-card-top">
@@ -71,6 +81,13 @@
                         <span class="info-label">Giờ:</span>
                         <span class="info-value table-clock" id="clock-@table.Id"></span>
                     </div>
+                    @if (!string.IsNullOrEmpty(plannedEndIso))
+                    {
+                        <div class="table-info-row table-remaining-row">
+                            <span class="info-label remaining-label">Còn lại:</span>
+                            <span class="info-value table-remaining" id="remaining-@table.Id"></span>
+                        </div>
+                    }
                 </div>
             </div>
         }

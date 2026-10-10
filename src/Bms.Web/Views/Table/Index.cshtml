@@ -9,14 +9,8 @@
     @Html.AntiForgeryToken()
 </div>
 
-<!-- Toast thông báo Bootstrap 5 -->
-<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;">
-    <div id="bms-toast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
-        <div class="d-flex">
-            <div class="toast-body" id="bms-toast-message"></div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Đóng"></button>
-        </div>
-    </div>
+<!-- Toast thông báo Bootstrap 5 (chứa tối đa 3 toast cùng lúc) -->
+<div class="toast-container position-fixed top-0 end-0 p-3" id="bms-toast-container" style="z-index: 1090;">
 </div>
 
 <div class="table-management-wrapper">
@@ -97,6 +91,10 @@
                     <span class="detail-key">Duration:</span>
                     <span class="detail-val duration-val" id="detail-duration">--</span>
                 </div>
+                <div class="detail-data-row" id="detail-remaining-row">
+                    <span class="detail-key">Còn lại:</span>
+                    <span class="detail-val duration-val" id="detail-remaining">--</span>
+                </div>
                 <div class="detail-data-row d-none" id="detail-playtime-row">
                     <span class="detail-key">Tiền giờ:</span>
                     <span class="detail-val" id="detail-playtime-amount">--</span>
@@ -152,11 +150,50 @@
                 </div>
             </div>
 
+            <!-- Khung 4b: Form Gia hạn phiên (mặc định d-none, hiện khi bấm GIA HẠN) -->
+            <div class="panel-card-box extend-session-form d-none" id="extend-session-form">
+                <div class="form-section-title mb-2 fw-bold">Gia hạn phiên chơi</div>
+                <div class="mb-3">
+                    <label class="form-label d-block text-muted small fw-bold mb-1">Thời gian gia hạn thêm:</label>
+                    <div class="preset-buttons-group mb-2 d-flex gap-1 flex-wrap" id="preset-extend-buttons-group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset-extend-minutes" data-minutes="15">15 phút</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset-extend-minutes active" data-minutes="30">30 phút</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset-extend-minutes" data-minutes="60">60 phút</button>
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <input type="number" class="form-control" id="input-extend-minutes" min="15" max="240" step="15" value="30" placeholder="Nhập số phút (15 - 240)">
+                        <span class="input-group-text">phút</span>
+                    </div>
+                    <div id="extend-form-error" class="form-text text-danger mt-1 small d-none"></div>
+                </div>
+
+                <div class="time-preview-box p-2 mb-3 rounded bg-light border">
+                    <div class="small text-muted" id="preview-extend-planned-end-row">
+                        Dự kiến kết thúc mới: <strong id="preview-extend-planned-end">--:--</strong>
+                    </div>
+                    <div class="small text-muted mt-1" id="preview-extend-remaining-row">
+                        Còn lại sau gia hạn: <strong id="preview-extend-remaining">--</strong>
+                    </div>
+                </div>
+
+                <div class="action-btn-row">
+                    <button type="button" class="btn btn-warning-bms btn-action-main" id="btn-confirm-extend">
+                        Xác nhận gia hạn
+                    </button>
+                    <button type="button" class="btn btn-wireframe btn-action-main" id="btn-cancel-extend">
+                        Hủy
+                    </button>
+                </div>
+            </div>
+
             <!-- Khung 5: Các nút hành động theo wireframe -->
             <div class="panel-card-box action-buttons-container" id="action-buttons-box">
                 <div class="action-btn-row">
                     <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-open-table" disabled>
                         OPEN TABLE
+                    </button>
+                    <button type="button" class="btn btn-warning-bms btn-action-main" id="btn-extend-table" disabled>
+                        GIA HẠN
                     </button>
                     <button type="button" class="btn btn-danger-bms btn-action-main" id="btn-close-table" disabled>
                         CLOSE TABLE
