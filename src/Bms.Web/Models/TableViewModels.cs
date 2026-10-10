@@ -99,3 +99,18 @@ public class TableOperationResult
             AutoReload = autoReload
         };
 }
+
+public class CloseSummaryViewModel
+{
+    public int SessionId { get; set; }
+    public string TableCode { get; set; } = string.Empty;
+    public string SessionMode { get; set; } = string.Empty;
+    public DateTime StartAtUtc { get; set; }
+    public DateTime BillingStartAtUtc { get; set; }
+    public DateTime ServerNowUtc { get; set; }
+    public DateTime BillingEndPreviewAtUtc { get; set; }
+    public int BilledMinutes { get; set; }
+    public bool MinimumChargeApplied { get; set; }
+    public decimal? EstimatedAmount { get; set; }
+}
+

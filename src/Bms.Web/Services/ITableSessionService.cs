@@ -8,5 +8,6 @@ public interface ITableSessionService
     Task<TableDetailViewModel?> GetTableDetailAsync(int tableId);
     Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string sessionMode = "Open", int? plannedMinutes = null);
     Task<TableOperationResult> CloseSessionAsync(int sessionId, string staffId);
+    Task<CloseSummaryViewModel?> GetCloseSummaryAsync(int sessionId);
     Task<TableOperationResult> ExtendSessionAsync(int sessionId, int addMinutes, string staffId);
 }

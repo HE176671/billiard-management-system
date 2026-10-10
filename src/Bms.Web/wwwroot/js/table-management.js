@@ -47,6 +47,18 @@
         minutes: 30                    // Mặc định 30 phút
     };
 
+    // Trạng thái form đóng bàn
+    let isCloseFormVisible = false;    // Đang hiển thị form xác nhận đóng bàn
+    let isCloseSummaryLoading = false; // Đang gửi request GetCloseSummary
+    let closeSummaryRequestId = 0;     // Bộ đếm thế hệ request tóm tắt đóng bàn
+    let closeSummaryTimerSeconds = 0;  // Bộ đếm giây làm mới tóm tắt đóng bàn (10s)
+
+    // Làm mới tiền tạm tính của bàn InUse trong panel chi tiết
+    let detailEstimatedAmountSeconds = 0; // Bộ đếm giây làm mới tiền tạm tính (30s)
+    let last15MinMark = -1;            // Mốc 15 phút trước đó để bắt sự kiện qua mốc
+    let isEstimatedAmountRefreshing = false; // Đang gửi request làm mới tiền tạm tính
+    let estimatedAmountRequestId = 0;  // Bộ đếm thế hệ request làm mới tiền
+
     // Cấu hình & Trạng thái đồng hồ thời gian thực
     let clockTimerId = null;           // Bộ đếm 1 giây duy nhất (chống tạo trùng)
     let deltaOffset = 0;               // ms lệch giữa client browser và server (Clock Skew)
@@ -87,6 +99,14 @@
         hour12: false
     });
 
+    const vnTimeWithSecondsFormatter = new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+
     const vnCurrencyFormatter = new Intl.NumberFormat('vi-VN', {
         style: 'currency',
         currency: 'VND'
@@ -111,6 +131,17 @@
             return vnHourMinuteFormatter.format(date);
         } catch {
             return '--:--';
+        }
+    }
+
+    function formatVnTimeWithSeconds(utcDateOrMs) {
+        if (!utcDateOrMs) return '--:--:--';
+        try {
+            const date = typeof utcDateOrMs === 'number' ? new Date(utcDateOrMs) : new Date(utcDateOrMs);
+            if (isNaN(date.getTime())) return '--:--:--';
+            return vnTimeWithSecondsFormatter.format(date);
+        } catch {
+            return '--:--:--';
         }
     }
 
@@ -404,7 +435,7 @@
         if (btnSplitMerge) btnSplitMerge.disabled = true;
 
         // Nếu bất kỳ form inline nào đang hiện thì vô hiệu hóa OPEN, EXTEND và CLOSE
-        if (isOpenFormVisible || isExtendFormVisible) {
+        if (isOpenFormVisible || isExtendFormVisible || isCloseFormVisible) {
             if (btnOpen) btnOpen.disabled = true;
             if (btnExtend) btnExtend.disabled = true;
             if (btnClose) btnClose.disabled = true;
@@ -778,6 +809,33 @@
 
         // 6. Quét cảnh báo thời gian
         checkTimeAlerts(cards);
+
+        // 7. Làm mới tóm tắt đóng bàn mỗi 10 giây khi form đóng đang mở
+        if (isCloseFormVisible && currentSelectedTable.sessionId) {
+            closeSummaryTimerSeconds++;
+            if (closeSummaryTimerSeconds >= 10) {
+                closeSummaryTimerSeconds = 0;
+                if (!isCloseSummaryLoading && !document.hidden) {
+                    loadCloseSummary(currentSelectedTable.sessionId, false);
+                }
+            }
+        }
+
+        // 8. Làm mới tiền tạm tính của bàn InUse trong panel chi tiết (mỗi 30s hoặc ngay khi qua mốc 15 phút)
+        const current15MinMark = Math.floor(nowServerMs / 900000);
+        const is15MinMarkCrossed = (last15MinMark !== -1 && current15MinMark !== last15MinMark);
+        last15MinMark = current15MinMark;
+
+        if (isPanelVisible && currentSelectedTable.id && currentSelectedTable.status === 'InUse' &&
+            !isOpenFormVisible && !isExtendFormVisible && !isCloseFormVisible) {
+            detailEstimatedAmountSeconds++;
+            if (detailEstimatedAmountSeconds >= 30 || is15MinMarkCrossed) {
+                detailEstimatedAmountSeconds = 0;
+                if (!isDetailLoading && !isEstimatedAmountRefreshing && !document.hidden) {
+                    refreshEstimatedAmount(currentSelectedTable.id);
+                }
+            }
+        }
     }
 
     /**
@@ -787,6 +845,58 @@
         if (clockTimerId !== null) return;
         updateClocks();
         clockTimerId = setInterval(updateClocks, 1000);
+    }
+
+    /**
+     * Làm mới riêng dòng tiền tạm tính của bàn InUse trong panel chi tiết
+     */
+    async function refreshEstimatedAmount(tableId) {
+        if (!tableId || isEstimatedAmountRefreshing) return;
+        const requestId = ++estimatedAmountRequestId;
+        isEstimatedAmountRefreshing = true;
+
+        try {
+            const response = await fetch(`/Table/GetTableDetail?tableId=${encodeURIComponent(tableId)}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin'
+            });
+
+            if (requestId !== estimatedAmountRequestId) return;
+            if (!response.ok) return;
+
+            const detail = await response.json();
+            if (requestId !== estimatedAmountRequestId) return;
+
+            const panel = document.getElementById('table-detail-panel');
+            if (!panel || panel.classList.contains('d-none')) return;
+            if (currentSelectedTable.id !== tableId || currentSelectedTable.status !== 'InUse') return;
+
+            const elPlaytimeRow = document.getElementById('detail-playtime-row');
+            const elPlaytimeLabel = document.getElementById('detail-playtime-label');
+            const elPlaytimeAmount = document.getElementById('detail-playtime-amount');
+            const estAmount = detail.estimatedAmount ?? detail.EstimatedAmount;
+            const srvTime = detail.serverTimeUtc ?? detail.ServerTimeUtc;
+
+            if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
+            if (elPlaytimeAmount) {
+                if (estAmount !== null && estAmount !== undefined) {
+                    const timeStr = srvTime ? ` (cập nhật ${formatVnTimeWithSeconds(srvTime)})` : '';
+                    elPlaytimeAmount.textContent = `${formatVnCurrency(estAmount)}${timeStr}`;
+                } else {
+                    elPlaytimeAmount.textContent = '--';
+                }
+            }
+            if (elPlaytimeRow) elPlaytimeRow.classList.remove('d-none');
+        } catch {
+            // Làm mới nền không gây toast lỗi làm phiền người dùng
+        } finally {
+            if (requestId === estimatedAmountRequestId) {
+                isEstimatedAmountRefreshing = false;
+            }
+        }
     }
 
     // =========================================================================
@@ -949,13 +1059,33 @@
         }
 
         const elPlaytimeRow = document.getElementById('detail-playtime-row');
+        const elPlaytimeLabel = document.getElementById('detail-playtime-label');
         const elPlaytimeAmount = document.getElementById('detail-playtime-amount');
         const playtimeAmount = detail.playtimeAmount ?? detail.PlaytimeAmount;
+        const estimatedAmount = detail.estimatedAmount ?? detail.EstimatedAmount;
+        const serverTime = detail.serverTimeUtc ?? detail.ServerTimeUtc;
 
-        if (playtimeAmount !== null && playtimeAmount !== undefined) {
-            if (elPlaytimeAmount) elPlaytimeAmount.textContent = formatVnCurrency(playtimeAmount);
+        if (currentSelectedTable.status === 'InUse') {
+            if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
+            if (elPlaytimeAmount) {
+                if (estimatedAmount !== null && estimatedAmount !== undefined) {
+                    const timeStr = serverTime ? ` (cập nhật ${formatVnTimeWithSeconds(serverTime)})` : '';
+                    elPlaytimeAmount.textContent = `${formatVnCurrency(estimatedAmount)}${timeStr}`;
+                } else {
+                    elPlaytimeAmount.textContent = '--';
+                }
+            }
+            if (elPlaytimeRow) elPlaytimeRow.classList.remove('d-none');
+        } else if (currentSelectedTable.status === 'AwaitingPayment') {
+            if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tiền giờ (đã chốt):';
+            if (elPlaytimeAmount) {
+                elPlaytimeAmount.textContent = (playtimeAmount !== null && playtimeAmount !== undefined)
+                    ? formatVnCurrency(playtimeAmount)
+                    : '--';
+            }
             if (elPlaytimeRow) elPlaytimeRow.classList.remove('d-none');
         } else {
+            if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
             if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
             if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
         }
@@ -993,7 +1123,9 @@
         if (elRemaining) elRemaining.textContent = '--';
 
         const elPlaytimeRow = document.getElementById('detail-playtime-row');
+        const elPlaytimeLabel = document.getElementById('detail-playtime-label');
         const elPlaytimeAmount = document.getElementById('detail-playtime-amount');
+        if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
         if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
         if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
     }
@@ -1007,6 +1139,9 @@
         }
         if (isExtendFormVisible) {
             hideExtendForm(false);
+        }
+        if (isCloseFormVisible) {
+            hideCloseForm(false);
         }
 
         const panel = document.getElementById('table-detail-panel');
@@ -1064,6 +1199,9 @@
         if (isExtendFormVisible) {
             hideExtendForm(false);
         }
+        if (isCloseFormVisible) {
+            hideCloseForm(false);
+        }
         closeDetailPanel(false);
     }
 
@@ -1078,6 +1216,9 @@
         }
         if (isExtendFormVisible) {
             hideExtendForm(false);
+        }
+        if (isCloseFormVisible) {
+            hideCloseForm(false);
         }
 
         lastSelectedCardId = tableId;
@@ -1256,6 +1397,10 @@
                 hideExtendForm(false);
                 showToast(`Bàn ${currentSelectedTable.code} không còn tồn tại.`, 'danger');
             }
+            if (isCloseFormVisible) {
+                hideCloseForm(false);
+                showToast(`Bàn ${currentSelectedTable.code} không còn tồn tại.`, 'danger');
+            }
             resetDetailPanel();
             return;
         }
@@ -1281,6 +1426,12 @@
             showToast(`Bàn ${currentSelectedTable.code} không còn ở trạng thái đang chơi theo thời gian.`, 'danger');
         }
 
+        // Nếu form đóng bàn đang mở mà bàn không còn InUse hoặc đổi phiên
+        if (isCloseFormVisible && (newCardStatus !== 'InUse' || (newCardSessionStart && prevCardSessionStart && newCardSessionStart !== prevCardSessionStart))) {
+            hideCloseForm(false);
+            showToast(`Bàn ${currentSelectedTable.code} không còn ở trạng thái đang chơi.`, 'danger');
+        }
+
         // Nếu plannedEnd thay đổi (người khác vừa gia hạn) trong lúc form gia hạn đang mở
         if (isExtendFormVisible && newCardPlannedEnd !== prevCardPlannedEnd) {
             currentSelectedTable.plannedEndAtUtc = newCardPlannedEnd;
@@ -1297,6 +1448,12 @@
                 currentSelectedTable.cardPlannedEnd = newCardPlannedEnd;
                 updateButtons();
             } else if (isExtendFormVisible && newCardStatus === 'InUse' && newCardMode.toLowerCase() === 'timed') {
+                currentSelectedTable.cardStatus = newCardStatus;
+                currentSelectedTable.cardSessionStart = newCardSessionStart;
+                currentSelectedTable.cardBillingStart = newCardBillingStart;
+                currentSelectedTable.cardPlannedEnd = newCardPlannedEnd;
+                updateButtons();
+            } else if (isCloseFormVisible && newCardStatus === 'InUse') {
                 currentSelectedTable.cardStatus = newCardStatus;
                 currentSelectedTable.cardSessionStart = newCardSessionStart;
                 currentSelectedTable.cardBillingStart = newCardBillingStart;
@@ -1452,6 +1609,9 @@
 
         if (isExtendFormVisible) {
             hideExtendForm(false);
+        }
+        if (isCloseFormVisible) {
+            hideCloseForm(false);
         }
 
         isOpenFormVisible = true;
@@ -1752,6 +1912,9 @@
         if (isOpenFormVisible) {
             hideOpenForm(false);
         }
+        if (isCloseFormVisible) {
+            hideCloseForm(false);
+        }
 
         isExtendFormVisible = true;
         extendFormState.minutes = 30;
@@ -2019,25 +2182,250 @@
     }
 
     // =========================================================================
+    // Quản lý Form ĐÓNG BÀN (Close Session Form)
+    // =========================================================================
+    function showCloseForm() {
+        if (currentSelectedTable.status !== 'InUse' || !currentSelectedTable.sessionId) return;
+
+        if (isOpenFormVisible) {
+            hideOpenForm(false);
+        }
+        if (isExtendFormVisible) {
+            hideExtendForm(false);
+        }
+
+        isCloseFormVisible = true;
+        closeSummaryTimerSeconds = 0;
+
+        const formEl = document.getElementById('close-session-form');
+        const actionsBox = document.getElementById('action-buttons-box');
+        if (formEl) formEl.classList.remove('d-none');
+        if (actionsBox) actionsBox.classList.add('d-none');
+
+        const btnConfirmClose = document.getElementById('btn-confirm-close');
+        if (btnConfirmClose) btnConfirmClose.disabled = true;
+
+        updateButtons();
+        loadCloseSummary(currentSelectedTable.sessionId, true);
+
+        // Focus mặc định đặt vào nút "Hủy" để tránh bấm Enter nhầm
+        const btnCancelClose = document.getElementById('btn-cancel-close');
+        if (btnCancelClose && typeof btnCancelClose.focus === 'function') {
+            btnCancelClose.focus();
+        } else if (formEl && typeof formEl.scrollIntoView === 'function') {
+            formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    function hideCloseForm(returnFocus = true) {
+        isCloseFormVisible = false;
+        isCloseSummaryLoading = false;
+        closeSummaryRequestId++;
+
+        const formEl = document.getElementById('close-session-form');
+        const actionsBox = document.getElementById('action-buttons-box');
+        if (formEl) formEl.classList.add('d-none');
+        if (actionsBox) actionsBox.classList.remove('d-none');
+
+        updateButtons();
+
+        if (returnFocus) {
+            const btnClose = document.getElementById('btn-close-table');
+            if (btnClose && !btnClose.disabled && typeof btnClose.focus === 'function') {
+                btnClose.focus();
+            }
+        }
+    }
+
+    async function loadCloseSummary(sessionId, isInitial = false) {
+        if (!sessionId) return;
+
+        const requestId = ++closeSummaryRequestId;
+        isCloseSummaryLoading = true;
+
+        const elLoading = document.getElementById('close-summary-loading');
+        const elError = document.getElementById('close-summary-error');
+        const elErrorMsg = document.getElementById('close-summary-error-msg');
+        const elContent = document.getElementById('close-summary-content');
+        const btnConfirm = document.getElementById('btn-confirm-close');
+
+        if (isInitial) {
+            if (elLoading) elLoading.classList.remove('d-none');
+            if (elError) elError.classList.add('d-none');
+            if (elContent) elContent.classList.add('d-none');
+            if (btnConfirm) btnConfirm.disabled = true;
+        }
+
+        try {
+            const response = await fetch(`/Table/GetCloseSummary?sessionId=${encodeURIComponent(sessionId)}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin'
+            });
+
+            if (requestId !== closeSummaryRequestId) return;
+
+            const isRedirectToLogin = response.redirected && (
+                response.url.includes('/Account/Login') ||
+                response.url.includes('/AccessDenied') ||
+                response.url.includes('/Account/AccessDenied')
+            );
+            if (isRedirectToLogin || response.status === 401 || response.status === 403) {
+                showToast('Phiên làm việc đã hết hạn, vui lòng tải lại trang.', 'danger');
+                stopPolling();
+                return;
+            }
+
+            if (!response.ok) {
+                if (isInitial) {
+                    if (elLoading) elLoading.classList.add('d-none');
+                    if (elContent) elContent.classList.add('d-none');
+                    if (elError) {
+                        if (elErrorMsg) elErrorMsg.textContent = 'Không thể tải tóm tắt đóng bàn. Vui lòng thử lại.';
+                        elError.classList.remove('d-none');
+                    }
+                    if (btnConfirm) btnConfirm.disabled = true;
+                }
+                return;
+            }
+
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                showToast('Phiên làm việc đã hết hạn, vui lòng tải lại trang.', 'danger');
+                stopPolling();
+                return;
+            }
+
+            const result = await response.json();
+            if (requestId !== closeSummaryRequestId) return;
+
+            const isSuccess = Boolean(result.success ?? result.Success);
+            const serverMessage = result.message ?? result.Message;
+            const errorCode = result.errorCode ?? result.ErrorCode;
+            const autoReload = Boolean(result.autoReload ?? result.AutoReload);
+
+            if (!isSuccess) {
+                if (errorCode === 51502 || errorCode === 51699) {
+                    showToast(serverMessage || 'Phiên chơi không hợp lệ hoặc đã kết thúc.', 'danger');
+                    hideCloseForm(false);
+                    if (autoReload) {
+                        await reloadTableGrid();
+                    }
+                    return;
+                }
+
+                if (isInitial || !elContent || elContent.classList.contains('d-none')) {
+                    if (elLoading) elLoading.classList.add('d-none');
+                    if (elContent) elContent.classList.add('d-none');
+                    if (elError) {
+                        if (elErrorMsg) elErrorMsg.textContent = serverMessage || 'Không thể tải tóm tắt đóng bàn.';
+                        elError.classList.remove('d-none');
+                    }
+                    if (btnConfirm) btnConfirm.disabled = true;
+                }
+                return;
+            }
+
+            const data = result.data ?? result.Data;
+            if (!data) return;
+
+            const tableCode = data.tableCode ?? data.TableCode ?? currentSelectedTable.code;
+            const sessionMode = data.sessionMode ?? data.SessionMode;
+            const startAtUtc = data.startAtUtc ?? data.StartAtUtc;
+            const billingStartAtUtc = data.billingStartAtUtc ?? data.BillingStartAtUtc;
+            const billingEndPreviewAtUtc = data.billingEndPreviewAtUtc ?? data.BillingEndPreviewAtUtc;
+            const billedMinutes = data.billedMinutes ?? data.BilledMinutes ?? 0;
+            const minimumChargeApplied = Boolean(data.minimumChargeApplied ?? data.MinimumChargeApplied);
+            const estimatedAmount = data.estimatedAmount ?? data.EstimatedAmount;
+            const serverNowUtc = data.serverNowUtc ?? data.ServerNowUtc;
+
+            const elTable = document.getElementById('close-summary-table');
+            const elMode = document.getElementById('close-summary-mode');
+            const elStart = document.getElementById('close-summary-start');
+            const elBillingStart = document.getElementById('close-summary-billing-start');
+            const elBillingEnd = document.getElementById('close-summary-billing-end');
+            const elBlocks = document.getElementById('close-summary-blocks');
+            const elAmount = document.getElementById('close-summary-amount');
+            const elTimestamp = document.getElementById('close-summary-timestamp');
+            const elMinNote = document.getElementById('close-summary-minimum-note');
+
+            if (elTable) elTable.textContent = tableCode;
+            if (elMode) {
+                if (sessionMode === 'Open') elMode.textContent = 'Không giới hạn';
+                else if (sessionMode === 'Timed') elMode.textContent = 'Đăng ký thời gian';
+                else elMode.textContent = sessionMode || '--';
+            }
+            if (elStart) elStart.textContent = startAtUtc ? formatVnDateTime(startAtUtc) : '--';
+            if (elBillingStart) elBillingStart.textContent = billingStartAtUtc ? formatVnDateTime(billingStartAtUtc) : '--';
+            if (elBillingEnd) elBillingEnd.textContent = billingEndPreviewAtUtc ? formatVnDateTime(billingEndPreviewAtUtc) : '--';
+            if (elBlocks) {
+                const blocksCount = Math.floor(billedMinutes / 15);
+                elBlocks.textContent = `${blocksCount} block (${billedMinutes} phút)`;
+            }
+            if (elAmount) elAmount.textContent = formatVnCurrency(estimatedAmount);
+            if (elTimestamp) {
+                elTimestamp.textContent = serverNowUtc ? `Tạm tính lúc ${formatVnTimeWithSeconds(serverNowUtc)}` : 'Tạm tính';
+            }
+            if (elMinNote) {
+                if (minimumChargeApplied) elMinNote.classList.remove('d-none');
+                else elMinNote.classList.add('d-none');
+            }
+
+            if (elLoading) elLoading.classList.add('d-none');
+            if (elError) elError.classList.add('d-none');
+            if (elContent) elContent.classList.remove('d-none');
+            if (btnConfirm) btnConfirm.disabled = isProcessing;
+
+            if (isInitial) {
+                const btnCancel = document.getElementById('btn-cancel-close');
+                if (btnCancel && typeof btnCancel.focus === 'function') {
+                    btnCancel.focus();
+                }
+            }
+        } catch {
+            if (requestId === closeSummaryRequestId) {
+                if (isInitial) {
+                    if (elLoading) elLoading.classList.add('d-none');
+                    if (elContent) elContent.classList.add('d-none');
+                    if (elError) {
+                        if (elErrorMsg) elErrorMsg.textContent = 'Không thể kết nối máy chủ.';
+                        elError.classList.remove('d-none');
+                    }
+                    if (btnConfirm) btnConfirm.disabled = true;
+                }
+            }
+        } finally {
+            if (requestId === closeSummaryRequestId) {
+                isCloseSummaryLoading = false;
+            }
+        }
+    }
+
+    // =========================================================================
     // Thao tác ĐÓNG PHIÊN (CloseSession)
     // =========================================================================
-    async function handleCloseTable() {
+    function handleCloseTable() {
         if (isProcessing) return;
         if (!currentSelectedTable.sessionId || currentSelectedTable.status !== 'InUse') return;
 
-        const targetSessionId = currentSelectedTable.sessionId;
-        const targetTableCode = currentSelectedTable.code;
+        showCloseForm();
+    }
 
-        const confirmed = window.confirm(`Bạn có chắc chắn muốn đóng phiên cho bàn ${targetTableCode}?`);
-        if (!confirmed) {
-            return;
-        }
+    async function handleConfirmCloseSession() {
+        if (isProcessing) return;
+        if (!currentSelectedTable.sessionId || currentSelectedTable.status !== 'InUse') return;
 
         const token = getVerificationToken();
         if (!token) {
             showToast('Thiếu mã xác thực bảo mật (Anti-forgery token).', 'danger');
             return;
         }
+
+        const targetSessionId = currentSelectedTable.sessionId;
+        const targetTableId = currentSelectedTable.id;
+        const targetTableCode = currentSelectedTable.code;
 
         if (pollingAbortController) {
             pollingAbortController.abort();
@@ -2048,6 +2436,8 @@
 
         isProcessing = true;
         updateButtons();
+        const btnConfirm = document.getElementById('btn-confirm-close');
+        if (btnConfirm) btnConfirm.disabled = true;
 
         try {
             const params = new URLSearchParams();
@@ -2085,18 +2475,31 @@
             const isSuccess = Boolean(result.success ?? result.Success);
             const autoReload = Boolean(result.autoReload ?? result.AutoReload);
             const serverMessage = result.message ?? result.Message;
+            const errorCode = result.errorCode ?? result.ErrorCode;
 
             if (isSuccess) {
+                hideCloseForm(false);
+
                 const data = result.data ?? result.Data;
                 const playtimeAmount = data?.playtimeAmount ?? data?.PlaytimeAmount ?? 0;
+                const billingStartUtc = data?.billingStartAtUtc ?? data?.BillingStartAtUtc;
+                const billingEndAtUtc = data?.billingEndAtUtc ?? data?.BillingEndAtUtc;
+                const billedMinutes = data?.billedMinutes ?? data?.BilledMinutes ?? 0;
+
+                const bStartStr = billingStartUtc ? formatVnTimeOnly(billingStartUtc) : '--:--';
+                const bEndStr = billingEndAtUtc ? formatVnTimeOnly(billingEndAtUtc) : '--:--';
                 const formattedAmount = formatVnCurrency(playtimeAmount);
-                const successMsg = `Đã đóng phiên bàn ${targetTableCode} thành công. Tổng tiền giờ: ${formattedAmount}`;
+
+                const successMsg = `Đã đóng bàn ${targetTableCode}. Tính giờ từ ${bStartStr} đến ${bEndStr} (${billedMinutes} phút). Tiền giờ: ${formattedAmount}`;
                 showToast(successMsg, 'success');
+
                 await reloadTableGrid();
+                await handleTableSelect(targetTableId);
             } else {
                 const errorMsg = serverMessage || 'Thao tác không thành công. Vui lòng thử lại.';
                 showToast(errorMsg, 'danger');
-                if (autoReload) {
+                if (errorCode === 51502 || errorCode === 51699 || autoReload) {
+                    hideCloseForm(false);
                     await reloadTableGrid();
                 }
             }
@@ -2105,6 +2508,11 @@
         } finally {
             isProcessing = false;
             updateButtons();
+            if (isCloseFormVisible && btnConfirm) {
+                const elContent = document.getElementById('close-summary-content');
+                const isLoaded = elContent && !elContent.classList.contains('d-none');
+                btnConfirm.disabled = !isLoaded;
+            }
         }
     }
 
@@ -2156,6 +2564,11 @@
                 }
                 if (isExtendFormVisible) {
                     hideExtendForm(true);
+                    e.preventDefault();
+                    return;
+                }
+                if (isCloseFormVisible) {
+                    hideCloseForm(true);
                     e.preventDefault();
                     return;
                 }
@@ -2280,6 +2693,28 @@
         const btnCancelExtend = document.getElementById('btn-cancel-extend');
         if (btnCancelExtend) {
             btnCancelExtend.addEventListener('click', () => hideExtendForm(true));
+        }
+
+        // ---------------------------------------------------------------------
+        // Sự kiện cho Form Đóng bàn
+        // ---------------------------------------------------------------------
+        const btnConfirmClose = document.getElementById('btn-confirm-close');
+        if (btnConfirmClose) {
+            btnConfirmClose.addEventListener('click', handleConfirmCloseSession);
+        }
+
+        const btnCancelClose = document.getElementById('btn-cancel-close');
+        if (btnCancelClose) {
+            btnCancelClose.addEventListener('click', () => hideCloseForm(true));
+        }
+
+        const btnRetryCloseSummary = document.getElementById('btn-retry-close-summary');
+        if (btnRetryCloseSummary) {
+            btnRetryCloseSummary.addEventListener('click', () => {
+                if (currentSelectedTable.sessionId) {
+                    loadCloseSummary(currentSelectedTable.sessionId, true);
+                }
+            });
         }
 
         // ---------------------------------------------------------------------

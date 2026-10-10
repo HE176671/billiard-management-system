@@ -361,12 +361,19 @@ public class TableSessionService : ITableSessionService
                 int endOrdinal = reader.GetOrdinal("EndAtUtc");
                 int rateOrdinal = reader.GetOrdinal("HourlyRateSnapshot");
                 int amountOrdinal = reader.GetOrdinal("PlaytimeAmount");
+                int billStartOrdinal = reader.GetOrdinal("BillingStartAtUtc");
+                int billEndOrdinal = reader.GetOrdinal("BillingEndAtUtc");
+                int modeOrdinal = reader.GetOrdinal("SessionMode");
 
                 int id = reader.GetInt32(idOrdinal);
                 DateTime startAtUtc = DateTime.SpecifyKind(reader.GetDateTime(startOrdinal), DateTimeKind.Utc);
                 DateTime endAtUtc = DateTime.SpecifyKind(reader.GetDateTime(endOrdinal), DateTimeKind.Utc);
                 decimal hourlyRateSnapshot = reader.GetDecimal(rateOrdinal);
                 decimal playtimeAmount = reader.GetDecimal(amountOrdinal);
+                DateTime billingStartAtUtc = DateTime.SpecifyKind(reader.GetDateTime(billStartOrdinal), DateTimeKind.Utc);
+                DateTime billingEndAtUtc = DateTime.SpecifyKind(reader.GetDateTime(billEndOrdinal), DateTimeKind.Utc);
+                string sessionMode = reader.GetString(modeOrdinal);
+                int billedMinutes = (int)(billingEndAtUtc - billingStartAtUtc).TotalMinutes;
 
                 return TableOperationResult.Ok(new
                 {
@@ -374,7 +381,11 @@ public class TableSessionService : ITableSessionService
                     PlaytimeAmount = playtimeAmount,
                     HourlyRateSnapshot = hourlyRateSnapshot,
                     StartAtUtc = startAtUtc,
-                    EndAtUtc = endAtUtc
+                    EndAtUtc = endAtUtc,
+                    BillingStartAtUtc = billingStartAtUtc,
+                    BillingEndAtUtc = billingEndAtUtc,
+                    SessionMode = sessionMode,
+                    BilledMinutes = billedMinutes
                 });
             }
 
@@ -388,6 +399,109 @@ public class TableSessionService : ITableSessionService
         {
             _logger.LogError(ex, "Lỗi không xác định khi thực hiện CloseSessionAsync cho phiên {SessionId} bởi nhân viên {StaffId}.", sessionId, staffId);
             return TableOperationResult.Fail(null, "Đã xảy ra lỗi không xác định trên hệ thống. Vui lòng thử lại sau.", autoReload: false);
+        }
+        finally
+        {
+            if (openedHere && conn.State == ConnectionState.Open)
+            {
+                await conn.CloseAsync();
+            }
+        }
+    }
+
+    public async Task<CloseSummaryViewModel?> GetCloseSummaryAsync(int sessionId)
+    {
+        if (sessionId <= 0)
+        {
+            return null;
+        }
+
+        var conn = (SqlConnection)_context.Database.GetDbConnection();
+        var openedHere = conn.State == ConnectionState.Closed;
+
+        try
+        {
+            if (openedHere)
+            {
+                await conn.OpenAsync();
+            }
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+SELECT 
+    s.Id AS SessionId,
+    t.TableCode,
+    s.SessionMode,
+    s.StartAtUtc,
+    s.BillingStartAtUtc,
+    CAST(SYSUTCDATETIME() AS datetime2(0)) AS ServerNowUtc,
+    dbo.fn_CeilTo15Min(CAST(SYSUTCDATETIME() AS datetime2(0))) AS CeilNowUtc,
+    dbo.fn_CalcPlaytimeAmount(s.Id, CAST(SYSUTCDATETIME() AS datetime2(0))) AS EstimatedAmount
+FROM dbo.PlaySessions s
+JOIN dbo.BilliardTables t ON t.Id = s.TableId
+WHERE s.Id = @SessionId AND s.Status = 'Active';";
+            cmd.CommandType = CommandType.Text;
+            cmd.Parameters.Add(new SqlParameter("@SessionId", SqlDbType.Int) { Value = sessionId });
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                int sessionIdOrdinal = reader.GetOrdinal("SessionId");
+                int tableCodeOrdinal = reader.GetOrdinal("TableCode");
+                int sessionModeOrdinal = reader.GetOrdinal("SessionMode");
+                int startOrdinal = reader.GetOrdinal("StartAtUtc");
+                int billStartOrdinal = reader.GetOrdinal("BillingStartAtUtc");
+                int serverNowOrdinal = reader.GetOrdinal("ServerNowUtc");
+                int ceilNowOrdinal = reader.GetOrdinal("CeilNowUtc");
+                int estAmountOrdinal = reader.GetOrdinal("EstimatedAmount");
+
+                int resultSessionId = reader.GetInt32(sessionIdOrdinal);
+                string tableCode = reader.GetString(tableCodeOrdinal);
+                string sessionMode = reader.GetString(sessionModeOrdinal);
+                DateTime startAtUtc = DateTime.SpecifyKind(reader.GetDateTime(startOrdinal), DateTimeKind.Utc);
+                DateTime billingStartAtUtc = DateTime.SpecifyKind(reader.GetDateTime(billStartOrdinal), DateTimeKind.Utc);
+                DateTime serverNowUtc = DateTime.SpecifyKind(reader.GetDateTime(serverNowOrdinal), DateTimeKind.Utc);
+                DateTime ceilNowUtc = DateTime.SpecifyKind(reader.GetDateTime(ceilNowOrdinal), DateTimeKind.Utc);
+                decimal? estimatedAmount = reader.IsDBNull(estAmountOrdinal) ? null : reader.GetDecimal(estAmountOrdinal);
+
+                DateTime billingEndPreviewUtc;
+                int billedMinutes;
+                bool minimumChargeApplied;
+
+                if (ceilNowUtc > billingStartAtUtc)
+                {
+                    billingEndPreviewUtc = ceilNowUtc;
+                    billedMinutes = (int)(ceilNowUtc - billingStartAtUtc).TotalMinutes;
+                    minimumChargeApplied = false;
+                }
+                else
+                {
+                    billingEndPreviewUtc = billingStartAtUtc.AddMinutes(15);
+                    billedMinutes = 15;
+                    minimumChargeApplied = true;
+                }
+
+                return new CloseSummaryViewModel
+                {
+                    SessionId = resultSessionId,
+                    TableCode = tableCode,
+                    SessionMode = sessionMode,
+                    StartAtUtc = startAtUtc,
+                    BillingStartAtUtc = billingStartAtUtc,
+                    ServerNowUtc = serverNowUtc,
+                    BillingEndPreviewAtUtc = billingEndPreviewUtc,
+                    BilledMinutes = billedMinutes,
+                    MinimumChargeApplied = minimumChargeApplied,
+                    EstimatedAmount = estimatedAmount
+                };
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi lấy tóm tắt đóng phiên GetCloseSummaryAsync cho phiên {SessionId}.", sessionId);
+            return null;
         }
         finally
         {
@@ -466,6 +580,13 @@ public class TableSessionService : ITableSessionService
 
     private TableOperationResult HandleSqlException(SqlException ex, string operationName, int targetId)
     {
+        if (ex.Number == 51699)
+        {
+            _logger.LogError(ex, "Lỗi toàn vẹn dữ liệu phiên chơi ({SqlErrorNumber}) khi thực thi {Operation} (TargetId: {TargetId}).",
+                ex.Number, operationName, targetId);
+            return TableOperationResult.Fail(ex.Number, MapErrorCode(ex.Number), autoReload: true);
+        }
+
         if (IsKnownDomainError(ex.Number))
         {
             var message = MapErrorCode(ex.Number);
@@ -486,13 +607,13 @@ public class TableSessionService : ITableSessionService
 
     private static bool IsKnownDomainError(int errorNumber) => errorNumber switch
     {
-        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51409 or 51410 or 51501 or 51502 or 51601 or 51602 or 51603 => true,
+        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51409 or 51410 or 51501 or 51502 or 51601 or 51602 or 51603 or 51699 => true,
         _ => false
     };
 
     private static bool IsAutoReloadError(int errorNumber) => errorNumber switch
     {
-        51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51502 or 51602 => true,
+        51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51502 or 51602 or 51699 => true,
         _ => false
     };
 
@@ -513,6 +634,7 @@ public class TableSessionService : ITableSessionService
         51601 => "Thao tác gia hạn yêu cầu tài khoản Nhân viên hoặc Quản trị viên đang hoạt động.",
         51602 => "Chỉ gia hạn được phiên đăng ký thời gian đang chơi (có thể phiên đã được đóng hoặc không phải loại đăng ký thời gian).",
         51603 => "Thời gian gia hạn không hợp lệ: phải là bội số của 15 phút, từ 15 đến 240 phút.",
+        51699 => "Dữ liệu phiên chơi không nhất quán (không có đoạn bàn đang mở). Vui lòng báo quản trị viên.",
         _ => "Đã xảy ra lỗi khi kết nối hoặc xử lý cơ sở dữ liệu. Vui lòng thử lại sau."
     };
 }

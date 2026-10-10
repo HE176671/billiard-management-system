@@ -95,8 +95,8 @@
                     <span class="detail-key">Còn lại:</span>
                     <span class="detail-val duration-val" id="detail-remaining">--</span>
                 </div>
-                <div class="detail-data-row d-none" id="detail-playtime-row">
-                    <span class="detail-key">Tiền giờ:</span>
+                <div class="detail-data-row" id="detail-playtime-row">
+                    <span class="detail-key" id="detail-playtime-label">Tạm tính:</span>
                     <span class="detail-val" id="detail-playtime-amount">--</span>
                 </div>
             </div>
@@ -185,6 +185,71 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Khung 4c: Form Đóng bàn (mặc định d-none, hiện khi bấm CLOSE TABLE) -->
+            <div class="panel-card-box close-session-form d-none" id="close-session-form">
+                <div class="form-section-title mb-2 fw-bold">Xác nhận đóng bàn</div>
+
+                <div id="close-summary-loading" class="text-muted small py-2 d-none">
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    Đang tải tóm tắt...
+                </div>
+
+                <div id="close-summary-error" class="alert alert-danger p-2 small mb-2 d-none">
+                    <div id="close-summary-error-msg" class="mb-1">Không thể tải tóm tắt đóng bàn.</div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="btn-retry-close-summary">Thử lại</button>
+                </div>
+
+                <div id="close-summary-content" class="close-summary-body d-none">
+                    <div class="summary-data-row">
+                        <span class="summary-key">Bàn:</span>
+                        <span class="summary-val fw-bold" id="close-summary-table">--</span>
+                    </div>
+                    <div class="summary-data-row">
+                        <span class="summary-key">Hình thức:</span>
+                        <span class="summary-val" id="close-summary-mode">--</span>
+                    </div>
+                    <div class="summary-data-row">
+                        <span class="summary-key">Giờ mở:</span>
+                        <span class="summary-val" id="close-summary-start">--</span>
+                    </div>
+                    <div class="summary-data-row">
+                        <span class="summary-key">Tính giờ từ:</span>
+                        <span class="summary-val" id="close-summary-billing-start">--</span>
+                    </div>
+                    <div class="summary-data-row">
+                        <span class="summary-key">Tính đến (dự kiến):</span>
+                        <span class="summary-val" id="close-summary-billing-end">--</span>
+                    </div>
+                    <div class="summary-data-row">
+                        <span class="summary-key">Thời gian tính tiền:</span>
+                        <span class="summary-val" id="close-summary-blocks">--</span>
+                    </div>
+                    <div class="summary-data-row summary-amount-row py-1">
+                        <span class="summary-key fw-bold">Tiền tạm tính:</span>
+                        <span class="summary-val fw-bold text-success fs-6" id="close-summary-amount">--</span>
+                    </div>
+                    <div class="small text-muted text-end mb-1" id="close-summary-timestamp">
+                        Tạm tính lúc --:--:--
+                    </div>
+                    <div class="small text-warning-emphasis mb-2 d-none" id="close-summary-minimum-note">
+                        <i class="bi bi-info-circle me-1"></i>Áp dụng mức tối thiểu 1 block (15 phút)
+                    </div>
+                    <div class="small text-muted fst-italic mb-3" style="font-size: 0.75rem;">
+                        * Số tiền cuối cùng do hệ thống chốt khi xác nhận, có thể khác nếu qua mốc 15 phút.
+                    </div>
+                </div>
+
+                <div class="action-btn-row">
+                    <button type="button" class="btn btn-danger-bms btn-action-main" id="btn-confirm-close" disabled>
+                        Xác nhận đóng bàn
+                    </button>
+                    <button type="button" class="btn btn-wireframe btn-action-main" id="btn-cancel-close">
+                        Hủy
+                    </button>
+                </div>
+            </div>
+
 
             <!-- Khung 5: Các nút hành động theo wireframe -->
             <div class="panel-card-box action-buttons-container" id="action-buttons-box">

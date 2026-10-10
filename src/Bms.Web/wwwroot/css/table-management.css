@@ -777,3 +777,60 @@ button:disabled {
     color: #ffffff;
     border-color: var(--bg-dark);
 }
+
+/* ==========================================================================
+   Form Đóng bàn (Close Session Form)
+   ========================================================================== */
+.close-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.close-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.close-summary-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    background-color: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.75rem 0.85rem;
+}
+
+.summary-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.875rem;
+    padding: 0.15rem 0;
+}
+
+.summary-key {
+    color: var(--text-muted);
+}
+
+.summary-val {
+    color: var(--text-main);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.summary-amount-row {
+    border-top: 1px dashed var(--border-color);
+    border-bottom: 1px dashed var(--border-color);
+    margin-top: 0.35rem;
+    margin-bottom: 0.25rem;
+}
+
+.summary-amount-row .summary-val {
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+

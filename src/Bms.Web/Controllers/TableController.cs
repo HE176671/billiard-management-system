@@ -51,6 +51,25 @@ public class TableController : Controller
         return Json(detail);
     }
 
+    // GET: /Table/GetCloseSummary?sessionId=1
+    [HttpGet]
+    public async Task<IActionResult> GetCloseSummary([FromQuery] int sessionId)
+    {
+        if (sessionId <= 0 || !ModelState.IsValid)
+        {
+            return Json(TableOperationResult.Fail(null, "Dữ liệu gửi lên không hợp lệ.", false));
+        }
+
+        var summary = await _tableSessionService.GetCloseSummaryAsync(sessionId);
+        if (summary == null)
+        {
+            return Json(TableOperationResult.Fail(51502, "Phiên chơi không còn ở trạng thái Hoạt động (có thể đã được nhân viên khác đóng).", true));
+        }
+
+        return Json(TableOperationResult.Ok(summary));
+    }
+
+
     // POST: /Table/OpenSession
     [HttpPost]
     [ValidateAntiForgeryToken]
