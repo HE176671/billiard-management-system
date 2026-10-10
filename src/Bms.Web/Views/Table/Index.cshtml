@@ -19,6 +19,19 @@
         <div class="section-box-header">
             <h2 class="section-box-title">Sơ đồ bàn</h2>
         </div>
+
+        <!-- Dải chú giải trạng thái tĩnh đồng bộ biến CSS -->
+        <div class="status-legend-bar" aria-label="Chú giải trạng thái">
+            <span class="legend-item"><span class="legend-dot status-dot-available"></span>Trống</span>
+            <span class="legend-item"><span class="legend-dot status-dot-pending"></span>Chờ tính giờ</span>
+            <span class="legend-item"><span class="legend-dot status-dot-inuse"></span>Đang chơi</span>
+            <span class="legend-item"><span class="legend-dot status-dot-warning"></span>Sắp hết giờ</span>
+            <span class="legend-item"><span class="legend-dot status-dot-overdue"></span>Hết giờ</span>
+            <span class="legend-item"><span class="legend-dot status-dot-awaitingpayment"></span>Chờ thanh toán</span>
+            <span class="legend-item"><span class="legend-dot status-dot-maintenance"></span>Bảo trì</span>
+            <span class="legend-item"><span class="legend-dot status-dot-inactive"></span>Ngừng hoạt động</span>
+        </div>
+
         <div id="table-grid-container" class="table-grid-container">
             <partial name="_TableGridPartial" model="Model.Tables" />
         </div>
@@ -34,8 +47,9 @@
                 </button>
             </div>
 
-            <!-- Khung 1: Thông tin bàn & Trạng thái -->
+            <!-- Nhóm (a): Thông tin bàn -->
             <div class="panel-card-box">
+                <div class="panel-group-title">Thông tin bàn</div>
                 <div class="detail-data-row">
                     <span class="detail-key">Table Name:</span>
                     <span class="detail-val" id="detail-table-name">--</span>
@@ -46,8 +60,61 @@
                 </div>
             </div>
 
-            <!-- Khung 2: Khách hàng & Thông tin đặt bàn -->
+            <!-- Nhóm (b): Thời gian chơi -->
             <div class="panel-card-box">
+                <div class="panel-group-title">Thời gian chơi</div>
+                <div class="detail-data-row" id="detail-session-mode-row">
+                    <span class="detail-key">Hình thức:</span>
+                    <span class="detail-val" id="detail-session-mode">--</span>
+                </div>
+                <div class="detail-data-row" id="detail-start-time-row">
+                    <span class="detail-key">Start Time:</span>
+                    <span class="detail-val" id="detail-start-time">--</span>
+                </div>
+                <div class="detail-data-row" id="detail-billing-start-row">
+                    <span class="detail-key">Tính giờ từ:</span>
+                    <span class="detail-val" id="detail-billing-start">--</span>
+                </div>
+                <div class="detail-data-row d-none" id="detail-planned-end-row">
+                    <span class="detail-key">Dự kiến kết thúc:</span>
+                    <span class="detail-val" id="detail-planned-end">--</span>
+                </div>
+                <div class="detail-data-row d-none" id="detail-end-time-row">
+                    <span class="detail-key">End Time:</span>
+                    <span class="detail-val" id="detail-end-time">--</span>
+                </div>
+                <div class="detail-data-row" id="detail-duration-row">
+                    <span class="detail-key">Duration:</span>
+                    <span class="detail-val duration-val" id="detail-duration">--</span>
+                </div>
+                <div class="detail-data-row d-none" id="detail-remaining-row">
+                    <span class="detail-key">Còn lại:</span>
+                    <span class="detail-val duration-val" id="detail-remaining">--</span>
+                </div>
+            </div>
+
+            <!-- Nhóm (c): Chi phí (ẩn khi không có phiên và không có tiền) -->
+            <div class="panel-card-box d-none" id="detail-pricing-box">
+                <div class="panel-group-title">Chi phí</div>
+                <div class="detail-data-row" id="detail-playtime-row">
+                    <span class="detail-key" id="detail-playtime-label">Tạm tính:</span>
+                    <span class="detail-val" id="detail-playtime-amount">--</span>
+                </div>
+            </div>
+
+            <!-- Nhóm (d): Lịch sử bàn (mặc định d-none, hiện khi có từ 2 đoạn trở lên) -->
+            <div class="panel-card-box d-none" id="detail-segments-box">
+                <div class="panel-group-title d-flex justify-content-between align-items-baseline mb-2">
+                    <span>Lịch sử bàn</span>
+                    <span class="small text-muted fw-normal" style="font-size: 0.75rem;">Giờ thực tế. Tiền tính theo mốc 15 phút.</span>
+                </div>
+                <div class="detail-segments-list" id="detail-segments-list">
+                </div>
+            </div>
+
+            <!-- Nhóm (e): Khách hàng & Đặt bàn -->
+            <div class="panel-card-box">
+                <div class="panel-group-title">Khách hàng & Đặt bàn</div>
                 <div class="detail-data-row">
                     <span class="detail-key">Customer:</span>
                     <span class="detail-val" id="detail-customer">--</span>
@@ -65,53 +132,7 @@
                 </div>
             </div>
 
-            <!-- Khung 3: Thời gian chơi -->
-            <div class="panel-card-box">
-                <div class="detail-data-row">
-                    <span class="detail-key">Hình thức:</span>
-                    <span class="detail-val" id="detail-session-mode">--</span>
-                </div>
-                <div class="detail-data-row">
-                    <span class="detail-key">Start Time:</span>
-                    <span class="detail-val" id="detail-start-time">--</span>
-                </div>
-                <div class="detail-data-row">
-                    <span class="detail-key">End Time:</span>
-                    <span class="detail-val" id="detail-end-time">--</span>
-                </div>
-                <div class="detail-data-row">
-                    <span class="detail-key">Tính giờ từ:</span>
-                    <span class="detail-val" id="detail-billing-start">--</span>
-                </div>
-                <div class="detail-data-row">
-                    <span class="detail-key">Dự kiến kết thúc:</span>
-                    <span class="detail-val" id="detail-planned-end">--</span>
-                </div>
-                <div class="detail-data-row">
-                    <span class="detail-key">Duration:</span>
-                    <span class="detail-val duration-val" id="detail-duration">--</span>
-                </div>
-                <div class="detail-data-row" id="detail-remaining-row">
-                    <span class="detail-key">Còn lại:</span>
-                    <span class="detail-val duration-val" id="detail-remaining">--</span>
-                </div>
-                <div class="detail-data-row" id="detail-playtime-row">
-                    <span class="detail-key" id="detail-playtime-label">Tạm tính:</span>
-                    <span class="detail-val" id="detail-playtime-amount">--</span>
-                </div>
-            </div>
-
-            <!-- Khung 3b: Lịch sử bàn (mặc định d-none, hiện khi có từ 2 đoạn trở lên) -->
-            <div class="panel-card-box d-none" id="detail-segments-box">
-                <div class="form-section-title mb-2 fw-bold d-flex justify-content-between align-items-baseline">
-                    <span>Lịch sử bàn</span>
-                    <span class="small text-muted fw-normal" style="font-size: 0.75rem;">Giờ thực tế. Tiền tính theo mốc 15 phút.</span>
-                </div>
-                <div class="detail-segments-list" id="detail-segments-list">
-                </div>
-            </div>
-
-            <!-- Khung 4: Form Mở bàn (mặc định d-none, hiện khi bấm OPEN TABLE) -->
+            <!-- Form Mở bàn (mặc định d-none, hiện khi bấm OPEN TABLE) -->
             <div class="panel-card-box open-session-form d-none" id="open-session-form">
                 <div class="form-section-title mb-2 fw-bold">Mở bàn mới</div>
                 <div class="mb-3">
@@ -160,7 +181,7 @@
                 </div>
             </div>
 
-            <!-- Khung 4b: Form Gia hạn phiên (mặc định d-none, hiện khi bấm GIA HẠN) -->
+            <!-- Form Gia hạn phiên (mặc định d-none, hiện khi bấm GIA HẠN) -->
             <div class="panel-card-box extend-session-form d-none" id="extend-session-form">
                 <div class="form-section-title mb-2 fw-bold">Gia hạn phiên chơi</div>
                 <div class="mb-3">
@@ -196,7 +217,7 @@
                 </div>
             </div>
 
-            <!-- Khung 4c: Form Đóng bàn (mặc định d-none, hiện khi bấm CLOSE TABLE) -->
+            <!-- Form Đóng bàn (mặc định d-none, hiện khi bấm CLOSE TABLE) -->
             <div class="panel-card-box close-session-form d-none" id="close-session-form">
                 <div class="form-section-title mb-2 fw-bold">Xác nhận đóng bàn</div>
 
@@ -263,7 +284,7 @@
                 </div>
             </div>
 
-            <!-- Khung 4d: Form Chuyển bàn (mặc định d-none, hiện khi bấm CHUYỂN BÀN) -->
+            <!-- Form Chuyển bàn (mặc định d-none, hiện khi bấm CHUYỂN BÀN) -->
             <div class="panel-card-box transfer-session-form d-none" id="transfer-session-form">
                 <div class="form-section-title mb-2 fw-bold">Chuyển bàn</div>
 
@@ -304,28 +325,21 @@
                 </div>
             </div>
 
-            <!-- Khung 5: Các nút hành động theo wireframe -->
+            <!-- Khối nút hành động: bố cục lưới 2x2 đều nhau -->
             <div class="panel-card-box action-buttons-container" id="action-buttons-box">
-                <div class="action-btn-row">
+                <div class="action-buttons-grid">
                     <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-open-table" disabled>
                         OPEN TABLE
-                    </button>
-                    <button type="button" class="btn btn-warning-bms btn-action-main" id="btn-extend-table" disabled>
-                        GIA HẠN
                     </button>
                     <button type="button" class="btn btn-danger-bms btn-action-main" id="btn-close-table" disabled>
                         CLOSE TABLE
                     </button>
-                </div>
-                <div class="action-btn-row">
-                    <span class="tooltip-wrapper flex-fill" id="wrapper-btn-transfer" title="Chưa hỗ trợ" data-bs-toggle="tooltip">
-                        <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe" id="btn-transfer" disabled>
+                    <button type="button" class="btn btn-warning-bms btn-action-main" id="btn-extend-table" disabled>
+                        GIA HẠN
+                    </button>
+                    <span class="tooltip-wrapper d-block" id="wrapper-btn-transfer" title="Chưa hỗ trợ" data-bs-toggle="tooltip">
+                        <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe h-100" id="btn-transfer" disabled>
                             CHUYỂN BÀN
-                        </button>
-                    </span>
-                    <span class="tooltip-wrapper flex-fill" title="Chưa hỗ trợ" data-bs-toggle="tooltip">
-                        <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe" id="btn-split-merge" disabled>
-                            SPLIT/MERGE
                         </button>
                     </span>
                 </div>

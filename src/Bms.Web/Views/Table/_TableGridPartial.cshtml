@@ -72,8 +72,17 @@
                  @if (!string.IsNullOrEmpty(table.SessionMode)) { <text>data-session-mode="@table.SessionMode"</text> }
                  @if (!string.IsNullOrEmpty(plannedEndIso)) { <text>data-planned-end="@plannedEndIso"</text> }>
                 <div class="table-card-top">
-                    <span class="table-code">@table.TableCode</span>
-                    <span class="table-type">@table.TableTypeName</span>
+                    <span class="table-code" title="@table.TableCode">@table.TableCode</span>
+                    <div class="table-top-meta">
+                        @if (table.Status == "InUse" && !string.IsNullOrEmpty(table.SessionMode))
+                        {
+                            var isTimedMode = string.Equals(table.SessionMode, "Timed", StringComparison.OrdinalIgnoreCase);
+                            <span class="table-mode-badge" title="Hình thức chơi: @(isTimedMode ? "Đăng ký thời gian" : "Không giới hạn")">
+                                @(isTimedMode ? "Đăng ký" : "Không giới hạn")
+                            </span>
+                        }
+                        <span class="table-type" title="@table.TableTypeName">@table.TableTypeName</span>
+                    </div>
                 </div>
                 <div class="table-card-info">
                     <div class="table-info-row">
@@ -84,13 +93,10 @@
                         <span class="info-label">Giờ:</span>
                         <span class="info-value table-clock" id="clock-@table.Id"></span>
                     </div>
-                    @if (!string.IsNullOrEmpty(plannedEndIso))
-                    {
-                        <div class="table-info-row table-remaining-row">
-                            <span class="info-label remaining-label">Còn lại:</span>
-                            <span class="info-value table-remaining" id="remaining-@table.Id"></span>
-                        </div>
-                    }
+                    <div class="table-info-row table-remaining-row @(string.IsNullOrEmpty(plannedEndIso) ? "table-remaining-placeholder" : "")">
+                        <span class="info-label remaining-label">Còn lại:</span>
+                        <span class="info-value table-remaining" id="remaining-@table.Id"></span>
+                    </div>
                 </div>
             </div>
         }

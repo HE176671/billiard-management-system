@@ -436,11 +436,9 @@
         const btnConfirmBooking = document.getElementById('btn-confirm-booking');
         const btnTransfer = document.getElementById('btn-transfer');
         const wrapperTransfer = document.getElementById('wrapper-btn-transfer');
-        const btnSplitMerge = document.getElementById('btn-split-merge');
 
         // Các nút wireframe chưa có logic: luôn vô hiệu hóa
         if (btnConfirmBooking) btnConfirmBooking.disabled = true;
-        if (btnSplitMerge) btnSplitMerge.disabled = true;
 
         // Nếu bất kỳ form inline nào đang hiện thì vô hiệu hóa OPEN, EXTEND, CLOSE và TRANSFER
         if (isOpenFormVisible || isExtendFormVisible || isCloseFormVisible || isTransferFormVisible) {
@@ -909,7 +907,7 @@
             if (!panel || panel.classList.contains('d-none')) return;
             if (currentSelectedTable.id !== tableId || currentSelectedTable.status !== 'InUse') return;
 
-            const elPlaytimeRow = document.getElementById('detail-playtime-row');
+            const boxPricing = document.getElementById('detail-pricing-box');
             const elPlaytimeLabel = document.getElementById('detail-playtime-label');
             const elPlaytimeAmount = document.getElementById('detail-playtime-amount');
             const estAmount = detail.estimatedAmount ?? detail.EstimatedAmount;
@@ -924,7 +922,7 @@
                     elPlaytimeAmount.textContent = '--';
                 }
             }
-            if (elPlaytimeRow) elPlaytimeRow.classList.remove('d-none');
+            if (boxPricing) boxPricing.classList.remove('d-none');
         } catch {
             // Làm mới nền không gây toast lỗi làm phiền người dùng
         } finally {
@@ -1014,6 +1012,28 @@
             elPlannedEnd.textContent = plannedEndUtc ? formatVnDateTime(plannedEndUtc) : '--';
         }
 
+        // Ẩn/hiện dòng có điều kiện dựa trên dữ liệu & mã trạng thái
+        const isTimed = (sessionMode && sessionMode.trim().toLowerCase() === 'timed');
+        const hasPlannedEnd = isTimed && Boolean(plannedEndUtc);
+        const rowPlannedEnd = document.getElementById('detail-planned-end-row');
+        if (rowPlannedEnd) {
+            if (hasPlannedEnd) rowPlannedEnd.classList.remove('d-none');
+            else rowPlannedEnd.classList.add('d-none');
+        }
+
+        const hasEndTime = Boolean(endUtc) || currentSelectedTable.status === 'AwaitingPayment';
+        const rowEndTime = document.getElementById('detail-end-time-row');
+        if (rowEndTime) {
+            if (hasEndTime) rowEndTime.classList.remove('d-none');
+            else rowEndTime.classList.add('d-none');
+        }
+
+        const rowRemaining = document.getElementById('detail-remaining-row');
+        if (rowRemaining) {
+            if (hasPlannedEnd && !endUtc) rowRemaining.classList.remove('d-none');
+            else rowRemaining.classList.add('d-none');
+        }
+
         // Cập nhật Status & Duration & Remaining theo thời gian thực
         const nowServerMs = Date.now() - deltaOffset;
 
@@ -1078,8 +1098,7 @@
         }
 
         if (elRemaining) {
-            const isTimed = (sessionMode && sessionMode.trim().toLowerCase() === 'timed');
-            if (isTimed && plannedEndUtc && !endUtc) {
+            if (hasPlannedEnd && !endUtc) {
                 if (!billingStartUtc) {
                     elRemaining.textContent = '--';
                 } else {
@@ -1093,7 +1112,8 @@
             }
         }
 
-        const elPlaytimeRow = document.getElementById('detail-playtime-row');
+        // Khối Tiền (#detail-pricing-box)
+        const boxPricing = document.getElementById('detail-pricing-box');
         const elPlaytimeLabel = document.getElementById('detail-playtime-label');
         const elPlaytimeAmount = document.getElementById('detail-playtime-amount');
         const playtimeAmount = detail.playtimeAmount ?? detail.PlaytimeAmount;
@@ -1110,7 +1130,7 @@
                     elPlaytimeAmount.textContent = '--';
                 }
             }
-            if (elPlaytimeRow) elPlaytimeRow.classList.remove('d-none');
+            if (boxPricing) boxPricing.classList.remove('d-none');
         } else if (currentSelectedTable.status === 'AwaitingPayment') {
             if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tiền giờ (đã chốt):';
             if (elPlaytimeAmount) {
@@ -1118,10 +1138,10 @@
                     ? formatVnCurrency(playtimeAmount)
                     : '--';
             }
-            if (elPlaytimeRow) elPlaytimeRow.classList.remove('d-none');
+            if (boxPricing) boxPricing.classList.remove('d-none');
         } else {
+            if (boxPricing) boxPricing.classList.add('d-none');
             if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
-            if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
             if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
         }
 
@@ -1226,11 +1246,21 @@
         if (elDuration) elDuration.textContent = '--';
         if (elRemaining) elRemaining.textContent = '--';
 
-        const elPlaytimeRow = document.getElementById('detail-playtime-row');
+        const rowPlannedEnd = document.getElementById('detail-planned-end-row');
+        if (rowPlannedEnd) rowPlannedEnd.classList.add('d-none');
+
+        const rowEndTime = document.getElementById('detail-end-time-row');
+        if (rowEndTime) rowEndTime.classList.add('d-none');
+
+        const rowRemaining = document.getElementById('detail-remaining-row');
+        if (rowRemaining) rowRemaining.classList.add('d-none');
+
+        const boxPricing = document.getElementById('detail-pricing-box');
+        if (boxPricing) boxPricing.classList.add('d-none');
+
         const elPlaytimeLabel = document.getElementById('detail-playtime-label');
         const elPlaytimeAmount = document.getElementById('detail-playtime-amount');
         if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
-        if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
         if (elPlaytimeAmount) elPlaytimeAmount.textContent = '--';
 
         renderTableSegments([]);
@@ -1382,8 +1412,17 @@
         if (elDuration) elDuration.textContent = 'Đang tải...';
         if (elRemaining) elRemaining.textContent = 'Đang tải...';
 
-        const elPlaytimeRow = document.getElementById('detail-playtime-row');
-        if (elPlaytimeRow) elPlaytimeRow.classList.add('d-none');
+        const rowPlannedEnd = document.getElementById('detail-planned-end-row');
+        if (rowPlannedEnd) rowPlannedEnd.classList.add('d-none');
+
+        const rowEndTime = document.getElementById('detail-end-time-row');
+        if (rowEndTime) rowEndTime.classList.add('d-none');
+
+        const rowRemaining = document.getElementById('detail-remaining-row');
+        if (rowRemaining) rowRemaining.classList.add('d-none');
+
+        const boxPricing = document.getElementById('detail-pricing-box');
+        if (boxPricing) boxPricing.classList.add('d-none');
 
         // Vô hiệu hóa các nút hành động trong lúc đang tải
         updateButtons();
