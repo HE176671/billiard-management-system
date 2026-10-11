@@ -1,4 +1,5 @@
 using Bms.Web.Data;
+using Bms.Web.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,6 +33,9 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.LoginPath = "/Account/Login";
     options.AccessDeniedPath = "/Account/AccessDenied";
 });
+
+// Đăng ký Services cho Module F&B, Menu, Kho hàng & Combo (UC41 & UC42)
+builder.Services.AddScoped<IMenuService, MenuService>();
 
 var app = builder.Build();
 

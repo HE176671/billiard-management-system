@@ -1,0 +1,71 @@
+@model Bms.Web.Models.CreateProductViewModel
+@{
+    ViewData["Title"] = "Thêm món F&B mới";
+    Layout = "_AdminLayout";
+}
+
+<div class="d-flex align-items-center gap-2 mb-4">
+    <a asp-action="Index" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <h5 class="mb-0">Thêm món F&B mới</h5>
+</div>
+
+<div class="form-card">
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+
+        @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey(string.Empty))
+        {
+            <div class="alert alert-danger rounded-3 mb-3" style="font-size:0.875rem">
+                @foreach (var err in ViewData.ModelState[string.Empty]!.Errors)
+                {
+                    <div><i class="bi bi-exclamation-circle me-1"></i>@err.ErrorMessage</div>
+                }
+            </div>
+        }
+
+        <div class="row g-3">
+            <div class="col-12">
+                <label asp-for="Name" class="form-label">Tên sản phẩm F&B <span class="text-danger">*</span></label>
+                <input asp-for="Name" class="form-control" maxlength="100" placeholder="VD: Bò Húc, Trà đào cam sả, Mì xào bò..." />
+                <div class="form-text">Tên món là duy nhất trên toàn hệ thống (tối đa 100 ký tự).</div>
+                <span asp-validation-for="Name" class="field-error"></span>
+            </div>
+
+            <div class="col-md-6">
+                <label asp-for="CategoryId" class="form-label">Danh mục <span class="text-danger">*</span></label>
+                <select asp-for="CategoryId" class="form-select">
+                    @foreach (var cat in Model.AvailableCategories)
+                    {
+                        <option value="@cat.Id">@cat.Name</option>
+                    }
+                </select>
+                <span asp-validation-for="CategoryId" class="field-error"></span>
+            </div>
+
+            <div class="col-md-6">
+                <label asp-for="Price" class="form-label">Đơn giá bán (VNĐ) <span class="text-danger">*</span></label>
+                <input asp-for="Price" type="number" step="500" min="1" class="form-control" placeholder="25000" />
+                <div class="form-text">Đơn giá phải lớn hơn 0 VNĐ.</div>
+                <span asp-validation-for="Price" class="field-error"></span>
+            </div>
+
+            <div class="col-md-6">
+                <label asp-for="StockQuantity" class="form-label">Số lượng tồn kho ban đầu <span class="text-danger">*</span></label>
+                <input asp-for="StockQuantity" type="number" step="1" min="0" class="form-control" placeholder="0" />
+                <div class="form-text">Tồn kho ban đầu phải lớn hơn hoặc bằng 0.</div>
+                <span asp-validation-for="StockQuantity" class="field-error"></span>
+            </div>
+
+            <div class="col-12 d-flex gap-2 pt-2">
+                <button type="submit" class="btn-primary-bms">
+                    <i class="bi bi-plus-circle"></i> Lưu vào thực đơn
+                </button>
+                <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

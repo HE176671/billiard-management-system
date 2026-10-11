@@ -1,0 +1,36 @@
+sequenceDiagram
+    actor Staff as Nhân viên (Staff)
+    participant UI as Giao diện Gọi món (POS)
+    participant Ctrl as OrderController / Api
+    participant Svc as OrderService
+    participant DB as SQL Server (BilliardDB)
+
+    Staff->>UI: Chọn bàn đang chơi (SessionId) & Danh sách món
+    UI->>Ctrl: POST /api/v1/sessions/{id}/orders (items)
+    Ctrl->>Svc: PlaceOrderAsync(sessionId, items)
+    
+    activate Svc
+    Svc->>DB: Kiểm tra PlaySessions.Status == 'Active'
+    alt Phiên đã đóng ('Closed')
+        DB-->>Svc: Status != 'Active'
+        Svc-->>Ctrl: ServiceResult.Failure("ERR_SESSION_NOT_ACTIVE")
+        Ctrl-->>UI: 400 Bad Request: "Phiên chơi đã kết thúc"
+    else Phiên đang Active
+        Svc->>DB: BEGIN TRANSACTION (Serializable)
+        loop Duyệt từng món đặt
+            Svc->>DB: SELECT StockQuantity, RowVersion FROM Products WITH (UPDLOCK) WHERE Id = @id
+            alt Quantity > StockQuantity (Thiếu hàng)
+                Svc->>DB: ROLLBACK TRANSACTION
+                Svc-->>Ctrl: ServiceResult.Failure("ERR_INSUFFICIENT_STOCK", "Không đủ tồn kho")
+                Ctrl-->>UI: 400 Bad Request: Báo tên món & số lượng còn lại
+            else Đủ tồn kho
+                Svc->>DB: UPDATE Products SET StockQuantity = StockQuantity - @qty WHERE Id = @id
+            end
+        end
+        Svc->>DB: INSERT INTO Orders (SessionId, Status='Pending', OrderTimeUtc=NOW)
+        Svc->>DB: INSERT INTO OrderDetails (OrderId, ProductId, Quantity, UnitPrice)
+        Svc->>DB: COMMIT TRANSACTION
+        Svc-->>Ctrl: ServiceResult.Success(OrderDto)
+        Ctrl-->>UI: 201 Created: Đơn hàng thành công, hiển thị món đã đặt
+    end
+    deactivate Svc

@@ -1,0 +1,86 @@
+@model Bms.Web.Models.EditProductViewModel
+@{
+    ViewData["Title"] = "Cập nhật món F&B";
+    Layout = "_AdminLayout";
+}
+
+<div class="d-flex align-items-center gap-2 mb-4">
+    <a asp-action="Index" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <h5 class="mb-0">Cập nhật sản phẩm #@Model.Id — @Model.Name</h5>
+</div>
+
+<div class="form-card">
+    <form asp-action="Edit" asp-route-id="@Model.Id" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="RowVersionBase64" />
+        <input type="hidden" asp-for="CurrentStockQuantity" />
+        <input type="hidden" asp-for="IsActive" />
+
+        @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey(string.Empty))
+        {
+            <div class="alert alert-danger rounded-3 mb-3" style="font-size:0.875rem">
+                @foreach (var err in ViewData.ModelState[string.Empty]!.Errors)
+                {
+                    <div><i class="bi bi-exclamation-circle me-1"></i>@err.ErrorMessage</div>
+                }
+            </div>
+        }
+
+        <div class="row g-3">
+            <div class="col-12">
+                <label asp-for="Name" class="form-label">Tên sản phẩm F&B <span class="text-danger">*</span></label>
+                <input asp-for="Name" class="form-control" maxlength="100" />
+                <span asp-validation-for="Name" class="field-error"></span>
+            </div>
+
+            <div class="col-md-6">
+                <label asp-for="CategoryId" class="form-label">Danh mục <span class="text-danger">*</span></label>
+                <select asp-for="CategoryId" class="form-select">
+                    @foreach (var cat in Model.AvailableCategories)
+                    {
+                        <option value="@cat.Id">@cat.Name</option>
+                    }
+                </select>
+                <span asp-validation-for="CategoryId" class="field-error"></span>
+            </div>
+
+            <div class="col-md-6">
+                <label asp-for="Price" class="form-label">Đơn giá bán (VNĐ) <span class="text-danger">*</span></label>
+                <input asp-for="Price" type="number" step="500" min="1" class="form-control" />
+                <span asp-validation-for="Price" class="field-error"></span>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Số lượng tồn kho hiện tại</label>
+                <input type="text" class="form-control" value="@Model.CurrentStockQuantity" readonly style="background-color:#f1f5f9" />
+                <div class="form-text">Tồn kho được điều chỉnh qua chức năng Nhập/Kiểm kho (Phase 4).</div>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Trạng thái kinh doanh</label>
+                <div class="pt-1">
+                    @if (Model.IsActive)
+                    {
+                        <span class="badge-active">Đang mở bán</span>
+                    }
+                    else
+                    {
+                        <span class="badge-inactive">Đã ngừng bán</span>
+                    }
+                </div>
+            </div>
+
+            <div class="col-12 d-flex gap-2 pt-2">
+                <button type="submit" class="btn-primary-bms">
+                    <i class="bi bi-check2-circle"></i> Lưu thay đổi
+                </button>
+                <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

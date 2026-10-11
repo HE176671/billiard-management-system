@@ -1,4 +1,4 @@
-﻿## Build outputs
+## Build outputs
 bin/
 obj/
 
@@ -21,3 +21,9 @@ logs/
 ## OS
 .DS_Store
 Thumbs.db
+
+## Spec Kit local runtime cache
+.specify/feature.json
+/.agents
+/.github
+/.specify

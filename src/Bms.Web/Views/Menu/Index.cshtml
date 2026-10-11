@@ -1,0 +1,252 @@
+@model Bms.Web.Models.MenuIndexViewModel
+@{
+    ViewData["Title"] = "Quản lý thực đơn & kho F&B";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-cup-straw"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalCount</div>
+                <div class="stat-label">Tổng món thực đơn</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-check2-circle"></i></div>
+            <div>
+                <div class="stat-value">@Model.ActiveCount</div>
+                <div class="stat-label">Đang mở bán</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(245,158,11,0.12);color:#d97706"><i class="bi bi-tags-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.Categories.Count</div>
+                <div class="stat-label">Danh mục F&B</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:rgba(220,38,38,0.12);color:#dc2626"><i class="bi bi-box-seam"></i></div>
+            <div>
+                <div class="stat-value">@Model.OutOfStockCount</div>
+                <div class="stat-label">Đang hết hàng (Tồn = 0)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data card -->
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-cup-straw me-2"></i>Danh sách món F&B & Tồn kho</span>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <!-- Search & filter form -->
+            <form method="get" class="d-flex gap-2 flex-wrap" id="menuSearchForm">
+                <input type="text" name="search" value="@Model.Search" placeholder="Tìm tên món, danh mục..."
+                       class="form-control" style="width:190px;font-size:0.8rem" />
+                <select name="categoryId" class="form-select" style="width:155px;font-size:0.8rem"
+                        onchange="document.getElementById('menuSearchForm').submit()">
+                    <option value="">Tất cả danh mục</option>
+                    @foreach (var cat in Model.Categories)
+                    {
+                        <option value="@cat.Id" selected="@(Model.CategoryId == cat.Id)">@cat.Name (@cat.ProductCount)</option>
+                    }
+                </select>
+                <select name="status" class="form-select" style="width:145px;font-size:0.8rem"
+                        onchange="document.getElementById('menuSearchForm').submit()">
+                    <option value="" selected="@(string.IsNullOrEmpty(Model.StatusFilter))">Tất cả trạng thái</option>
+                    <option value="active" selected="@(Model.StatusFilter == "active")">Đang bán</option>
+                    <option value="out-of-stock" selected="@(Model.StatusFilter == "out-of-stock")">Hết hàng (0)</option>
+                    <option value="inactive" selected="@(Model.StatusFilter == "inactive")">Ngừng bán</option>
+                </select>
+                <button type="submit" class="btn-primary-bms"><i class="bi bi-search"></i></button>
+                @if (!string.IsNullOrEmpty(Model.Search) || Model.CategoryId.HasValue || !string.IsNullOrEmpty(Model.StatusFilter))
+                {
+                    <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x"></i> Xóa lọc</a>
+                }
+            </form>
+
+            <button type="button" class="btn-outline-bms" data-bs-toggle="modal" data-bs-target="#categoryModal">
+                <i class="bi bi-tags"></i> Danh mục (@Model.Categories.Count)
+            </button>
+            <a asp-action="Create" class="btn-primary-bms">
+                <i class="bi bi-plus-lg"></i> Thêm món mới
+            </a>
+        </div>
+    </div>
+
+    @if (!Model.Products.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            Không tìm thấy sản phẩm F&B nào phù hợp.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:70px">Mã</th>
+                        <th>Tên món</th>
+                        <th>Danh mục</th>
+                        <th class="text-end">Đơn giá (VNĐ)</th>
+                        <th class="text-center">Tồn kho</th>
+                        <th>Trạng thái</th>
+                        <th style="width:110px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Products)
+                    {
+                        <tr>
+                            <td><code style="font-size:0.8rem">#@item.Id</code></td>
+                            <td><strong>@item.Name</strong></td>
+                            <td>
+                                <span class="badge bg-light text-dark border" style="font-weight:500">
+                                    @item.CategoryName
+                                </span>
+                            </td>
+                            <td class="text-end fw-semibold" style="color:#0f172a">
+                                @item.Price.ToString("N0") ₫
+                            </td>
+                            <td class="text-center">
+                                @if (item.StockQuantity == 0)
+                                {
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                        0 (Hết hàng)
+                                    </span>
+                                }
+                                else if (item.StockQuantity <= 10)
+                                {
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                                        @item.StockQuantity (Sắp hết)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="fw-semibold text-success">@item.StockQuantity</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!item.IsActive)
+                                {
+                                    <span class="badge-inactive">Ngừng bán</span>
+                                }
+                                else if (item.StockQuantity == 0)
+                                {
+                                    <span class="badge bg-warning text-dark" style="font-size:0.72rem;padding:3px 9px;border-radius:20px">Tạm hết hàng</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-active">Đang bán</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a asp-action="Edit" asp-route-id="@item.Id"
+                                       class="btn-sm-icon" title="Chỉnh sửa món">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (Model.TotalPages > 1)
+        {
+            <div class="d-flex justify-content-between align-items-center px-3 py-3 border-top">
+                <span class="text-muted" style="font-size:0.8rem">
+                    Trang @Model.Page / @Model.TotalPages (Tổng @Model.TotalCount món)
+                </span>
+                <div class="d-flex gap-1">
+                    @for (int p = 1; p <= Model.TotalPages; p++)
+                    {
+                        <a asp-action="Index"
+                           asp-route-page="@p"
+                           asp-route-search="@Model.Search"
+                           asp-route-categoryId="@Model.CategoryId"
+                           asp-route-status="@Model.StatusFilter"
+                           class="btn btn-sm @(p == Model.Page ? "btn-danger" : "btn-outline-secondary")"
+                           style="font-size:0.78rem">
+                            @p
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<!-- Modal Quản lý Danh mục F&B (ProductCategories) -->
+<div class="modal fade" id="categoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom">
+                <h6 class="modal-title fw-bold"><i class="bi bi-tags me-2 text-danger"></i>Quản lý Danh mục F&B</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Form thêm danh mục mới -->
+                <form asp-action="CreateCategory" method="post" class="d-flex gap-2 mb-4">
+                    @Html.AntiForgeryToken()
+                    <input type="text" name="Name" class="form-control" maxlength="60" required
+                           placeholder="Nhập tên danh mục mới (VD: Đồ ăn vặt)..." />
+                    <button type="submit" class="btn-primary-bms text-nowrap">
+                        <i class="bi bi-plus-lg"></i> Thêm
+                    </button>
+                </form>
+
+                <!-- Danh sách danh mục hiện có (cho phép đổi tên trực tiếp) -->
+                <div class="small text-muted fw-semibold mb-2">DANH MỤC HIỆN CÓ (@Model.Categories.Count)</div>
+                <div class="list-group list-group-flush border rounded-3">
+                    @foreach (var cat in Model.Categories)
+                    {
+                        <div class="list-group-item py-2">
+                            <form asp-action="EditCategory" method="post" class="d-flex align-items-center gap-2">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="Id" value="@cat.Id" />
+                                <input type="text" name="Name" value="@cat.Name" class="form-control form-control-sm"
+                                       maxlength="60" required />
+                                <span class="badge bg-secondary-subtle text-secondary text-nowrap">
+                                    @cat.ProductCount món
+                                </span>
+                                <button type="submit" class="btn-sm-icon" title="Lưu tên danh mục">
+                                    <i class="bi bi-check2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

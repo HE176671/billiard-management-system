@@ -230,7 +230,7 @@
             <i class="bi bi-calendar-check"></i> Đặt bàn
         </a>
         <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Menu" ? "active" : "")"
-           href="#">
+           asp-controller="Menu" asp-action="Index">
             <i class="bi bi-cup-straw"></i> Thực đơn
         </a>
     </div>
