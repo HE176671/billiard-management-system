@@ -165,25 +165,41 @@
             font-size: 0.875rem; font-weight: 500;
             transition: background 0.15s, transform 0.1s;
             display: inline-flex; align-items: center; gap: 0.4rem;
+            text-decoration: none !important;
         }
-        .btn-primary-bms:hover { background: var(--primary-dark); transform: translateY(-1px); color: #fff; }
+        .btn-primary-bms:hover, .btn-primary-bms:focus {
+            background: var(--primary-dark); transform: translateY(-1px); color: #fff;
+            text-decoration: none !important;
+        }
         .btn-outline-bms {
             background: transparent; color: var(--primary);
             border: 1px solid var(--primary); border-radius: 8px;
             padding: 0.4rem 0.85rem; font-size: 0.8rem;
             transition: all 0.15s;
             display: inline-flex; align-items: center; gap: 0.35rem;
+            text-decoration: none !important;
         }
-        .btn-outline-bms:hover { background: var(--primary); color: #fff; }
+        .btn-outline-bms:hover, .btn-outline-bms:focus {
+            background: var(--primary); color: #fff;
+            text-decoration: none !important;
+        }
         .btn-sm-icon {
             width: 30px; height: 30px; border-radius: 6px;
             display: inline-flex; align-items: center; justify-content: center;
             font-size: 0.85rem; border: 1px solid #e2e8f0;
             background: #fff; color: #64748b; cursor: pointer;
             transition: all 0.15s;
+            text-decoration: none !important;
         }
-        .btn-sm-icon:hover { border-color: var(--primary); color: var(--primary); }
-        .btn-sm-icon.danger:hover { border-color: #dc2626; color: #dc2626; }
+        .btn-sm-icon:hover { border-color: var(--primary); color: var(--primary); text-decoration: none !important; }
+        .btn-sm-icon.danger:hover { border-color: #dc2626; color: #dc2626; text-decoration: none !important; }
+
+        a.btn-primary-bms, a.btn-outline-bms, a.btn-sm-icon {
+            text-decoration: none !important;
+        }
+        a.btn-primary-bms:hover, a.btn-outline-bms:hover, a.btn-sm-icon:hover {
+            text-decoration: none !important;
+        }
 
         /* ── Form ── */
         .form-card {
@@ -218,6 +234,10 @@
         <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
            asp-controller="Employee" asp-action="Index">
             <i class="bi bi-people"></i> Nhân viên
+        </a>
+        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Shift" ? "active" : "")"
+           asp-controller="Shift" asp-action="Index">
+            <i class="bi bi-clock-history"></i> Ca làm việc
         </a>
 
         <div class="nav-section-label">Nghiệp vụ</div>

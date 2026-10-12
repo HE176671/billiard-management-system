@@ -1,0 +1,121 @@
+@model Bms.Web.Models.EditShiftViewModel
+@{
+    ViewData["Title"] = "Sửa ca làm việc";
+    Layout = "_AdminLayout";
+}
+
+<div class="d-flex justify-content-center">
+    <div style="width: 100%; max-width: 640px;">
+        <div class="d-flex align-items-center gap-2 mb-4">
+            <a asp-action="Index" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+            <h5 class="mb-0">
+                Ca làm việc <code style="color:#8b5cf6">#@Model.Id</code>
+                — <span style="color:#64748b;font-size:0.9rem">
+                    @(Model.StaffName ?? "—")
+                    @if (!string.IsNullOrEmpty(Model.EmployeeCode)) { <text>(@Model.EmployeeCode)</text> }
+                </span>
+            </h5>
+        </div>
+
+        <div class="form-card" style="max-width: 100%;">
+            <form asp-action="Edit" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Id" />
+                <input type="hidden" asp-for="StaffName" />
+                <input type="hidden" asp-for="EmployeeCode" />
+
+                @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey(string.Empty))
+                {
+                    <div class="alert alert-danger rounded-3 mb-3" style="font-size:0.875rem">
+                        @foreach (var err in ViewData.ModelState[string.Empty]!.Errors)
+                        { <div><i class="bi bi-exclamation-circle me-1"></i>@err.ErrorMessage</div> }
+                    </div>
+                }
+
+                <div class="row g-3">
+                    <!-- Nhân viên (read-only) -->
+                    <div class="col-12">
+                        <label class="form-label">Nhân viên trực ca</label>
+                        <input type="text" class="form-control" style="background:#f8fafc"
+                               value="@(Model.StaffName ?? "—") @(string.IsNullOrEmpty(Model.EmployeeCode) ? "" : $"({Model.EmployeeCode})")"
+                               readonly />
+                    </div>
+
+                    <!-- Giờ bắt đầu (giờ VN) -->
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            Giờ bắt đầu (giờ VN) <span class="text-danger">*</span>
+                        </label>
+                        <input type="datetime-local"
+                               name="StartTimeLocal" id="StartTimeLocal"
+                               class="form-control"
+                               value="@Model.StartTimeLocal.ToString("yyyy-MM-ddTHH:mm")" />
+                        <div class="form-text">Giờ Việt Nam (UTC+7)</div>
+                        <span asp-validation-for="StartTimeLocal" class="field-error"></span>
+                    </div>
+
+                    <!-- Giờ kết thúc (giờ VN) -->
+                    <div class="col-md-6">
+                        <label class="form-label">Giờ kết thúc (giờ VN)</label>
+                        <input type="datetime-local"
+                               name="EndTimeLocal" id="EndTimeLocal"
+                               class="form-control"
+                               value="@(Model.EndTimeLocal.HasValue ? Model.EndTimeLocal.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                        <div class="form-text">Để trống nếu ca đang chạy</div>
+                        <span asp-validation-for="EndTimeLocal" class="field-error"></span>
+                    </div>
+
+                    <!-- Tiền quỹ đầu ca -->
+                    <div class="col-md-6">
+                        <label asp-for="StartingCash" class="form-label"></label>
+                        <div class="input-group">
+                            <input asp-for="StartingCash" type="number" min="0" step="1000" class="form-control" />
+                            <span class="input-group-text" style="font-size:0.8rem;background:#f8fafc;border-color:#e2e8f0">₫</span>
+                        </div>
+                        <span asp-validation-for="StartingCash" class="field-error"></span>
+                    </div>
+
+                    <!-- Tiền quỹ cuối ca -->
+                    <div class="col-md-6">
+                        <label asp-for="EndingCash" class="form-label"></label>
+                        <div class="input-group">
+                            <input asp-for="EndingCash" type="number" min="0" step="1000" class="form-control"
+                                   placeholder="Chưa chốt..." />
+                            <span class="input-group-text" style="font-size:0.8rem;background:#f8fafc;border-color:#e2e8f0">₫</span>
+                        </div>
+                        <span asp-validation-for="EndingCash" class="field-error"></span>
+                    </div>
+
+                    <!-- Trạng thái -->
+                    <div class="col-12">
+                        <label asp-for="Status" class="form-label"></label>
+                        <select asp-for="Status" class="form-select">
+                            <option value="Active">Đang làm việc (Active)</option>
+                            <option value="Closed">Đã kết thúc (Closed)</option>
+                        </select>
+                        <span asp-validation-for="Status" class="field-error"></span>
+                    </div>
+
+                    <!-- Ghi chú -->
+                    <div class="col-12">
+                        <label asp-for="Notes" class="form-label"></label>
+                        <textarea asp-for="Notes" class="form-control" rows="2"
+                                  placeholder="Ghi chú thêm..."></textarea>
+                        <span asp-validation-for="Notes" class="field-error"></span>
+                    </div>
+
+                    <div class="col-12 d-flex gap-2 pt-2">
+                        <button type="submit" class="btn-primary-bms">
+                            <i class="bi bi-check-lg"></i> Lưu thay đổi
+                        </button>
+                        <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

@@ -1,0 +1,170 @@
+@model Bms.Web.Models.ShiftListViewModel
+@{
+    ViewData["Title"] = "Quản lý ca làm việc";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalCount</div>
+                <div class="stat-label">Tổng số ca</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-person-badge-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.ActiveCount</div>
+                <div class="stat-label">Ca đang mở</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data table -->
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>Danh sách ca làm việc</span>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <form method="get" class="d-flex gap-2 flex-wrap" id="searchForm">
+                <input type="text" name="search" value="@Model.Search" placeholder="Tìm tên, mã nhân viên..."
+                       class="form-control" style="width:210px;font-size:0.8rem" />
+                <select name="status" class="form-select" style="width:150px;font-size:0.8rem"
+                        onchange="document.getElementById('searchForm').submit()">
+                    <option value="" selected="@(Model.StatusFilter == null)">Tất cả</option>
+                    <option value="active" selected="@(Model.StatusFilter == "active")">Đang mở</option>
+                    <option value="closed" selected="@(Model.StatusFilter == "closed")">Đã đóng</option>
+                </select>
+                <button type="submit" class="btn-primary-bms"><i class="bi bi-search"></i></button>
+                @if (!string.IsNullOrEmpty(Model.Search) || Model.StatusFilter != null)
+                {
+                    <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x"></i> Xóa lọc</a>
+                }
+            </form>
+            <a asp-action="Create" class="btn-primary-bms ms-auto text-decoration-none">
+                <i class="bi bi-plus-lg"></i> Mở ca mới
+            </a>
+        </div>
+    </div>
+
+    @if (!Model.Shifts.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            Không tìm thấy ca làm việc nào.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>MÃ CA</th>
+                        <th>NHÂN VIÊN</th>
+                        <th>GIỜ MỞ CA</th>
+                        <th>GIỜ ĐÓNG CA</th>
+                        <th>TIỀN QUỸ ĐẦU CA</th>
+                        <th>TIỀN QUỸ CUỐI CA</th>
+                        <th>GHI CHÚ</th>
+                        <th>TRẠNG THÁI</th>
+                        <th style="width:110px">THAO TÁC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var shift in Model.Shifts)
+                    {
+                        <tr>
+                            <td><code style="font-size:0.8rem;color:#8b5cf6">#@shift.Id</code></td>
+                            <td>
+                                <strong>@(shift.StaffName ?? "—")</strong>
+                                @if (!string.IsNullOrEmpty(shift.EmployeeCode))
+                                {
+                                    <br /><span style="font-size:0.75rem;color:#64748b">@shift.EmployeeCode</span>
+                                }
+                            </td>
+                            <td style="font-size:0.85rem">
+                                <i class="bi bi-play-circle text-success me-1"></i>
+                                @shift.StartTimeLocal.ToString("dd/MM/yyyy HH:mm")
+                            </td>
+                            <td style="font-size:0.85rem">
+                                @if (shift.EndTimeLocal.HasValue)
+                                {
+                                    <i class="bi bi-stop-circle text-danger me-1"></i>
+                                    @shift.EndTimeLocal.Value.ToString("dd/MM/yyyy HH:mm")
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td style="font-size:0.85rem">
+                                @shift.StartingCash.ToString("N0") <span style="font-size:0.75rem;color:#94a3b8">₫</span>
+                            </td>
+                            <td style="font-size:0.85rem">
+                                @if (shift.EndingCash.HasValue)
+                                {
+                                    @shift.EndingCash.Value.ToString("N0") <span style="font-size:0.75rem;color:#94a3b8">₫</span>
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td><span style="font-size:0.8rem;color:#64748b">@(shift.Notes ?? "—")</span></td>
+                            <td>
+                                @if (shift.Status == "Active")
+                                { <span class="badge-active">Đang mở</span> }
+                                else
+                                { <span class="badge-inactive">Đã đóng</span> }
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a asp-action="Edit" asp-route-id="@shift.Id"
+                                       class="btn-sm-icon" title="Sửa / Xem chi tiết">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form asp-action="ToggleStatus" asp-route-id="@shift.Id"
+                                          method="post" class="d-inline"
+                                          onsubmit="return confirm('@(shift.Status == "Active" ? "Đóng" : "Mở lại") ca #@shift.Id?')">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit"
+                                                class="btn-sm-icon @(shift.Status == "Active" ? "danger" : "")"
+                                                title="@(shift.Status == "Active" ? "Đóng ca" : "Mở lại ca")">
+                                            <i class="bi @(shift.Status == "Active" ? "bi-stop-circle" : "bi-play-circle")"></i>
+                                        </button>
+                                    </form>
+                                    <form asp-action="Delete" asp-route-id="@shift.Id"
+                                          method="post" class="d-inline"
+                                          onsubmit="return confirm('Bạn có chắc chắn muốn xóa ca #@shift.Id không?\n\nCảnh báo: Hành động này không thể hoàn tác!')">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn-sm-icon text-danger" title="Xóa ca">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
