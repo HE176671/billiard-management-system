@@ -1,0 +1,80 @@
+@model Bms.Web.Models.EditProfileViewModel
+@{
+    ViewData["Title"] = "Chỉnh sửa hồ sơ";
+    Layout = "_AdminLayout";
+}
+
+<div class="form-card">
+    <div class="data-card-header mb-3" style="border-bottom:1px solid #f1f5f9;padding-bottom:0.75rem">
+        <span class="data-card-title"><i class="bi bi-pencil-square me-2"></i>Chỉnh sửa hồ sơ</span>
+        <a asp-action="Index" class="btn-outline-bms">
+            <i class="bi bi-arrow-left"></i> Quay lại
+        </a>
+    </div>
+
+    <form asp-action="Edit" method="post" novalidate>
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="ModelOnly" class="field-error mb-3"></div>
+
+        <!-- Chỉ đọc -->
+        <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label">Tên đăng nhập</label>
+                <input type="text" class="form-control bg-light" value="@Model.UserName" readonly tabindex="-1"
+                       id="profile-username" />
+                <div class="form-text">Không thể thay đổi tên đăng nhập.</div>
+            </div>
+            <div class="col-sm-3">
+                <label class="form-label">Hạng thành viên</label>
+                <input type="text" class="form-control bg-light" value="@Model.RankName" readonly tabindex="-1"
+                       id="profile-rank" />
+            </div>
+            <div class="col-sm-3">
+                <label class="form-label">Tổng điểm</label>
+                <input type="text" class="form-control bg-light" value="@Model.TotalPoints" readonly tabindex="-1"
+                       id="profile-points" />
+            </div>
+        </div>
+
+        <!-- Có thể sửa -->
+        <div class="row g-3">
+            <div class="col-12">
+                <label asp-for="FullName" class="form-label"></label>
+                <input asp-for="FullName" class="form-control" id="profile-fullname" maxlength="100" />
+                <span asp-validation-for="FullName" class="field-error"></span>
+            </div>
+            <div class="col-sm-6">
+                <label asp-for="Email" class="form-label"></label>
+                <input asp-for="Email" class="form-control" id="profile-email" type="email" maxlength="100" />
+                <span asp-validation-for="Email" class="field-error"></span>
+            </div>
+            <div class="col-sm-6">
+                <label asp-for="PhoneNumber" class="form-label"></label>
+                <input asp-for="PhoneNumber" class="form-control" id="profile-phone" maxlength="10"
+                       placeholder="0xxxxxxxxx" inputmode="tel" />
+                <span asp-validation-for="PhoneNumber" class="field-error"></span>
+                <div class="form-text">10 chữ số, bắt đầu bằng 0.</div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn-primary-bms" id="btn-save-profile">
+                <i class="bi bi-check-lg"></i> Lưu thay đổi
+            </button>
+            <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        // Disable nút sau khi submit (chống bấm 2 lần — NFR bảo mật form)
+        document.getElementById('btn-save-profile')
+            ?.closest('form')
+            ?.addEventListener('submit', function () {
+                const btn = document.getElementById('btn-save-profile');
+                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang lưu...'; }
+            });
+    </script>
+}

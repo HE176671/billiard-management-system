@@ -1,0 +1,92 @@
+@model Bms.Web.Models.ProfileViewModel
+@{
+    ViewData["Title"] = "Hồ sơ của tôi";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <!-- Stat cards hạng & điểm -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="bi bi-trophy-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalPoints</div>
+                <div class="stat-label">Tổng điểm</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-award-fill"></i></div>
+            <div>
+                <div class="stat-value" style="font-size:1.1rem">@Model.RankName</div>
+                <div class="stat-label">Hạng thành viên</div>
+            </div>
+        </div>
+    </div>
+    @if (Model.PointsToNextRank.HasValue)
+    {
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon blue"><i class="bi bi-arrow-up-circle-fill"></i></div>
+                <div>
+                    <div class="stat-value">@Model.PointsToNextRank</div>
+                    <div class="stat-label">Điểm để lên hạng</div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon green"><i class="bi bi-star-fill"></i></div>
+                <div>
+                    <div class="stat-value" style="font-size:0.9rem">Cao nhất</div>
+                    <div class="stat-label">Bạn đang ở hạng cao nhất</div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Thông tin hồ sơ -->
+<div class="form-card mt-4">
+    <div class="data-card-header mb-3" style="border-bottom:1px solid #f1f5f9;padding-bottom:0.75rem">
+        <span class="data-card-title"><i class="bi bi-person-circle me-2"></i>Thông tin cá nhân</span>
+        <a asp-action="Edit" class="btn-primary-bms">
+            <i class="bi bi-pencil-square"></i> Chỉnh sửa
+        </a>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Họ và tên</label>
+            <div style="font-weight:600">@Model.FullName</div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Tên đăng nhập</label>
+            <div><code>@(Model.UserName ?? "—")</code></div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Email</label>
+            <div>@(Model.Email ?? "—")</div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Số điện thoại</label>
+            <div>@(Model.PhoneNumber ?? "—")</div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Ngày tham gia</label>
+            <div>@Model.CreatedAtUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm")</div>
+        </div>
+    </div>
+</div>

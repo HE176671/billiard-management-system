@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,9 +9,16 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options) { }
 
+    // ── Business tables ──
+    public DbSet<PlaySession>   PlaySessions   => Set<PlaySession>();
+    public DbSet<BilliardTable> BilliardTables => Set<BilliardTable>();
+    public DbSet<TableType>     TableTypes     => Set<TableType>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        // ── Identity column config ──
         var user = builder.Entity<ApplicationUser>();
         user.Property(x => x.FullName).HasMaxLength(100).IsRequired();
         user.Property(x => x.PhoneNumber).HasMaxLength(20);
@@ -28,5 +35,19 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<IdentityUserLogin<string>>().Property(x => x.ProviderKey).HasMaxLength(128);
         builder.Entity<IdentityUserToken<string>>().Property(x => x.LoginProvider).HasMaxLength(128);
         builder.Entity<IdentityUserToken<string>>().Property(x => x.Name).HasMaxLength(128);
+
+        // ── PlaySessions ──
+        var ps = builder.Entity<PlaySession>();
+        ps.Property(x => x.StartAtUtc).HasColumnType("datetime2(0)");
+        ps.Property(x => x.EndAtUtc).HasColumnType("datetime2(0)");
+        ps.Property(x => x.HourlyRateSnapshot).HasColumnType("decimal(18,2)");
+        ps.Property(x => x.PlaytimeAmount).HasColumnType("decimal(18,2)");
+        ps.HasOne(x => x.Table).WithMany()
+            .HasForeignKey(x => x.TableId)
+            .OnDelete(DeleteBehavior.Restrict);
+        // EF không quản lý CustomerId FK sang AspNetUsers — identity đã handle
+        ps.Ignore(x => x.ClosedById);
+        ps.Ignore(x => x.OpenedById);
+        ps.Ignore(x => x.BookingId);
     }
 }

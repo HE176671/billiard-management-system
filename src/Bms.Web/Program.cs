@@ -51,6 +51,21 @@ app.UseAuthentication();  // phải trước UseAuthorization
 app.UseAuthorization();
 
 app.MapControllerRoute(
+    name: "profile",
+    pattern: "Profile/{action=Index}/{id?}",
+    defaults: new { controller = "CustomerProfile" });
+
+app.MapControllerRoute(
+    name: "playhistory",
+    pattern: "PlayHistory/{action=Index}/{id?}",
+    defaults: new { controller = "PlayHistory" });
+
+app.MapControllerRoute(
+    name: "loyalty",
+    pattern: "Loyalty/{action=Index}/{id?}",
+    defaults: new { controller = "Loyalty" });
+
+app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 

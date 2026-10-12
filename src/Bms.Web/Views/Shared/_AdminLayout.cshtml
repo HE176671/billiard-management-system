@@ -214,25 +214,48 @@
         <span class="logo-sub">Billiard Management System</span>
     </div>
     <div class="sidebar-nav">
-        <div class="nav-section-label">Admin</div>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
-           asp-controller="Employee" asp-action="Index">
-            <i class="bi bi-people"></i> Nhân viên
-        </a>
+        @if (User.IsInRole("Admin"))
+        {
+            <div class="nav-section-label">Admin</div>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
+               asp-controller="Employee" asp-action="Index">
+                <i class="bi bi-people"></i> Nhân viên
+            </a>
+        }
 
-        <div class="nav-section-label">Nghiệp vụ</div>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
-           href="#">
-            <i class="bi bi-grid-3x3"></i> Quản lý bàn
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
-           href="#">
-            <i class="bi bi-calendar-check"></i> Đặt bàn
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Menu" ? "active" : "")"
-           href="#">
-            <i class="bi bi-cup-straw"></i> Thực đơn
-        </a>
+        @if (User.IsInRole("Admin") || User.IsInRole("Staff"))
+        {
+            <div class="nav-section-label">Nghiệp vụ</div>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
+               href="#">
+                <i class="bi bi-grid-3x3"></i> Quản lý bàn
+            </a>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
+               href="#">
+                <i class="bi bi-calendar-check"></i> Đặt bàn
+            </a>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Menu" ? "active" : "")"
+               href="#">
+                <i class="bi bi-cup-straw"></i> Thực đơn
+            </a>
+        }
+
+        @if (User.IsInRole("Customer"))
+        {
+            <div class="nav-section-label">Khách hàng</div>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "CustomerProfile" ? "active" : "")"
+               asp-controller="CustomerProfile" asp-action="Index">
+                <i class="bi bi-person-circle"></i> Hồ sơ của tôi
+            </a>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "PlayHistory" ? "active" : "")"
+               asp-controller="PlayHistory" asp-action="Index">
+                <i class="bi bi-clock-history"></i> Lịch sử chơi
+            </a>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Loyalty" ? "active" : "")"
+               asp-controller="Loyalty" asp-action="Index">
+                <i class="bi bi-trophy"></i> Điểm thưởng
+            </a>
+        }
     </div>
     <div class="sidebar-footer">
         <div class="user-chip">
