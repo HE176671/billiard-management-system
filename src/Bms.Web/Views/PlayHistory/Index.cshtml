@@ -47,8 +47,8 @@
                             </td>
                             <td>@s.StartAtUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm")</td>
                             <td>
-                                @if (s.IsActive) { <span>—</span> }
-                                else { @s.EndAtUtc!.Value.AddHours(7).ToString("dd/MM/yyyy HH:mm") }
+                                @if (s.IsActive || !s.EndAtUtc.HasValue) { <span>—</span> }
+                                else { @s.EndAtUtc.Value.AddHours(7).ToString("dd/MM/yyyy HH:mm") }
                             </td>
                             <td>@s.DurationDisplay</td>
                             <td class="text-end">

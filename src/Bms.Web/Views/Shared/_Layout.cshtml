@@ -22,12 +22,51 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
                         </li>
+                        @if (User.IsInRole("Customer"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="CustomerProfile" asp-action="Index">Hồ sơ</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="PlayHistory" asp-action="Index">Lịch sử chơi</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Loyalty" asp-action="Index">Điểm thưởng</a>
+                            </li>
+                        }
+                        else if (User.IsInRole("Admin"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Employee" asp-action="Index">Nhân viên</a>
+                            </li>
+                        }
+                        else if (User.IsInRole("Staff"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Staff" asp-action="Index">Khu vực nhân viên</a>
+                            </li>
+                        }
                     </ul>
                     <ul class="navbar-nav">
                         @if (User.Identity?.IsAuthenticated == true)
                         {
                             <li class="nav-item">
-                                <span class="nav-link text-dark">👤 @User.Identity.Name</span>
+                                @if (User.IsInRole("Customer"))
+                                {
+                                    <a class="nav-link text-dark fw-medium" asp-controller="CustomerProfile" asp-action="Index">👤 @User.Identity.Name</a>
+                                }
+                                else if (User.IsInRole("Admin"))
+                                {
+                                    <a class="nav-link text-dark fw-medium" asp-controller="Employee" asp-action="Index">👤 @User.Identity.Name</a>
+                                }
+                                else if (User.IsInRole("Staff"))
+                                {
+                                    <a class="nav-link text-dark fw-medium" asp-controller="Staff" asp-action="Index">👤 @User.Identity.Name</a>
+                                }
+                                else
+                                {
+                                    <span class="nav-link text-dark">👤 @User.Identity.Name</span>
+                                }
                             </li>
                             <li class="nav-item">
                                 <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">

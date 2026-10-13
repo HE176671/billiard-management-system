@@ -45,9 +45,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         ps.HasOne(x => x.Table).WithMany()
             .HasForeignKey(x => x.TableId)
             .OnDelete(DeleteBehavior.Restrict);
-        // EF không quản lý CustomerId FK sang AspNetUsers — identity đã handle
-        ps.Ignore(x => x.ClosedById);
-        ps.Ignore(x => x.OpenedById);
-        ps.Ignore(x => x.BookingId);
+        // EF không dùng navigation cho OpenedById/ClosedById/BookingId/CustomerId
+        // (đây là FK sang AspNetUsers và Bookings, identity đã xử lý riêng)
+        // — chỉ đậnh nghĩa chúng là scalar column, không tạo navigation property
+        ps.Property(x => x.OpenedById).HasMaxLength(450).IsRequired();
+        ps.Property(x => x.ClosedById).HasMaxLength(450);
+        ps.Property(x => x.BookingId);
+        ps.Property(x => x.CustomerId).HasMaxLength(450);
     }
 }

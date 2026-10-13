@@ -262,7 +262,7 @@
             <div class="user-avatar">@(User.Identity?.Name?.FirstOrDefault().ToString().ToUpper() ?? "?")</div>
             <div>
                 <div class="user-name">@User.Identity?.Name</div>
-                <div class="user-role">Administrator</div>
+                <div class="user-role">@(User.IsInRole("Admin") ? "Quản trị viên" : User.IsInRole("Staff") ? "Nhân viên" : "Khách hàng")</div>
             </div>
         </div>
     </div>

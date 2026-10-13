@@ -15,6 +15,15 @@ public class HomeController : Controller
 
     public IActionResult Index()
     {
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            if (User.IsInRole("Admin"))
+                return RedirectToAction("Index", "Employee");
+            if (User.IsInRole("Staff"))
+                return RedirectToAction("Index", "Staff");
+            if (User.IsInRole("Customer"))
+                return RedirectToAction("Index", "CustomerProfile");
+        }
         return View();
     }
 

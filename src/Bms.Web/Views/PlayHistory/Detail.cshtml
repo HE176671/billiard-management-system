@@ -40,8 +40,8 @@
                 <div class="col-6">
                     <div class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Kết thúc</div>
                     <div>
-                        @if (Model.IsActive) { <span>—</span> }
-                        else { @Model.EndAtUtc!.Value.AddHours(7).ToString("dd/MM/yyyy HH:mm") }
+                        @if (Model.IsActive || !Model.EndAtUtc.HasValue) { <span>—</span> }
+                        else { @Model.EndAtUtc.Value.AddHours(7).ToString("dd/MM/yyyy HH:mm") }
                     </div>
                 </div>
                 <div class="col-6">

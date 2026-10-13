@@ -54,20 +54,31 @@ public class LoyaltyController : Controller
         var totalPoints = allAmounts.Sum(a => LoyaltyConstants.CalcSessionPoints(a));
 
         // Trang lịch sử — sắp xếp mới nhất trước (FR-09.1)
-        var historyPage = await closedQuery
+        var rawHistory = await closedQuery
             .OrderByDescending(s => s.StartAtUtc)
             .Skip((page - 1) * PageSize)
             .Take(PageSize)
-            .Select(s => new LoyaltyHistoryRowViewModel
+            .Select(s => new
             {
-                SessionId      = s.Id,
+                s.Id,
                 TableCode      = s.Table.TableCode,
-                StartAtUtc     = s.StartAtUtc,
-                EndAtUtc       = s.EndAtUtc!.Value,
-                PlaytimeAmount = s.PlaytimeAmount!.Value,
-                Points         = (int)Math.Floor((double)(s.PlaytimeAmount!.Value / LoyaltyConstants.VndPerPoint))
+                s.StartAtUtc,
+                s.EndAtUtc,
+                PlaytimeAmount = s.PlaytimeAmount!.Value
             })
             .ToListAsync();
+
+        var historyPage = rawHistory
+            .Select(r => new LoyaltyHistoryRowViewModel
+            {
+                SessionId      = r.Id,
+                TableCode      = r.TableCode,
+                StartAtUtc     = r.StartAtUtc,
+                EndAtUtc       = r.EndAtUtc ?? r.StartAtUtc,
+                PlaytimeAmount = r.PlaytimeAmount,
+                Points         = LoyaltyConstants.CalcSessionPoints(r.PlaytimeAmount)
+            })
+            .ToList();
 
         var vm = new LoyaltyViewModel
         {

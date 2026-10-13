@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bms.Web.Controllers;
@@ -13,7 +13,6 @@ public class CustomerController : Controller
     // GET /Customer
     public IActionResult Index()
     {
-        ViewData["Title"] = "Customer Dashboard";
-        return View();
+        return RedirectToAction("Index", "CustomerProfile");
     }
 }
