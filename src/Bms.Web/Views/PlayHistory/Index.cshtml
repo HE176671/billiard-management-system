@@ -31,7 +31,7 @@
                         <th>Bắt đầu</th>
                         <th>Kết thúc</th>
                         <th>Thời lượng</th>
-                        <th class="text-end">Tiền giờ (₫)</th>
+                        <th class="text-end">Tổng tiền (₫)</th>
                         <th>Trạng thái</th>
                         <th></th>
                     </tr>
@@ -52,10 +52,19 @@
                             </td>
                             <td>@s.DurationDisplay</td>
                             <td class="text-end">
-                                @if (s.PlaytimeAmount.HasValue)
-                                { @s.PlaytimeAmount.Value.ToString("#,##0") }
+                                @if (s.TotalAmount.HasValue)
+                                {
+                                    <span class="fw-semibold">@s.TotalAmount.Value.ToString("#,##0")</span>
+                                    @if (s.FoodAmount > 0)
+                                    {
+                                        <div style="font-size:0.72rem;color:#64748b" title="Gồm @s.FoodAmount.ToString("#,##0") ₫ đồ ăn/uống">
+                                            <i class="bi bi-cup-straw"></i> +@s.FoodAmount.ToString("#,##0")
+                                        </div>
+                                    }
+                                }
                                 else { <span>—</span> }
                             </td>
+
                             <td>
                                 @if (s.IsActive)
                                 { <span class="badge-active">Đang chơi</span> }

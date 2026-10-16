@@ -57,7 +57,11 @@ public class PlayHistoryController : Controller
                 StartAtUtc     = s.StartAtUtc,
                 EndAtUtc       = s.EndAtUtc,
                 Status         = s.Status,
-                PlaytimeAmount = s.PlaytimeAmount
+                PlaytimeAmount = s.PlaytimeAmount,
+                FoodAmount     = s.Orders
+                    .Where(o => o.Status != "Cancelled")
+                    .SelectMany(o => o.OrderDetails)
+                    .Sum(d => (decimal?)(d.Quantity * d.UnitPrice)) ?? 0m
             })
             .ToListAsync();
 
@@ -82,9 +86,22 @@ public class PlayHistoryController : Controller
         // Lọc đúng CustomerId — IDOR trả 404 không tiết lộ tồn tại (FR-10.5, FR-00.2)
         var session = await _db.PlaySessions
             .Include(s => s.Table).ThenInclude(t => t.TableType)
+            .Include(s => s.Orders).ThenInclude(o => o.OrderDetails).ThenInclude(d => d.Product)
             .FirstOrDefaultAsync(s => s.Id == id && s.CustomerId == userId);
 
         if (session == null) return NotFound();
+
+        var orderedItems = session.Orders
+            .Where(o => o.Status != "Cancelled")
+            .SelectMany(o => o.OrderDetails)
+            .Select(d => new CustomerOrderItemViewModel
+            {
+                ProductId   = d.ProductId,
+                ProductName = d.Product.Name,
+                Quantity    = d.Quantity,
+                UnitPrice   = d.UnitPrice
+            })
+            .ToList();
 
         var vm = new PlayHistoryDetailViewModel
         {
@@ -99,10 +116,12 @@ public class PlayHistoryController : Controller
             Status            = session.Status,
             SessionPoints     = session.Status == "Closed" && session.PlaytimeAmount.HasValue
                                     ? LoyaltyConstants.CalcSessionPoints(session.PlaytimeAmount.Value)
-                                    : 0
+                                    : 0,
+            OrderedItems      = orderedItems
         };
 
         ViewData["Title"] = $"Chi tiết phiên #{session.Id}";
         return View(vm);
     }
+
 }

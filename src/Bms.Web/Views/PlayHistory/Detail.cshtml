@@ -76,6 +76,22 @@
                 </div>
                 <div class="col-6">
                     <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:0.25rem">
+                        <div class="stat-label">Tiền đồ ăn / uống</div>
+                        <div class="stat-value" style="font-size:1.2rem">
+                            @Model.FoodAmount.ToString("#,##0") ₫
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:0.25rem;background:#f8fafc">
+                        <div class="stat-label">Tổng tiền phiên</div>
+                        <div class="stat-value" style="font-size:1.2rem;color:var(--primary);font-weight:800">
+                            @Model.TotalBillAmount.ToString("#,##0") ₫
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:0.25rem">
                         <div class="stat-label">Điểm nhận được</div>
                         <div class="stat-value" style="font-size:1.2rem;color:#f59e0b">
                             @if (!Model.IsActive)
@@ -96,13 +112,57 @@
     </div>
 </div>
 
-<!-- Đồ uống & đồ ăn (Iter 2 placeholder) -->
+<!-- Đồ uống & đồ ăn đã gọi (UC07) -->
 <div class="data-card mt-4">
     <div class="data-card-header">
         <span class="data-card-title"><i class="bi bi-cup-straw me-2"></i>Đồ ăn / uống đã gọi</span>
+        @if (Model.OrderedItems.Any())
+        {
+            <span style="font-size:0.85rem;color:#64748b">Tổng: @Model.OrderedItems.Count món</span>
+        }
     </div>
-    <div class="text-center py-4 text-muted" style="font-size:0.875rem">
-        <i class="bi bi-hourglass me-1"></i>
-        Tính năng xem đồ gọi sẽ có trong phiên bản tới.
-    </div>
+    @if (!Model.OrderedItems.Any())
+    {
+        <div class="text-center py-4 text-muted" style="font-size:0.875rem">
+            <i class="bi bi-cup-straw me-1 fs-4 d-block mb-2"></i>
+            Chưa có món nào được gọi trong phiên này.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th style="width:50px">#</th>
+                        <th>Tên món</th>
+                        <th class="text-center" style="width:120px">Số lượng</th>
+                        <th class="text-end" style="width:140px">Đơn giá (₫)</th>
+                        <th class="text-end" style="width:160px">Thành tiền (₫)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int idx = 1; }
+                    @foreach (var item in Model.OrderedItems)
+                    {
+                        <tr>
+                            <td><span class="text-muted">@idx</span></td>
+                            <td><strong>@item.ProductName</strong></td>
+                            <td class="text-center"><span class="badge" style="background:#e2e8f0;color:#1e293b;font-size:0.85rem">×@item.Quantity</span></td>
+                            <td class="text-end">@item.UnitPrice.ToString("#,##0") ₫</td>
+                            <td class="text-end font-monospace fw-semibold">@item.Subtotal.ToString("#,##0") ₫</td>
+                        </tr>
+                        idx++;
+                    }
+                </tbody>
+                <tfoot>
+                    <tr style="background:#f8fafc;font-weight:600">
+                        <td colspan="4" class="text-end">Tổng tiền đồ ăn / uống:</td>
+                        <td class="text-end" style="color:var(--primary)">@Model.FoodAmount.ToString("#,##0") ₫</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
 </div>
+

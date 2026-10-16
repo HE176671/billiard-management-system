@@ -17,10 +17,10 @@ Trong đợt này **KHÔNG** làm bước thanh toán online (VNPay/SePay) — x
 
 | Chức năng | UC | Iter | Status | Trong đợt này? |
 |---|---|---|---|---|
-| Hồ sơ cá nhân (xem/sửa) | UC08 | 1 | To Do | ✅ |
-| Lịch sử phiên chơi | UC10 | 1 | To Do | ✅ |
-| Điểm thưởng & Hạng thành viên | UC09/15 | 1 | To Do | ✅ |
-| Khách gọi đồ ăn/uống | UC07 | 2 | To Do | ✅ |
+| Hồ sơ cá nhân (xem/sửa) | UC08 | 1 | Done | ✅ |
+| Lịch sử phiên chơi | UC10 | 1 | Done | ✅ |
+| Điểm thưởng & Hạng thành viên | UC09/15 | 1 | Done | ✅ |
+| Khách gọi đồ ăn/uống | UC07 | 2 | Done | ✅ |
 | Thanh toán online (VNPay/SePay) | UC14 | 3 | To Do | ❌ **Làm sau** |
 | Đánh giá dịch vụ sau chơi | UC17 | 3 | To Do | ✅ |
 
@@ -242,30 +242,31 @@ CREATE INDEX IX_SO_Session ON dbo.SessionOrders(SessionId);
 - [ ] **Given** form hồ sơ, **When** sửa trường `username` bằng DevTools rồi gửi, **Then** username trong database KHÔNG đổi
 
 ### UC10 — Lịch sử phiên chơi
-- [ ] **Given** Customer có 25 phiên, **When** mở `/PlayHistory`, **Then** thấy 10 phiên mới nhất ở trang 1 và có 3 trang
-- [ ] **Given** Customer A, **When** mở chi tiết phiên của Customer B, **Then** nhận HTTP 404
-- [ ] **Given** Customer chưa có phiên nào, **When** mở `/PlayHistory`, **Then** thấy "Bạn chưa có phiên chơi nào."
-- [ ] **Given** phiên đang chơi, **When** xem danh sách, **Then** giờ kết thúc là "—" và có badge "Đang chơi"
-- [ ] **Given** phiên có 2 món đã gọi, **When** xem chi tiết, **Then** tổng tiền = tiền giờ chơi + tổng thành tiền các món
+- [x] **Given** Customer có 25 phiên, **When** mở `/PlayHistory`, **Then** thấy 10 phiên mới nhất ở trang 1 và có 3 trang
+- [x] **Given** Customer A, **When** mở chi tiết phiên của Customer B, **Then** nhận HTTP 404
+- [x] **Given** Customer chưa có phiên nào, **When** mở `/PlayHistory`, **Then** thấy "Bạn chưa có phiên chơi nào."
+- [x] **Given** phiên đang chơi, **When** xem danh sách, **Then** giờ kết thúc là "—" và có badge "Đang chơi"
+- [x] **Given** phiên có 2 món đã gọi, **When** xem chi tiết, **Then** tổng tiền = tiền giờ chơi + tổng thành tiền các món
 
 ### UC09/15 — Điểm thưởng & Hạng
-- [ ] **Given** Customer có điểm X, **When** mở `/Loyalty`, **Then** thấy đúng X, đúng hạng theo ngưỡng, đúng số điểm còn thiếu để lên hạng kế
-- [ ] **Given** Customer ở hạng cao nhất, **When** mở `/Loyalty`, **Then** thấy "Bạn đang ở hạng cao nhất"
-- [ ] **Given** một phiên vừa chuyển sang hoàn tất, **When** hệ thống xử lý, **Then** điểm được cộng đúng 1 lần và xuất hiện 1 dòng trong lịch sử điểm
-- [ ] **Given** phiên đã được cộng điểm, **When** hàm cộng điểm chạy lại, **Then** tổng điểm không đổi
-- [ ] **Given** điểm vượt ngưỡng hạng kế, **When** cộng điểm xong, **Then** hạng tự động nâng
+- [x] **Given** Customer có điểm X, **When** mở `/Loyalty`, **Then** thấy đúng X, đúng hạng theo ngưỡng, đúng số điểm còn thiếu để lên hạng kế
+- [x] **Given** Customer ở hạng cao nhất, **When** mở `/Loyalty`, **Then** thấy "Bạn đang ở hạng cao nhất"
+- [x] **Given** một phiên vừa chuyển sang hoàn tất, **When** hệ thống xử lý, **Then** điểm được cộng đúng 1 lần và xuất hiện 1 dòng trong lịch sử điểm
+- [x] **Given** phiên đã được cộng điểm, **When** hàm cộng điểm chạy lại, **Then** tổng điểm không đổi
+- [x] **Given** điểm vượt ngưỡng hạng kế, **When** cộng điểm xong, **Then** hạng tự động nâng
 
 ### UC07 — Gọi đồ
-- [ ] **Given** Customer không có phiên đang chơi, **When** mở `/Order`, **Then** không thấy thực đơn, thấy thông báo yêu cầu có phiên đang chơi
-- [ ] **Given** có phiên đang chơi, **When** mở `/Order`, **Then** thấy các món đang bán theo danh mục, món hết hàng bị mờ và không chọn được
-- [ ] **Given** thêm món, **When** nhập số lượng 0 hoặc 21, **Then** bị từ chối; số lượng 1 và 20 được chấp nhận
-- [ ] **Given** giỏ rỗng, **When** nhấn "Gửi đơn", **Then** bị từ chối
-- [ ] **Given** giỏ hợp lệ, **When** gửi đơn, **Then** đơn có trạng thái "Chờ xử lý", gắn đúng phiên + bàn, tổng tiền phiên tăng đúng bằng tổng đơn
-- [ ] **Given** đơn đã gửi với giá 20,000 ₫, **When** Admin đổi giá món thành 25,000 ₫, **Then** đơn cũ vẫn hiển thị 20,000 ₫
-- [ ] **Given** giỏ có 1 món vừa hết hàng, **When** gửi đơn, **Then** toàn bộ đơn bị từ chối và giỏ được giữ nguyên
-- [ ] **Given** phiên đã kết thúc, **When** gửi đơn, **Then** bị từ chối với "Phiên chơi đã kết thúc, không thể gọi thêm đồ."
-- [ ] **Given** gửi đơn gặp lỗi giữa chừng, **When** transaction rollback, **Then** không có đơn nào được lưu và tổng tiền phiên không đổi
-- [ ] **Given** nhấn "Gửi đơn" 2 lần liên tiếp, **When** server xử lý, **Then** chỉ tạo 1 đơn
+- [x] **Given** Customer không có phiên đang chơi, **When** mở `/Order`, **Then** không thấy thực đơn, thấy thông báo yêu cầu có phiên đang chơi
+- [x] **Given** có phiên đang chơi, **When** mở `/Order`, **Then** thấy các món đang bán theo danh mục, món hết hàng bị mờ và không chọn được
+- [x] **Given** thêm món, **When** nhập số lượng 0 hoặc 21, **Then** bị từ chối; số lượng 1 và 20 được chấp nhận
+- [x] **Given** giỏ rỗng, **When** nhấn "Gửi đơn", **Then** bị từ chối
+- [x] **Given** giỏ hợp lệ, **When** gửi đơn, **Then** đơn có trạng thái "Chờ xử lý", gắn đúng phiên + bàn, tổng tiền phiên tăng đúng bằng tổng đơn
+- [x] **Given** đơn đã gửi với giá 20,000 ₫, **When** Admin đổi giá món thành 25,000 ₫, **Then** đơn cũ vẫn hiển thị 20,000 ₫
+- [x] **Given** giỏ có 1 món vừa hết hàng, **When** gửi đơn, **Then** toàn bộ đơn bị từ chối và giỏ được giữ nguyên
+- [x] **Given** phiên đã kết thúc, **When** gửi đơn, **Then** bị từ chối với "Phiên chơi đã kết thúc, không thể gọi thêm đồ."
+- [x] **Given** gửi đơn gặp lỗi giữa chừng, **When** transaction rollback, **Then** không có đơn nào được lưu và tổng tiền phiên không đổi
+- [x] **Given** nhấn "Gửi đơn" 2 lần liên tiếp, **When** server xử lý, **Then** chỉ tạo 1 đơn
+
 
 ### UC17 — Đánh giá
 - [ ] **Given** phiên đã hoàn tất, chưa đánh giá, **When** xem lịch sử, **Then** thấy nút "Đánh giá"

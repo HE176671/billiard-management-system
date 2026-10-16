@@ -71,8 +71,14 @@ app.MapControllerRoute(
     defaults: new { controller = "Loyalty" });
 
 app.MapControllerRoute(
+    name: "order",
+    pattern: "Order/{action=Index}/{id?}",
+    defaults: new { controller = "Order" });
+
+app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
 
 // Đặt mật khẩu admin.demo chỉ trong môi trường Development
 if (app.Environment.IsDevelopment())

@@ -1,0 +1,622 @@
+@model Bms.Web.Models.OrderMenuViewModel
+@{
+    ViewData["Title"] = "Gọi đồ ăn / uống";
+    Layout = "_AdminLayout";
+}
+
+<style>
+    .order-header-card {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        color: #fff;
+        border-radius: 14px;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    }
+    .badge-session-active {
+        background: #10b981;
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 20px;
+    }
+    .category-pills {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.25rem;
+        scrollbar-width: thin;
+    }
+    .category-pill-btn {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+        padding: 0.45rem 1rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .category-pill-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    .category-pill-btn.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(233, 69, 96, 0.25);
+    }
+    .product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .product-card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        position: relative;
+    }
+    .product-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+    }
+    .product-card.unavailable {
+        opacity: 0.55;
+        background: #f8fafc;
+        filter: grayscale(40%);
+    }
+    .product-name {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0.25rem;
+    }
+    .product-price {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+    }
+    .stock-badge {
+        font-size: 0.72rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-weight: 500;
+        display: inline-block;
+    }
+    .stock-badge.in-stock {
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+    }
+    .stock-badge.out-stock {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+    .qty-controls {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+    }
+    .qty-btn {
+        width: 30px;
+        height: 30px;
+        border: none;
+        background: #f8fafc;
+        color: #334155;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.1s;
+    }
+    .qty-btn:hover { background: #e2e8f0; }
+    .qty-input {
+        width: 40px;
+        height: 30px;
+        border: none;
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 600;
+        outline: none;
+    }
+    .cart-card {
+        background: #fff;
+        border-radius: 14px;
+        border: 1px solid #e2e8f0;
+        padding: 1.25rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        position: sticky;
+        top: 72px;
+    }
+    .cart-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.65rem 0;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.85rem;
+    }
+    .cart-item:last-child { border-bottom: none; }
+    .badge-warning-bms {
+        background: #fef3c7;
+        color: #d97706;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .badge-info-bms {
+        background: #e0e7ff;
+        color: #4338ca;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+</style>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show d-flex align-items-center mb-4" role="alert" style="border-radius:10px">
+        <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+        <div>@TempData["Success"]</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center mb-4" role="alert" style="border-radius:10px">
+        <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+        <div>@TempData["Error"]</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!Model.HasActiveSession)
+{
+    <!-- FR-07.2: Không có phiên đang chơi -->
+    <div class="form-card mx-auto text-center py-5 my-4" style="max-width: 540px;">
+        <div class="mb-3 text-muted">
+            <i class="bi bi-cup-hot fs-1 text-danger opacity-75"></i>
+        </div>
+        <h4 class="fw-bold mb-2">Bạn cần có phiên chơi đang diễn ra để gọi đồ.</h4>
+        <p class="text-muted mb-4" style="font-size: 0.9rem;">
+            Vui lòng liên hệ nhân viên tại quầy để nhận bàn hoặc mở phiên chơi trước khi thực hiện gọi đồ ăn & uống.
+        </p>
+        <div class="d-flex justify-content-center gap-2">
+            <a asp-controller="PlayHistory" asp-action="Index" class="btn-outline-bms">
+                <i class="bi bi-clock-history"></i> Xem lịch sử chơi
+            </a>
+            <a asp-controller="Loyalty" asp-action="Index" class="btn-outline-bms">
+                <i class="bi bi-trophy"></i> Xem điểm thưởng
+            </a>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Header thông tin phiên đang chơi -->
+    <div class="order-header-card">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="badge-session-active"><i class="bi bi-circle-fill" style="font-size:0.5rem"></i> Đang chơi</span>
+                    <span style="font-size: 0.85rem; color: #94a3b8;">Phiên #@Model.ActiveSessionId</span>
+                </div>
+                <div class="fs-5 fw-bold">
+                    <i class="bi bi-table me-1 text-danger"></i> Bàn @Model.TableCode
+                    <span style="font-size: 0.9rem; font-weight: normal; color: #cbd5e1;">(@Model.TableTypeName – Tầng @Model.FloorNumber)</span>
+                </div>
+            </div>
+            <div class="text-end">
+                <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase;">Bắt đầu lúc</div>
+                <div class="fw-semibold">@(Model.StartAtUtc?.AddHours(7).ToString("HH:mm - dd/MM/yyyy") ?? "—")</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Layout 2 cột: Thực đơn & Giỏ hàng / Đơn của tôi -->
+    <div class="row g-4">
+        <!-- Cột trái: Thực đơn món ăn / đồ uống -->
+        <div class="col-lg-8">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h5 class="fw-bold m-0"><i class="bi bi-journal-text me-2"></i>Thực đơn</h5>
+                <span class="text-muted" style="font-size: 0.8rem;">Chọn món và số lượng để thêm vào giỏ</span>
+            </div>
+
+            <!-- Bộ lọc danh mục món -->
+            <div class="category-pills">
+                <button type="button" class="category-pill-btn active" data-category="all">Tất cả</button>
+                @foreach (var cat in Model.Categories)
+                {
+                    <button type="button" class="category-pill-btn" data-category="cat-@cat.Id">@cat.Name (@cat.Products.Count)</button>
+                }
+            </div>
+
+            <!-- Danh sách món theo danh mục -->
+            @foreach (var cat in Model.Categories)
+            {
+                <div class="category-section mb-4" id="section-cat-@cat.Id" data-category-group="cat-@cat.Id">
+                    <h6 class="fw-bold text-muted text-uppercase mb-3" style="font-size: 0.8rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-bookmark-fill me-1 text-danger"></i> @cat.Name
+                    </h6>
+                    <div class="product-grid">
+                        @foreach (var p in cat.Products)
+                        {
+                            <div class="product-card @(!p.IsAvailable ? "unavailable" : "")" data-product-id="@p.Id" data-category="cat-@cat.Id">
+                                <div>
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <div class="product-name">@p.Name</div>
+                                    </div>
+                                    <div class="product-price">@p.Price.ToString("#,##0") ₫</div>
+                                    <div class="mb-3">
+                                        @if (!p.IsActive)
+                                        {
+                                            <span class="stock-badge out-stock"><i class="bi bi-slash-circle me-1"></i>Ngừng bán</span>
+                                        }
+                                        else if (p.StockQuantity <= 0)
+                                        {
+                                            <span class="stock-badge out-stock"><i class="bi bi-x-circle me-1"></i>Hết hàng</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="stock-badge in-stock"><i class="bi bi-check-circle me-1"></i>Còn @p.StockQuantity</span>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="pt-2 border-top">
+                                    @if (p.IsAvailable)
+                                    {
+                                        <div class="d-flex align-items-center justify-content-between gap-2">
+                                            <div class="qty-controls">
+                                                <button type="button" class="qty-btn btn-item-minus" data-id="@p.Id">−</button>
+                                                <input type="text" readonly class="qty-input item-qty-val" id="qty-input-@p.Id" value="1" />
+                                                <button type="button" class="qty-btn btn-item-plus" data-id="@p.Id" data-max="@Math.Min(20, p.StockQuantity)">+</button>
+                                            </div>
+                                            <button type="button" class="btn-primary-bms btn-add-cart w-100 justify-content-center"
+                                                    data-id="@p.Id"
+                                                    data-name="@p.Name"
+                                                    data-price="@p.Price"
+                                                    data-max="@Math.Min(20, p.StockQuantity)">
+                                                <i class="bi bi-cart-plus"></i> Thêm
+                                            </button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn btn-secondary btn-sm w-100" disabled style="font-size:0.8rem">
+                                            Không khả dụng
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Cột phải: Giỏ hàng & Tab "Đơn của tôi" (FR-07.6) -->
+        <div class="col-lg-4">
+            <div class="cart-card">
+                <!-- Nav tabs giỏ hàng / đơn đã gọi -->
+                <ul class="nav nav-pills nav-fill mb-3" id="orderTab" role="tablist" style="background:#f1f5f9;padding:4px;border-radius:10px;">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active py-1 fw-semibold" id="cart-tab" data-bs-toggle="tab" data-bs-target="#tab-cart" type="button" role="tab" style="font-size:0.85rem;border-radius:8px">
+                            <i class="bi bi-cart me-1"></i> Giỏ hàng <span class="badge bg-danger ms-1" id="cart-badge-count">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link py-1 fw-semibold" id="myorders-tab" data-bs-toggle="tab" data-bs-target="#tab-myorders" type="button" role="tab" style="font-size:0.85rem;border-radius:8px">
+                            <i class="bi bi-clock-history me-1"></i> Đơn của tôi (@Model.MyOrders.Count)
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="orderTabContent">
+                    <!-- Tab 1: Giỏ hàng hiện tại -->
+                    <div class="tab-pane fade show active" id="tab-cart" role="tabpanel">
+                        <div id="cart-empty-message" class="text-center py-4 text-muted" style="font-size: 0.85rem;">
+                            <i class="bi bi-cart-x fs-1 d-block mb-2 text-muted opacity-50"></i>
+                            Giỏ hàng của bạn đang trống.<br />Hãy chọn món ở thực đơn bên cạnh.
+                        </div>
+
+                        <!-- Danh sách món trong giỏ -->
+                        <div id="cart-items-container" class="mb-3" style="max-height: 280px; overflow-y: auto;">
+                            <!-- JS render các món ở đây -->
+                        </div>
+
+                        <!-- Tóm tắt tiền giỏ hàng -->
+                        <div id="cart-summary" style="display: none;">
+                            <div class="d-flex justify-content-between align-items-center py-2 border-top fw-bold" style="font-size: 0.95rem;">
+                                <span>Tạm tính:</span>
+                                <span class="text-danger" id="cart-total-display">0 ₫</span>
+                            </div>
+
+                            <form asp-controller="Order" asp-action="Submit" method="post" id="form-submit-order" class="mt-3">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="IdempotencyToken" id="idempotency-token" value="@Guid.NewGuid().ToString()" />
+                                <div id="form-hidden-items"></div>
+                                <button type="submit" id="btn-submit-order" class="btn-primary-bms w-100 justify-content-center py-2 fs-6">
+                                    <i class="bi bi-send-check"></i> Gửi đơn gọi món
+                                </button>
+                            </form>
+                            <div class="text-center mt-2 text-muted" style="font-size: 0.72rem;">
+                                <i class="bi bi-shield-check"></i> Đơn giá được lưu cố định tại thời điểm gửi đơn.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Đơn của tôi (FR-07.6) -->
+                    <div class="tab-pane fade" id="tab-myorders" role="tabpanel">
+                        @if (!Model.MyOrders.Any())
+                        {
+                            <div class="text-center py-4 text-muted" style="font-size: 0.85rem;">
+                                <i class="bi bi-inbox fs-1 d-block mb-2 text-muted opacity-50"></i>
+                                Bạn chưa gọi món nào trong phiên này.
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="max-height: 420px; overflow-y: auto;">
+                                @foreach (var order in Model.MyOrders)
+                                {
+                                    <div class="p-2 mb-3 rounded-3" style="border:1px solid #e2e8f0;background:#f8fafc;">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-bold" style="font-size:0.8rem">Đơn #@order.OrderId</span>
+                                            <span class="@order.StatusBadgeClass">@order.StatusDisplay</span>
+                                        </div>
+                                        <div style="font-size:0.75rem;color:#64748b" class="mb-2">
+                                            <i class="bi bi-clock me-1"></i>@order.OrderTimeUtc.AddHours(7).ToString("HH:mm:ss - dd/MM")
+                                        </div>
+                                        <div class="border-top pt-1">
+                                            @foreach (var item in order.Items)
+                                            {
+                                                <div class="d-flex justify-content-between py-1" style="font-size:0.8rem">
+                                                    <span>@item.ProductName <span class="text-muted">×@item.Quantity</span></span>
+                                                    <span class="font-monospace">@item.Subtotal.ToString("#,##0") ₫</span>
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center pt-2 mt-1 border-top fw-bold" style="font-size:0.85rem">
+                                            <span>Tổng đơn:</span>
+                                            <span class="text-danger font-monospace">@order.TotalAmount.ToString("#,##0") ₫</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <div class="p-2 rounded-3 text-center mt-2" style="background:#e0f2fe;color:#0369a1;font-size:0.8rem">
+                                <strong>Tổng tiền đồ đã gọi:</strong> @Model.TotalFoodAmount.ToString("#,##0") ₫
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+    // ── Client-side Cart State ──
+    const Cart = {
+        items: {}, // key: productId, value: { id, name, price, qty, max }
+        
+        add(id, name, price, qty, max) {
+            qty = parseInt(qty) || 1;
+            max = parseInt(max) || 20;
+            if (this.items[id]) {
+                const newQty = this.items[id].qty + qty;
+                this.items[id].qty = Math.min(newQty, Math.min(20, max));
+            } else {
+                this.items[id] = {
+                    id: id,
+                    name: name,
+                    price: parseFloat(price),
+                    qty: Math.min(qty, Math.min(20, max)),
+                    max: max
+                };
+            }
+            this.render();
+        },
+
+        updateQty(id, newQty) {
+            newQty = parseInt(newQty);
+            if (isNaN(newQty) || newQty < 1) {
+                delete this.items[id];
+            } else {
+                if (this.items[id]) {
+                    this.items[id].qty = Math.min(Math.max(1, newQty), Math.min(20, this.items[id].max));
+                }
+            }
+            this.render();
+        },
+
+        remove(id) {
+            delete this.items[id];
+            this.render();
+        },
+
+        total() {
+            return Object.values(this.items).reduce((sum, item) => sum + (item.price * item.qty), 0);
+        },
+
+        count() {
+            return Object.values(this.items).reduce((sum, item) => sum + item.qty, 0);
+        },
+
+        formatMoney(num) {
+            return num.toLocaleString('vi-VN') + ' ₫';
+        },
+
+        render() {
+            const container = document.getElementById('cart-items-container');
+            const emptyMsg = document.getElementById('cart-empty-message');
+            const summary = document.getElementById('cart-summary');
+            const badgeCount = document.getElementById('cart-badge-count');
+            const totalDisplay = document.getElementById('cart-total-display');
+            const hiddenInputs = document.getElementById('form-hidden-items');
+
+            const keys = Object.keys(this.items);
+            badgeCount.innerText = this.count();
+
+            if (keys.length === 0) {
+                emptyMsg.style.display = 'block';
+                container.innerHTML = '';
+                summary.style.display = 'none';
+                hiddenInputs.innerHTML = '';
+                return;
+            }
+
+            emptyMsg.style.display = 'none';
+            summary.style.display = 'block';
+
+            let html = '';
+            let formHtml = '';
+            let index = 0;
+
+            keys.forEach(k => {
+                const item = this.items[k];
+                const subtotal = item.price * item.qty;
+
+                html += `
+                    <div class="cart-item">
+                        <div style="flex:1;padding-right:0.5rem">
+                            <div class="fw-semibold text-truncate" title="${item.name}">${item.name}</div>
+                            <div class="text-muted" style="font-size:0.75rem">${this.formatMoney(item.price)}</div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="qty-controls" style="border-radius:6px;">
+                                <button type="button" class="qty-btn" onclick="Cart.updateQty(${item.id}, ${item.qty - 1})" style="width:24px;height:24px;font-size:0.75rem">−</button>
+                                <span class="qty-input" style="width:30px;height:24px;line-height:24px;font-size:0.8rem">${item.qty}</span>
+                                <button type="button" class="qty-btn" onclick="Cart.updateQty(${item.id}, ${item.qty + 1})" style="width:24px;height:24px;font-size:0.75rem">+</button>
+                            </div>
+                            <div class="text-end font-monospace fw-semibold" style="min-width:65px">
+                                ${this.formatMoney(subtotal)}
+                            </div>
+                            <button type="button" class="btn-sm-icon danger" onclick="Cart.remove(${item.id})" title="Xóa" style="width:24px;height:24px">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                formHtml += `
+                    <input type="hidden" name="Items[${index}].ProductId" value="${item.id}" />
+                    <input type="hidden" name="Items[${index}].Quantity" value="${item.qty}" />
+                `;
+                index++;
+            });
+
+            container.innerHTML = html;
+            hiddenInputs.innerHTML = formHtml;
+            totalDisplay.innerText = this.formatMoney(this.total());
+        }
+    };
+
+    // Category filter pills
+    document.querySelectorAll('.category-pill-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.category-pill-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            const cat = this.getAttribute('data-category');
+            
+            document.querySelectorAll('.category-section').forEach(sec => {
+                if (cat === 'all' || sec.getAttribute('data-category-group') === cat) {
+                    sec.style.display = 'block';
+                } else {
+                    sec.style.display = 'none';
+                }
+            });
+        });
+    });
+
+    // Product card quantity buttons
+    document.querySelectorAll('.btn-item-plus').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const id = this.getAttribute('data-id');
+            const max = parseInt(this.getAttribute('data-max')) || 20;
+            const input = document.getElementById('qty-input-' + id);
+            let val = parseInt(input.value) || 1;
+            if (val < Math.min(20, max)) {
+                input.value = val + 1;
+            }
+        });
+    });
+
+    document.querySelectorAll('.btn-item-minus').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const id = this.getAttribute('data-id');
+            const input = document.getElementById('qty-input-' + id);
+            let val = parseInt(input.value) || 1;
+            if (val > 1) {
+                input.value = val - 1;
+            }
+        });
+    });
+
+    // Add to cart button
+    document.querySelectorAll('.btn-add-cart').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const id = parseInt(this.getAttribute('data-id'));
+            const name = this.getAttribute('data-name');
+            const price = parseFloat(this.getAttribute('data-price'));
+            const max = parseInt(this.getAttribute('data-max')) || 20;
+            const input = document.getElementById('qty-input-' + id);
+            const qty = parseInt(input.value) || 1;
+
+            Cart.add(id, name, price, qty, max);
+
+            // Switch to cart tab if currently on my orders tab
+            const cartTabTrigger = document.querySelector('#cart-tab');
+            if (cartTabTrigger) {
+                bootstrap.Tab.getInstance(cartTabTrigger)?.show() || new bootstrap.Tab(cartTabTrigger).show();
+            }
+
+            // Visual feedback
+            const originalHtml = this.innerHTML;
+            this.innerHTML = '<i class="bi bi-check"></i> Đã thêm';
+            this.style.background = '#10b981';
+            setTimeout(() => {
+                this.innerHTML = originalHtml;
+                this.style.background = '';
+            }, 800);
+        });
+    });
+
+    // Anti double submit form protection
+    const orderForm = document.getElementById('form-submit-order');
+    if (orderForm) {
+        orderForm.addEventListener('submit', function (e) {
+            const btn = document.getElementById('btn-submit-order');
+            if (btn.disabled) {
+                e.preventDefault();
+                return false;
+            }
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Đang gửi đơn...';
+        });
+    }
+</script>
+}

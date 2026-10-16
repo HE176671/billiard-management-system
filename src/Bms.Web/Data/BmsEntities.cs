@@ -79,4 +79,93 @@ public class PlaySession
 
     // Navigation
     public BilliardTable Table { get; set; } = null!;
+    public ICollection<Order> Orders { get; set; } = new List<Order>();
+}
+
+/// <summary>
+/// Ánh xạ bảng dbo.ProductCategories.
+/// </summary>
+[Table("ProductCategories")]
+public class ProductCategory
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Required, MaxLength(60)]
+    public string Name { get; set; } = string.Empty;
+
+    public ICollection<Product> Products { get; set; } = new List<Product>();
+}
+
+/// <summary>
+/// Ánh xạ bảng dbo.Products.
+/// </summary>
+[Table("Products")]
+public class Product
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int CategoryId { get; set; }
+
+    [Required, MaxLength(100)]
+    public string Name { get; set; } = string.Empty;
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal Price { get; set; }
+
+    public int StockQuantity { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    // Navigation
+    public ProductCategory Category { get; set; } = null!;
+}
+
+/// <summary>
+/// Ánh xạ bảng dbo.Orders.
+/// </summary>
+[Table("Orders")]
+public class Order
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int SessionId { get; set; }
+
+    public DateTime OrderTimeUtc { get; set; }
+
+    [Required, MaxLength(20)]
+    public string Status { get; set; } = "Pending"; // Pending | Preparing | Served | Cancelled
+
+    // Navigation
+    public PlaySession Session { get; set; } = null!;
+    public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
+}
+
+/// <summary>
+/// Ánh xạ bảng dbo.OrderDetails.
+/// </summary>
+[Table("OrderDetails")]
+public class OrderDetail
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int OrderId { get; set; }
+
+    public int ProductId { get; set; }
+
+    public int Quantity { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal UnitPrice { get; set; }
+
+    [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? Subtotal { get; set; }
+
+    // Navigation
+    public Order Order { get; set; } = null!;
+    public Product Product { get; set; } = null!;
 }

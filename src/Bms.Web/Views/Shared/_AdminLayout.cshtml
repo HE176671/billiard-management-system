@@ -247,6 +247,10 @@
                asp-controller="CustomerProfile" asp-action="Index">
                 <i class="bi bi-person-circle"></i> Hồ sơ của tôi
             </a>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Order" ? "active" : "")"
+               asp-controller="Order" asp-action="Index">
+                <i class="bi bi-cup-straw"></i> Gọi đồ ăn / uống
+            </a>
             <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "PlayHistory" ? "active" : "")"
                asp-controller="PlayHistory" asp-action="Index">
                 <i class="bi bi-clock-history"></i> Lịch sử chơi

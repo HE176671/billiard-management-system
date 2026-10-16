@@ -66,6 +66,8 @@ public class PlayHistoryRowViewModel
     public DateTime? EndAtUtc   { get; set; }
     public string  Status       { get; set; } = string.Empty;   // Active | Closed
     public decimal? PlaytimeAmount { get; set; }
+    public decimal FoodAmount   { get; set; }
+    public decimal? TotalAmount => PlaytimeAmount.HasValue ? PlaytimeAmount.Value + FoodAmount : (FoodAmount > 0 ? FoodAmount : null);
 
     // Computed
     public string DurationDisplay => EndAtUtc.HasValue
@@ -96,6 +98,11 @@ public class PlayHistoryDetailViewModel
 
     // Điểm nhận được từ phiên này (0 nếu chưa Closed)
     public int SessionPoints { get; set; }
+
+    // Đồ ăn / uống đã gọi trong phiên (UC07)
+    public List<CustomerOrderItemViewModel> OrderedItems { get; set; } = new();
+    public decimal FoodAmount => OrderedItems.Sum(x => x.Subtotal);
+    public decimal TotalBillAmount => (PlaytimeAmount ?? 0) + FoodAmount;
 }
 
 // ══════════════════════════════════════════════════════
@@ -125,3 +132,91 @@ public class LoyaltyHistoryRowViewModel
     public decimal PlaytimeAmount { get; set; }
     public int     Points        { get; set; }   // FLOOR(PlaytimeAmount / 10000)
 }
+
+// ══════════════════════════════════════════════════════
+// UC07 — Khách gọi đồ ăn/uống (Iter 2)
+// ══════════════════════════════════════════════════════
+
+/// <summary>View model cho trang gọi đồ (/Order).</summary>
+public class OrderMenuViewModel
+{
+    public bool HasActiveSession { get; set; }
+    public int? ActiveSessionId  { get; set; }
+    public string? TableCode     { get; set; }
+    public string? TableTypeName { get; set; }
+    public int? FloorNumber      { get; set; }
+    public DateTime? StartAtUtc  { get; set; }
+
+    public List<CategoryMenuViewModel> Categories { get; set; } = new();
+    public List<CustomerOrderSummaryViewModel> MyOrders { get; set; } = new();
+
+    public decimal TotalFoodAmount => MyOrders
+        .Where(o => o.Status != "Cancelled")
+        .Sum(o => o.TotalAmount);
+}
+
+public class CategoryMenuViewModel
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public List<ProductMenuItemViewModel> Products { get; set; } = new();
+}
+
+public class ProductMenuItemViewModel
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int StockQuantity { get; set; }
+    public bool IsActive { get; set; }
+
+    public bool IsAvailable => IsActive && StockQuantity > 0;
+}
+
+public class CustomerOrderSummaryViewModel
+{
+    public int OrderId { get; set; }
+    public DateTime OrderTimeUtc { get; set; }
+    public string Status { get; set; } = string.Empty; // Pending | Preparing | Served | Cancelled
+    public string StatusDisplay => Status switch
+    {
+        "Pending"   => "Chờ xử lý",
+        "Preparing" => "Đang chuẩn bị",
+        "Served"    => "Đã phục vụ",
+        "Cancelled" => "Đã hủy",
+        _           => Status
+    };
+    public string StatusBadgeClass => Status switch
+    {
+        "Pending"   => "badge-warning-bms",
+        "Preparing" => "badge-info-bms",
+        "Served"    => "badge-active",
+        "Cancelled" => "badge-inactive",
+        _           => "badge-secondary"
+    };
+
+    public List<CustomerOrderItemViewModel> Items { get; set; } = new();
+    public decimal TotalAmount => Items.Sum(i => i.Subtotal);
+}
+
+public class CustomerOrderItemViewModel
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal Subtotal => Quantity * UnitPrice;
+}
+
+public class SubmitOrderInputModel
+{
+    public string? IdempotencyToken { get; set; }
+    public List<OrderItemInputModel> Items { get; set; } = new();
+}
+
+public class OrderItemInputModel
+{
+    public int ProductId { get; set; }
+    public int Quantity { get; set; }
+}
+
