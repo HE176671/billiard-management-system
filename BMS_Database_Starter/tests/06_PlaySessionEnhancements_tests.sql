@@ -98,7 +98,7 @@ END CATCH;
 -------------------------------------------------------------------------------
 -- GROUP 2: Booking Rules (Max 7 days, Auto No-Show > 15m, Check-in & Table Selection)
 -------------------------------------------------------------------------------
--- 2.1: Booking > 7 days ahead is rejected with 51105
+-- 2.1: Booking > 15 days ahead is rejected with 51105
 BEGIN TRY
     BEGIN TRANSACTION;
     INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Type_B1', 100000);
@@ -106,19 +106,19 @@ BEGIN TRY
     INSERT INTO dbo.BilliardTables (TableCode, TableTypeId, Status) VALUES (N'ZZ-B1', @TT_B1, 'Available');
     DECLARE @T_B1 int = SCOPE_IDENTITY();
 
-    DECLARE @Future8Days datetime2(0) = DATEADD(day, 8, SYSUTCDATETIME());
-    EXEC dbo.usp_CreateBooking @CustomerId = @TestCustomerId, @TableId = @T_B1, @StartAtUtc = @Future8Days;
+    DECLARE @Future16Days datetime2(0) = DATEADD(day, 16, SYSUTCDATETIME());
+    EXEC dbo.usp_CreateBooking @CustomerId = @TestCustomerId, @TableId = @T_B1, @StartAtUtc = @Future16Days;
 
-    INSERT INTO @Results VALUES ('Booking', N'Chặn đặt bàn quá 7 ngày (51105)', 'FAIL', '51105', 'No Error', N'Không chặn khi đặt trước 8 ngày');
+    INSERT INTO @Results VALUES ('Booking', N'Chặn đặt bàn quá 15 ngày (51105)', 'FAIL', '51105', 'No Error', N'Không chặn khi đặt trước 16 ngày');
     ROLLBACK TRANSACTION;
 END TRY
 BEGIN CATCH
     DECLARE @Err_B1 int = ERROR_NUMBER();
     IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     IF @Err_B1 = 51105
-        INSERT INTO @Results VALUES ('Booking', N'Chặn đặt bàn quá 7 ngày (51105)', 'PASS', '51105', CAST(@Err_B1 AS varchar(20)), N'Chặn đúng giới hạn 7 ngày');
+        INSERT INTO @Results VALUES ('Booking', N'Chặn đặt bàn quá 15 ngày (51105)', 'PASS', '51105', CAST(@Err_B1 AS varchar(20)), N'Chặn đúng giới hạn 15 ngày');
     ELSE
-        INSERT INTO @Results VALUES ('Booking', N'Chặn đặt bàn quá 7 ngày (51105)', 'FAIL', '51105', CAST(@Err_B1 AS varchar(20)), ERROR_MESSAGE());
+        INSERT INTO @Results VALUES ('Booking', N'Chặn đặt bàn quá 15 ngày (51105)', 'FAIL', '51105', CAST(@Err_B1 AS varchar(20)), ERROR_MESSAGE());
 END CATCH;
 
 -- 2.2: Auto-expire booking > 15 minutes late to NoShow

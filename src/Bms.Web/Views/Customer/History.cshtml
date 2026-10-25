@@ -1,0 +1,113 @@
+@model List<Bms.Web.Models.CustomerBookingItemViewModel>
+@{
+    ViewData["Title"] = "Lịch đặt bàn của tôi";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["BookingSuccess"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["BookingSuccess"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["BookingError"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["BookingError"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="data-card">
+    <div class="data-card-header">
+        <div>
+            <div class="data-card-title fs-6">🕒 Lịch đặt bàn của tôi</div>
+            <div class="text-muted small">Quán giữ bàn tối đa 15 phút kể từ giờ hẹn. Quá 15 phút chưa Check-in sẽ tự động chuyển sang Quá hạn (No-Show).</div>
+        </div>
+        <a asp-controller="Customer" asp-action="Index" class="btn-primary-bms">
+            <i class="bi bi-plus-circle"></i> Đặt bàn mới
+        </a>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Mã đơn</th>
+                    <th>Bàn đã chọn</th>
+                    <th>Giờ hẹn đến (VN)</th>
+                    <th>Giữ bàn đến</th>
+                    <th>Trạng thái</th>
+                    <th>Ghi chú</th>
+                    <th class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model != null && Model.Count > 0)
+                {
+                    @foreach (var item in Model)
+                    {
+                        var startVn = item.StartAtUtc.AddHours(7);
+                        var holdVn = item.HoldUntilUtc.AddHours(7);
+                        var badgeClass = item.Status switch
+                        {
+                            "Confirmed" => "bg-success",
+                            "CheckedIn" => "bg-primary",
+                            "Completed" => "bg-dark",
+                            "Cancelled" => "bg-secondary",
+                            "NoShow" => "bg-danger",
+                            _ => "bg-secondary"
+                        };
+
+                        <tr>
+                            <td class="fw-bold">#@item.BookingId</td>
+                            <td>
+                                <span class="fw-bold">@item.TableCode</span>
+                                <span class="text-muted small d-block">@item.TableTypeName · Tầng @item.FloorNumber (@item.HourlyRate.ToString("N0") ₫/h)</span>
+                            </td>
+                            <td class="fw-semibold">@startVn.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td class="text-muted">@holdVn.ToString("HH:mm") (+15 phút)</td>
+                            <td>
+                                <span class="badge @badgeClass">@item.DisplayStatus</span>
+                            </td>
+                            <td class="small text-muted">
+                                @(string.IsNullOrWhiteSpace(item.Notes) ? "--" : item.Notes)
+                                @if (!string.IsNullOrWhiteSpace(item.CancellationReason))
+                                {
+                                    <div class="text-danger small">Lý do hủy: @item.CancellationReason</div>
+                                }
+                            </td>
+                            <td class="text-end">
+                                @if (item.CanCancel)
+                                {
+                                    <form asp-controller="Customer" asp-action="CancelBooking" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn hủy lịch đặt bàn #@item.BookingId không?');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="BookingId" value="@item.BookingId" />
+                                        <input type="hidden" name="Reason" value="Khách hàng chủ động hủy trên hệ thống" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-x-circle"></i> Hủy đặt
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">--</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            Bạn chưa có lịch đặt bàn nào. Hãy nhấn <strong>Đặt bàn mới</strong> để chọn bàn trước!
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

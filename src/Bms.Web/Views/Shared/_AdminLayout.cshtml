@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] — BMS Admin</title>
+    <title>@ViewData["Title"] — BMS</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <style>
@@ -111,6 +111,7 @@
             padding: 0.3rem 0.75rem; font-size: 0.8rem;
             cursor: pointer; transition: all 0.15s;
             display: flex; align-items: center; gap: 0.4rem;
+            text-decoration: none;
         }
         .btn-logout:hover { border-color: var(--primary); color: var(--primary); }
         .page-content { padding: 1.5rem; flex: 1; }
@@ -165,14 +166,17 @@
             font-size: 0.875rem; font-weight: 500;
             transition: background 0.15s, transform 0.1s;
             display: inline-flex; align-items: center; gap: 0.4rem;
+            text-decoration: none;
         }
         .btn-primary-bms:hover { background: var(--primary-dark); transform: translateY(-1px); color: #fff; }
+        .btn-primary-bms:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
         .btn-outline-bms {
             background: transparent; color: var(--primary);
             border: 1px solid var(--primary); border-radius: 8px;
             padding: 0.4rem 0.85rem; font-size: 0.8rem;
             transition: all 0.15s;
             display: inline-flex; align-items: center; gap: 0.35rem;
+            text-decoration: none;
         }
         .btn-outline-bms:hover { background: var(--primary); color: #fff; }
         .btn-sm-icon {
@@ -214,32 +218,49 @@
         <span class="logo-sub">Billiard Management System</span>
     </div>
     <div class="sidebar-nav">
-        <div class="nav-section-label">Admin</div>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
-           asp-controller="Employee" asp-action="Index">
-            <i class="bi bi-people"></i> Nhân viên
-        </a>
+        @if (User.IsInRole("Customer"))
+        {
+            <div class="nav-section-label">Khách hàng</div>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Customer" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")"
+               asp-controller="Customer" asp-action="Index">
+                <i class="bi bi-calendar-plus"></i> Đặt bàn mới
+            </a>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Customer" && ViewContext.RouteData.Values["action"]?.ToString() == "History" ? "active" : "")"
+               asp-controller="Customer" asp-action="History">
+                <i class="bi bi-clock-history"></i> Lịch đặt bàn của tôi
+            </a>
+        }
+        else
+        {
+            @if (User.IsInRole("Admin"))
+            {
+                <div class="nav-section-label">Admin</div>
+                <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
+                   asp-controller="Employee" asp-action="Index">
+                    <i class="bi bi-people"></i> Nhân viên
+                </a>
+            }
 
-        <div class="nav-section-label">Nghiệp vụ</div>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
-           href="#">
-            <i class="bi bi-grid-3x3"></i> Quản lý bàn
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
-           href="#">
-            <i class="bi bi-calendar-check"></i> Đặt bàn
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Menu" ? "active" : "")"
-           href="#">
-            <i class="bi bi-cup-straw"></i> Thực đơn
-        </a>
+            <div class="nav-section-label">Nghiệp vụ</div>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
+               asp-controller="Table" asp-action="Index">
+                <i class="bi bi-grid-3x3"></i> Quản lý bàn
+            </a>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
+               asp-controller="Booking" asp-action="Index">
+                <i class="bi bi-calendar-check"></i> Quản lý đặt bàn
+            </a>
+        }
     </div>
     <div class="sidebar-footer">
+        @{
+            var roleDisplay = User.IsInRole("Admin") ? "Administrator" : User.IsInRole("Staff") ? "Staff" : "Customer";
+        }
         <div class="user-chip">
             <div class="user-avatar">@(User.Identity?.Name?.FirstOrDefault().ToString().ToUpper() ?? "?")</div>
             <div>
                 <div class="user-name">@User.Identity?.Name</div>
-                <div class="user-role">Administrator</div>
+                <div class="user-role">@roleDisplay</div>
             </div>
         </div>
     </div>

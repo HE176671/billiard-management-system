@@ -606,7 +606,7 @@ public class BookingService : IBookingService
         51102 => TableOperationResult.Fail(51102, "Bạn cần đăng nhập tài khoản Khách hàng đang hoạt động để đặt bàn."),
         51103 => TableOperationResult.Fail(51103, "Bàn đã chọn hiện đang bảo trì hoặc ngừng hoạt động."),
         51104 => TableOperationResult.Fail(51104, "Bàn này đã có lịch đặt trùng giờ hoặc đang có khách chơi (cần cách hiện tại ít nhất 5 phút)."),
-        51105 => TableOperationResult.Fail(51105, "Chỉ được đặt bàn trước tối đa 7 ngày."),
+        51105 => TableOperationResult.Fail(51105, "Chỉ được đặt bàn trước tối đa 15 ngày."),
         51201 => TableOperationResult.Fail(51201, "Chỉ có thể hủy lịch đặt bàn đang ở trạng thái Đã đặt (Confirmed)."),
         51202 => TableOperationResult.Fail(51202, "Tài khoản thực hiện không hợp lệ hoặc đã bị khóa."),
         51203 => TableOperationResult.Fail(51203, "Khách hàng chỉ có thể hủy lịch đặt sắp tới của chính mình."),

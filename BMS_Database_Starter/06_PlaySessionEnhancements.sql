@@ -246,8 +246,8 @@ BEGIN
     IF @StartAtUtc IS NULL OR @StartAtUtc <= @Now OR @EndAtUtc <= @StartAtUtc
         THROW 51101, N'Choose a future start time and an end time after it.', 1;
 
-    IF @StartAtUtc > DATEADD(day, 7, @Now)
-        THROW 51105, N'Bookings can only be made up to 7 days in advance.', 1;
+    IF @StartAtUtc > DATEADD(day, 15, @Now)
+        THROW 51105, N'Bookings can only be made up to 15 days in advance.', 1;
 
     IF NOT EXISTS (SELECT 1 FROM dbo.AspNetUsers u
         JOIN dbo.AspNetUserRoles ur ON ur.UserId = u.Id
