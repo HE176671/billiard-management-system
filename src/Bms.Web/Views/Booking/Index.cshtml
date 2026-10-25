@@ -1,0 +1,381 @@
+@model Bms.Web.Models.StaffBookingManagementViewModel
+@{
+    ViewData["Title"] = "Quản lý Đặt bàn, Check-in & Phân bàn";
+    Layout = User.IsInRole("Admin") ? "_AdminLayout" : "_StaffLayout";
+
+    var confirmedCount = Model.Bookings.Count(b => b.Status == "Confirmed");
+    var checkedInWaitingCount = Model.Bookings.Count(b => b.Status == "CheckedIn" && b.LinkedSessionId == null);
+    var inPlayCount = Model.Bookings.Count(b => b.Status == "CheckedIn" && b.LinkedSessionId != null);
+    var noShowCount = Model.Bookings.Count(b => b.Status == "NoShow");
+    var dateValue = Model.DateFilterLocal?.ToString("yyyy-MM-dd") ?? "";
+}
+
+<style>
+    .booking-filter-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.15rem 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .summary-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.4rem 0.9rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+    .summary-pill.blue { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; }
+    .summary-pill.green { background: rgba(16, 185, 129, 0.14); color: #047857; }
+    .summary-pill.teal { background: rgba(13, 148, 136, 0.14); color: #0f766e; }
+    .summary-pill.amber { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+
+    .booking-list-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .scenario-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.55rem 0.75rem;
+        max-width: 360px;
+    }
+    .assign-box {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 8px;
+        padding: 0.6rem;
+        min-width: 250px;
+    }
+</style>
+
+@if (TempData["StaffBookingSuccess"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["StaffBookingSuccess"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["StaffBookingError"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["StaffBookingError"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h4 class="fw-bold mb-1">Quản lý Đặt bàn, Check-in & Phân bàn</h4>
+        <div class="text-muted small">
+            Tự động đánh giá 8 tình huống Check-in • Giữ bàn tối đa 15 phút • Bắt buộc trống bàn trước giờ hẹn 5 phút
+        </div>
+    </div>
+    <a asp-controller="Table" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-grid-3x3 me-1"></i>Sang Sơ đồ Quản lý Bàn
+    </a>
+</div>
+
+<!-- Bộ lọc & Tra cứu -->
+<div class="booking-filter-card">
+    <form asp-controller="Booking" asp-action="Index" method="get" class="row g-2 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label small fw-semibold text-muted mb-1">Tra cứu khách hàng / đặt bàn</label>
+            <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" name="keyword" value="@Model.Keyword" class="form-control"
+                       placeholder="Nhập SĐT, Tên khách, Mã bàn (VD: B01), hoặc Mã đơn..." />
+            </div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold text-muted mb-1">Trạng thái</label>
+            <select name="status" class="form-select">
+                <option value="ALL" selected="@(string.IsNullOrEmpty(Model.StatusFilter) || Model.StatusFilter == "ALL")">Tất cả trạng thái</option>
+                <option value="Confirmed" selected="@(Model.StatusFilter == "Confirmed")">Đang giữ chỗ (Confirmed)</option>
+                <option value="CheckedIn" selected="@(Model.StatusFilter == "CheckedIn")">Đã Check-in (CheckedIn)</option>
+                <option value="NoShow" selected="@(Model.StatusFilter == "NoShow")">Quá hạn 15p (NoShow)</option>
+                <option value="Completed" selected="@(Model.StatusFilter == "Completed")">Đã hoàn tất (Completed)</option>
+                <option value="Cancelled" selected="@(Model.StatusFilter == "Cancelled")">Đã hủy (Cancelled)</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold text-muted mb-1">Ngày hẹn</label>
+            <input type="date" name="date" value="@dateValue" class="form-control" />
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-danger w-100 fw-semibold">
+                <i class="bi bi-search me-1"></i>Tra cứu
+            </button>
+            @if (!string.IsNullOrWhiteSpace(Model.Keyword) || !string.IsNullOrWhiteSpace(Model.StatusFilter) || Model.DateFilterLocal.HasValue)
+            {
+                <a asp-controller="Booking" asp-action="Index" class="btn btn-outline-secondary" title="Xóa bộ lọc">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </a>
+            }
+        </div>
+    </form>
+</div>
+
+<!-- Thống kê nhanh -->
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <span class="summary-pill blue">
+        <i class="bi bi-bookmark-check-fill"></i> Đang giữ chỗ (Confirmed): @confirmedCount
+    </span>
+    <span class="summary-pill green">
+        <i class="bi bi-person-check-fill"></i> Đã Check-in chờ phân bàn: @checkedInWaitingCount
+    </span>
+    <span class="summary-pill teal">
+        <i class="bi bi-play-circle-fill"></i> Đang chơi: @inPlayCount
+    </span>
+    <span class="summary-pill amber">
+        <i class="bi bi-clock-history"></i> Quá hạn 15p (NoShow): @noShowCount
+    </span>
+</div>
+
+<!-- Danh sách đặt bàn & xử lý tình huống -->
+<div class="booking-list-card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Mã đơn</th>
+                    <th>Khách hàng</th>
+                    <th>Bàn đã đặt</th>
+                    <th>Giờ hẹn & Giữ chỗ</th>
+                    <th>Trạng thái</th>
+                    <th>Tình huống & Hướng dẫn xử lý</th>
+                    <th class="text-end" style="min-width: 270px;">Thao tác Check-in / Phân bàn</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Bookings != null && Model.Bookings.Count > 0)
+                {
+                    @foreach (var item in Model.Bookings)
+                    {
+                        var startVn = item.StartAtUtc.AddHours(7);
+                        var holdVn = item.HoldUntilUtc.AddHours(7);
+                        var vacateVn = item.MustVacateByUtc.AddHours(7);
+
+                        var statusBadge = item.Status switch
+                        {
+                            "Confirmed" => "bg-primary",
+                            "CheckedIn" => "bg-success",
+                            "Completed" => "bg-secondary",
+                            "Cancelled" => "bg-dark",
+                            "NoShow" => "bg-danger",
+                            _ => "bg-secondary"
+                        };
+
+                        var tableStatusBadge = item.TableCurrentStatus switch
+                        {
+                            "Available" => "bg-success-subtle text-success border border-success-subtle",
+                            "InUse" => "bg-danger-subtle text-danger border border-danger-subtle",
+                            _ => "bg-secondary-subtle text-secondary border"
+                        };
+
+                        <tr>
+                            <td class="fw-bold text-primary">#BK-@item.BookingId</td>
+                            <td>
+                                <div class="fw-semibold">@item.CustomerName</div>
+                                @if (!string.IsNullOrWhiteSpace(item.CustomerPhone))
+                                {
+                                    <div class="small text-muted"><i class="bi bi-telephone me-1"></i>@item.CustomerPhone</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(item.Notes))
+                                {
+                                    <div class="small text-secondary fst-italic mt-1">
+                                        <i class="bi bi-chat-left-text me-1"></i>"@item.Notes"
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-bold">Bàn @item.TableCode</div>
+                                <div class="small text-muted">@item.TableTypeName • Tầng @item.FloorNumber</div>
+                                <span class="badge @tableStatusBadge mt-1">
+                                    Hiện tại: @item.TableDisplayStatus
+                                </span>
+                            </td>
+                            <td>
+                                <div class="fw-bold text-dark">
+                                    <i class="bi bi-calendar-event me-1 text-primary"></i>@startVn.ToString("dd/MM/yyyy HH:mm")
+                                </div>
+                                <div class="small text-danger fw-semibold">
+                                    Giữ chỗ đến: @holdVn.ToString("HH:mm") (+15p)
+                                </div>
+                                <div class="small text-muted">
+                                    Cần trống trước: @vacateVn.ToString("HH:mm") (-5p)
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge @statusBadge">@item.DisplayStatus</span>
+                                @if (item.CheckedInAtUtc.HasValue)
+                                {
+                                    <div class="small text-success mt-1">
+                                        Check-in: @item.CheckedInAtUtc.Value.AddHours(7).ToString("HH:mm")
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <div class="scenario-box">
+                                    <div class="mb-1">
+                                        <span class="badge @item.ScenarioBadgeClass">@item.ScenarioTitle</span>
+                                    </div>
+                                    <div class="small text-secondary">@item.BusinessGuidance</div>
+                                    @if (!string.IsNullOrWhiteSpace(item.CancellationReason))
+                                    {
+                                        <div class="small text-danger mt-1">Lý do: @item.CancellationReason</div>
+                                    }
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex flex-column align-items-end gap-2">
+                                    @* 1. Nút Check-in đúng giờ hoặc muộn <= 15p *@
+                                    @if (item.CanCheckInNormal)
+                                    {
+                                        <div class="d-flex gap-2">
+                                            <form asp-controller="Booking" asp-action="CheckIn" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="bookingId" value="@item.BookingId" />
+                                                <input type="hidden" name="allowEarly" value="false" />
+                                                <input type="hidden" name="keyword" value="@Model.Keyword" />
+                                                <input type="hidden" name="status" value="@Model.StatusFilter" />
+                                                <input type="hidden" name="date" value="@dateValue" />
+                                                <button type="submit" class="btn btn-success btn-sm fw-semibold">
+                                                    <i class="bi bi-check2-circle me-1"></i>Xác nhận Check-in
+                                                </button>
+                                            </form>
+
+                                            @if (item.CanCancel)
+                                            {
+                                                <form asp-controller="Booking" asp-action="Cancel" method="post" class="d-inline"
+                                                      onsubmit="return confirm('Xác nhận hủy lịch đặt bàn #BK-@item.BookingId?');">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="bookingId" value="@item.BookingId" />
+                                                    <input type="hidden" name="keyword" value="@Model.Keyword" />
+                                                    <input type="hidden" name="status" value="@Model.StatusFilter" />
+                                                    <input type="hidden" name="date" value="@dateValue" />
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm">Hủy</button>
+                                                </form>
+                                            }
+                                        </div>
+                                    }
+                                    @* 2. Nút Check-in phục vụ sớm (khi khách đến sớm) *@
+                                    else if (item.CanCheckInEarly)
+                                    {
+                                        <div class="d-flex gap-2">
+                                            <form asp-controller="Booking" asp-action="CheckIn" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="bookingId" value="@item.BookingId" />
+                                                <input type="hidden" name="allowEarly" value="true" />
+                                                <input type="hidden" name="keyword" value="@Model.Keyword" />
+                                                <input type="hidden" name="status" value="@Model.StatusFilter" />
+                                                <input type="hidden" name="date" value="@dateValue" />
+                                                <button type="submit" class="btn btn-info btn-sm text-white fw-semibold">
+                                                    <i class="bi bi-lightning-charge-fill me-1"></i>Check-in phục vụ sớm
+                                                </button>
+                                            </form>
+
+                                            @if (item.CanCancel)
+                                            {
+                                                <form asp-controller="Booking" asp-action="Cancel" method="post" class="d-inline"
+                                                      onsubmit="return confirm('Xác nhận hủy lịch đặt bàn #BK-@item.BookingId?');">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="bookingId" value="@item.BookingId" />
+                                                    <input type="hidden" name="keyword" value="@Model.Keyword" />
+                                                    <input type="hidden" name="status" value="@Model.StatusFilter" />
+                                                    <input type="hidden" name="date" value="@dateValue" />
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm">Hủy</button>
+                                                </form>
+                                            }
+                                        </div>
+                                    }
+
+                                    @* 3. Sau khi đã Check-in: Nhân viên nhấn chọn bàn và mở phiên chơi *@
+                                    @if (item.CanAssignTableAndOpen)
+                                    {
+                                        <div class="assign-box text-start w-100">
+                                            <div class="small fw-bold text-success mb-1">
+                                                <i class="bi bi-hand-index-thumb me-1"></i>Chọn bàn mở phiên chơi:
+                                            </div>
+                                            @if (Model.AvailableTables.Any())
+                                            {
+                                                <form asp-controller="Booking" asp-action="AssignTable" method="post" class="d-flex flex-column gap-2">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="bookingId" value="@item.BookingId" />
+                                                    <input type="hidden" name="keyword" value="@Model.Keyword" />
+                                                    <input type="hidden" name="status" value="@Model.StatusFilter" />
+                                                    <input type="hidden" name="date" value="@dateValue" />
+
+                                                    <select name="selectedTableId" class="form-select form-select-sm">
+                                                        @foreach (var tbl in Model.AvailableTables)
+                                                        {
+                                                            var isBookedTable = tbl.TableId == item.TableId;
+                                                            <option value="@tbl.TableId" selected="@isBookedTable">
+                                                                Bàn @tbl.TableCode (@tbl.TableTypeName - Tầng @tbl.FloorNumber) @(isBookedTable ? "★ Bàn khách đặt" : "• Bàn trống thay thế")
+                                                            </option>
+                                                        }
+                                                    </select>
+                                                    <button type="submit" class="btn btn-danger btn-sm fw-semibold w-100">
+                                                        🎱 Chọn bàn & Mở phiên chơi
+                                                    </button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <div class="small text-danger">
+                                                    Hiện chưa có bàn nào đang trống. Vui lòng kết thúc hoặc chuyển bàn trên sơ đồ bàn trước.
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else if (item.LinkedSessionId.HasValue)
+                                    {
+                                        <a asp-controller="Table" asp-action="Index" class="btn btn-outline-success btn-sm">
+                                            <i class="bi bi-play-fill me-1"></i>Đang chơi (Phiên #@item.LinkedSessionId)
+                                        </a>
+                                    }
+                                    else if (item.Status == "NoShow" || item.Status == "Cancelled")
+                                    {
+                                        <a asp-controller="Table" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                                            <i class="bi bi-box-arrow-up-right me-1"></i>Mở bàn khách vãng lai
+                                        </a>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    @* Tình huống 5: Không tìm thấy booking *@
+                    <tr>
+                        <td colspan="7" class="text-center py-5">
+                            <div class="mx-auto" style="max-width: 520px;">
+                                <div class="fs-2 mb-2">🔍</div>
+                                <h6 class="fw-bold text-dark mb-1">Tình huống: Không tìm thấy booking</h6>
+                                <p class="text-muted small mb-3">
+                                    Không tìm thấy lịch đặt bàn nào khớp với thông tin tra cứu.
+                                    <strong>Hướng dẫn xử lý:</strong> Kiểm tra lại SĐT / Tên khách hàng; nếu khách chưa có booking, chuyển sang quy trình mở bàn trực tiếp cho khách đến quán.
+                                </p>
+                                <div class="d-flex justify-content-center gap-2">
+                                    <a asp-controller="Booking" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                                        Xem toàn bộ danh sách
+                                    </a>
+                                    <a asp-controller="Table" asp-action="Index" class="btn btn-danger btn-sm fw-semibold">
+                                        🎱 Chuyển sang Mở bàn trực tiếp (Khách vãng lai)
+                                    </a>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -17,8 +17,13 @@
         </div>
         <div class="sidebar-nav">
             <div class="nav-section-label">NGHIỆP VỤ</div>
-            <a class="sidebar-link active" asp-controller="Table" asp-action="Index">
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
+               asp-controller="Table" asp-action="Index">
                 <i class="bi bi-grid-3x3"></i> Quản lý bàn
+            </a>
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
+               asp-controller="Booking" asp-action="Index">
+                <i class="bi bi-calendar-check"></i> Quản lý đặt bàn & Check-in
             </a>
         </div>
         <div class="sidebar-footer">
