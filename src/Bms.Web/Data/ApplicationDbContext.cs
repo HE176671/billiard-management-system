@@ -12,6 +12,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<TableType> TableTypes => Set<TableType>();
     public DbSet<BilliardTable> BilliardTables => Set<BilliardTable>();
+    public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<PlaySession> PlaySessions => Set<PlaySession>();
     public DbSet<PlaySessionTableSegment> PlaySessionTableSegments => Set<PlaySessionTableSegment>();
 

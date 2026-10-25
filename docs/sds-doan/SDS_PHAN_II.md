@@ -2,386 +2,325 @@
 
 ## 1. Quản lý bàn và phiên chơi
 
+Phần này mô tả ba chức năng của màn hình Quản lý bàn: **Mở bàn**, **Đóng bàn** và **Chuyển bàn**. Các sơ đồ bám theo code thật: `TableController`, `TableSessionService`, `table-management.js` và các stored procedure trong `BMS_Database_Starter/06_PlaySessionEnhancements.sql`. Tiền giờ chỉ tính trên SQL Server, giao diện và C# không tính tiền.
+
 ### 1.1 Class Diagram
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'textColor': '#000000', 'noteBkgColor': '#ffffff', 'noteBorderColor': '#000000', 'noteTextColor': '#000000', 'fontFamily': 'Arial'}}}%%
 classDiagram
-    class TableController {
-        -ITableSessionService _tableSessionService
-        +Index() Task~IActionResult~
-        +GetTableCardsPartial() Task~IActionResult~
-        +GetTableDetail(int tableId) Task~IActionResult~
-        +OpenSession(OpenSessionRequest request) Task~IActionResult~
-        +CloseSession(CloseSessionRequest request) Task~IActionResult~
+    direction TB
+
+    class Controller {
+        <<framework>>
     }
-    class StaffController {
-        +Index() IActionResult
+    class TableController {
+        +OpenSession(request) Task
+        +CloseSession(request) Task
+        +GetCloseSummary(sessionId) Task
+        +TransferSession(request) Task
     }
     class ITableSessionService {
         <<interface>>
-        +GetTableCardsAsync() Task~List~TableCardViewModel~~
-        +GetTableDetailAsync(int tableId) Task~TableDetailViewModel?~
-        +OpenSessionAsync(int tableId, string staffId) Task~TableOperationResult~
-        +CloseSessionAsync(int sessionId, string staffId) Task~TableOperationResult~
+        +OpenSessionAsync(tableId, staffId, mode, minutes) Task
+        +CloseSessionAsync(sessionId, staffId) Task
+        +GetCloseSummaryAsync(sessionId) Task
+        +TransferSessionAsync(sessionId, newTableId, staffId) Task
     }
     class TableSessionService {
-        -ApplicationDbContext _context
-        -ILogger _logger
-        +GetTableCardsAsync() Task~List~TableCardViewModel~~
-        +GetTableDetailAsync(int tableId) Task~TableDetailViewModel?~
-        +OpenSessionAsync(int tableId, string staffId) Task~TableOperationResult~
-        +CloseSessionAsync(int sessionId, string staffId) Task~TableOperationResult~
-        +MapDisplayStatus(string status)$ string
-        -HandleSqlException(SqlException ex, string operationName, int targetId) TableOperationResult
-        -MapErrorCode(int errorNumber)$ string
+        +OpenSessionAsync(tableId, staffId, mode, minutes) Task
+        +CloseSessionAsync(sessionId, staffId) Task
+        +GetCloseSummaryAsync(sessionId) Task
+        +TransferSessionAsync(sessionId, newTableId, staffId) Task
     }
     class ApplicationDbContext {
-        +DbSet~TableType~ TableTypes
-        +DbSet~BilliardTable~ BilliardTables
-        +DbSet~PlaySession~ PlaySessions
-    }
-    class ILogger {
-        <<interface>>
+        +DbSet TableTypes
+        +DbSet BilliardTables
+        +DbSet PlaySessions
+        +DbSet PlaySessionTableSegments
     }
     class TableType {
         +int Id
         +string Name
-        +decimal HourlyRate
-        +ICollection~BilliardTable~ BilliardTables
+        +ICollection BilliardTables
     }
     class BilliardTable {
         +int Id
         +string TableCode
-        +int TableTypeId
         +string Status
-        +TableType TableType
-        +ICollection~PlaySession~ PlaySessions
+        +ICollection PlaySessions
     }
     class PlaySession {
         +int Id
         +int TableId
         +string Status
-        +DateTime StartAtUtc
-        +DateTime? EndAtUtc
-        +decimal? PlaytimeAmount
-        +decimal HourlyRateSnapshot
-        +int? BookingId
-        +string? CustomerId
-        +string OpenedById
-        +string? ClosedById
-        +BilliardTable BilliardTable
+        +decimal PlaytimeAmount
+        +ICollection Segments
     }
-    class TableCardViewModel {
-        +int Id
-        +string TableCode
-        +string Status
-        +string DisplayStatus
-        +int? ActiveSessionId
-        +DateTime? SessionStartUtc
-        +DateTime ServerTimeUtc
-    }
-    class TableDetailViewModel {
-        +int TableId
-        +string TableCode
-        +string Status
-        +string DisplayStatus
-        +int? SessionId
-        +DateTime? StartAtUtc
-        +DateTime? EndAtUtc
-        +decimal? PlaytimeAmount
-        +string? CustomerFullName
-        +DateTime ServerTimeUtc
-    }
-    class OpenSessionRequest {
-        +int TableId
-    }
-    class CloseSessionRequest {
+    class PlaySessionTableSegment {
         +int SessionId
+        +int TableId
+        +decimal HourlyRateSnapshot
+        +DateTime StartAtUtc
+        +DateTime EndAtUtc
+    }
+    class CloseSummaryViewModel {
+        +int SessionId
+        +DateTime BillingStartAtUtc
+        +DateTime BillingEndPreviewAtUtc
+        +int BilledMinutes
+        +decimal EstimatedAmount
     }
     class TableOperationResult {
         +bool Success
-        +int? ErrorCode
-        +string? Message
-        +bool AutoReload
-        +object? Data
-        +Ok(object? data, string? message)$ TableOperationResult
-        +Fail(int? errorCode, string? message, bool autoReload)$ TableOperationResult
+        +int ErrorCode
+        +string Message
+        +Ok(data, message) TableOperationResult
+        +Fail(code, message, reload) TableOperationResult
     }
 
-    StaffController ..> TableController : redirects
-    TableController --> ITableSessionService : _tableSessionService
-    TableController ..> OpenSessionRequest : input
-    TableController ..> CloseSessionRequest : input
-    TableController ..> TableOperationResult : output JSON
-    ITableSessionService <|.. TableSessionService : implements
-    TableSessionService --> ApplicationDbContext : _context
-    TableSessionService --> ILogger : _logger
-    TableSessionService ..> TableCardViewModel : produces
-    TableSessionService ..> TableDetailViewModel : produces
-    TableSessionService ..> TableOperationResult : produces
-    TableType "1" <-- "0..*" BilliardTable : TableType / BilliardTables
-    BilliardTable "1" <-- "0..*" PlaySession : BilliardTable / PlaySessions
-    ApplicationDbContext ..> TableType : DbSet
-    ApplicationDbContext ..> BilliardTable : DbSet
-    ApplicationDbContext ..> PlaySession : DbSet
+    Controller <|-- TableController
+    ITableSessionService <|.. TableSessionService
+
+    TableController --> ITableSessionService : "dùng qua DI"
+    TableSessionService --> ApplicationDbContext : "dùng qua DI"
+    ApplicationDbContext --> TableType : "DbSet"
+    ApplicationDbContext --> BilliardTable : "DbSet"
+    ApplicationDbContext --> PlaySession : "DbSet"
+    ApplicationDbContext --> PlaySessionTableSegment : "DbSet"
+    PlaySessionTableSegment --> BilliardTable : "thuộc bàn"
+
+    TableType "1" o-- "*" BilliardTable : "có nhiều bàn"
+    BilliardTable "1" o-- "*" PlaySession : "có nhiều phiên"
+    PlaySession "1" o-- "*" PlaySessionTableSegment : "có nhiều đoạn bàn"
+
+    TableController ..> TableOperationResult : "trả về JSON"
+    ITableSessionService ..> TableOperationResult : "kiểu trả về"
+    ITableSessionService ..> CloseSummaryViewModel : "kiểu trả về"
+    TableSessionService ..> TableOperationResult : "tạo kết quả"
+    TableSessionService ..> CloseSummaryViewModel : "tạo tóm tắt"
 ```
 
-**Hình II.1 — Class Diagram Phân hệ Quản lý Bàn và Phiên chơi.** Các thành viên trong sơ đồ phản ánh chính xác 100% mã nguồn thực tế. Nhằm đảm bảo sơ đồ trực quan và vừa vặn một trang báo cáo, các thuộc tính của Entity và ViewModel được rút gọn tập trung vào các trường khóa và trạng thái phục vụ luồng nghiệp vụ. 
+**Hình II.1 — Class Diagram cho ba chức năng Mở bàn, Đóng bàn, Chuyển bàn.** Sơ đồ gồm 11 hộp được rút gọn theo quy tắc: mỗi hộp tối đa 5 thành viên; `TableController` và `TableSessionService` chỉ giữ 4 phương thức công khai phục vụ trực tiếp ba chức năng; các phương thức private (`HandleSqlException`, `MapErrorCode`), dependency `ILogger` và các lớp Request nhỏ được chuyển xuống bảng giải thích để đảm bảo sơ đồ trực quan, không bị bè ngang. Kiểu dữ liệu được viết đơn giản (bỏ generic `Task<...>`, `DbSet<...>`) để biểu diễn rõ ràng.
 
-> [!NOTE]
-> - **Kiểm soát quan hệ:** Entity `PlaySession` chỉ lưu các scalar foreign key (`BookingId`, `CustomerId`, `OpenedById`, `ClosedById`) mà không khai báo navigation property tới `ApplicationUser` hay `Booking`. Việc đọc họ tên khách hàng (`CustomerFullName`) được `TableSessionService` thực hiện qua phép LINQ JOIN với bảng `_context.Users`.
-> - **Cơ chế gọi Stored Procedure:** `TableSessionService` sử dụng kết nối `SqlConnection` lấy từ `_context.Database.GetDbConnection()` để gọi trực tiếp các Stored Procedure `usp_OpenSession` và `usp_CloseSession`, dùng chung connection pool với Entity Framework Core.
-> - **Điều hướng:** `StaffController` chỉ chứa action `Index()` thực hiện chuyển hướng (`RedirectToAction`) sang `TableController.Index()`.
+**Quan hệ trong sơ đồ:**
+
+- **IS-A (kế thừa hoặc hiện thực):** `TableController` kế thừa `Controller` của ASP.NET Core MVC. `TableSessionService` hiện thực giao diện `ITableSessionService`.
+- **HAS-A (kết tập, hình thoi rỗng):** `TableType` có nhiều `BilliardTable`, `BilliardTable` có nhiều `PlaySession`, `PlaySession` có nhiều `PlaySessionTableSegment` (thể hiện qua các navigation property `BilliardTables`, `PlaySessions`, `Segments`).
+- **Liên kết (association, đường liền mũi tên):** `TableController` tham chiếu `ITableSessionService` qua cơ chế DI của ASP.NET Core; `TableSessionService` tham chiếu `ApplicationDbContext` qua DI; `ApplicationDbContext` khai báo các `DbSet` của bốn entity; `PlaySessionTableSegment` trỏ về `BilliardTable`.
+- **Phụ thuộc (dependency, đường đứt mũi tên hở):** `TableController` trả về kết quả JSON dạng `TableOperationResult`. `ITableSessionService` và `TableSessionService` dùng `TableOperationResult` và `CloseSummaryViewModel` làm kiểu dữ liệu trả về cho các tác vụ nghiệp vụ.
+
+Trong ba chức năng này, `ApplicationDbContext` chỉ được dùng để lấy đối tượng kết nối `SqlConnection` (`Database.GetDbConnection()`), toàn bộ thao tác cập nhật dữ liệu do các stored procedure trong SQL Server đảm nhiệm.
 
 | Class | Trách nhiệm |
 |---|---|
-| `TableController` | Tiếp nhận yêu cầu HTTP từ giao diện nhân viên, kiểm tra quyền và xác thực token CSRF, trích xuất `StaffId` từ `ClaimsPrincipal`, điều phối service và trả về Razor View hoặc JSON. |
-| `StaffController` | Điểm vào nghiệp vụ của nhân viên từ layout chung; chuyển hướng sang `TableController.Index()`. |
-| `ITableSessionService` | Interface trừu tượng hóa nghiệp vụ bàn và phiên chơi, cho phép phân tách lỏng và phục vụ kiểm thử đơn vị. |
-| `TableSessionService` | Triển khai logic nghiệp vụ bàn: đọc danh sách bàn và chi tiết bàn qua EF Core, gọi Stored Procedure qua ADO.NET, dịch mã lỗi SQL sang tiếng Việt và điều phối logging qua `ILogger`. |
-| `ApplicationDbContext` | Lớp ngữ cảnh cơ sở dữ liệu Entity Framework Core; cung cấp các `DbSet` (`TableTypes`, `BilliardTables`, `PlaySessions`) và quản lý kết nối CSDL chung. |
-| `ILogger` | Thành phần logging framework ghi nhận các cảnh báo nghiệp vụ (`LogWarning`) và nhật ký lỗi hệ thống (`LogError`). |
-| `TableType` | Thực thể ánh xạ bảng `TableTypes`, định nghĩa danh mục loại bàn (Pool, Carom) và đơn giá giờ cố định. |
-| `BilliardTable` | Thực thể ánh xạ bảng `BilliardTables`, quản lý mã bàn, vị trí tầng, trạng thái vật lý và liên kết phiên chơi. |
-| `PlaySession` | Thực thể ánh xạ bảng `PlaySessions`, lưu vết vòng đời phiên chơi từ khi mở đến khi đóng và chốt tiền giờ. |
-| `TableCardViewModel` | Mô hình dữ liệu hiển thị thẻ bàn trên sơ đồ POS (mã bàn, trạng thái, giờ bắt đầu phiên và thời gian server UTC). |
-| `TableDetailViewModel` | Mô hình dữ liệu hiển thị panel chi tiết bên phải (thông tin bàn, khách hàng, thời gian chơi, giá snapshot và tiền giờ chốt). |
-| `OpenSessionRequest` | Mô hình nhận dữ liệu `[FromForm]` khi nhân viên yêu cầu mở bàn (`TableId`). |
-| `CloseSessionRequest` | Mô hình nhận dữ liệu `[FromForm]` khi nhân viên yêu cầu đóng phiên (`SessionId`). |
-| `TableOperationResult` | Cấu trúc phản hồi JSON đồng nhất cho mọi thao tác POST: cờ thành công, mã lỗi, thông báo hiển thị, dữ liệu kèm theo và cờ tự động tải lại lưới (`AutoReload`). |
+| Controller | Lớp cơ sở MVC của framework ASP.NET Core, cung cấp `User`, `Json`, `View`, `ModelState` cho controller con |
+| TableController | Tiếp nhận yêu cầu HTTP cho màn hình Quản lý bàn. Yêu cầu quyền role `Staff` hoặc `Admin`, bảo vệ CSRF bằng `[ValidateAntiForgeryToken]` cho các action POST. Lấy `StaffId` trực tiếp từ `User` (`ClaimsPrincipal`), gọi service và trả kết quả JSON dạng `TableOperationResult` |
+| ITableSessionService | Giao diện dịch vụ phiên chơi, khai báo 4 phương thức công khai: `OpenSessionAsync`, `CloseSessionAsync`, `GetCloseSummaryAsync`, `TransferSessionAsync` (cùng các phương thức mở rộng khác) |
+| TableSessionService | Cài đặt nghiệp vụ phiên chơi: thực thi stored procedure qua ADO.NET `SqlConnection` lấy từ DbContext; gọi hàm `GetCloseSummaryAsync` tính tiền tạm tính; bắt `SqlException` qua phương thức private `HandleSqlException`, dịch mã lỗi nghiệp vụ sang tiếng Việt qua `MapErrorCode`, ghi log qua `ILogger` |
+| ILogger | Ghi log hệ thống cho `TableSessionService`: `LogWarning` cho các trường hợp nghiệp vụ bị từ chối, `LogError` cho các lỗi hệ thống hoặc dữ liệu bất thường (được rút khỏi hình để đơn giản hóa quan hệ) |
+| ApplicationDbContext | Ngữ cảnh EF Core, quản lý các `DbSet` thực thể. Trong ba chức năng phiên chơi, lớp này cung cấp kết nối `Database.GetDbConnection()` dùng chung connection pool với EF Core |
+| PlaySession | Entity bảng `PlaySessions`: đại diện cho một phiên chơi bida, lưu hình thức (`SessionMode`: Open/Timed), thời gian bắt đầu, kết thúc, mốc tính tiền (`BillingStartAtUtc`, `BillingEndAtUtc`), giờ dự kiến kết thúc (`PlannedEndAtUtc`), tiền giờ chơi (`PlaytimeAmount`) và danh sách các đoạn bàn (`Segments`) |
+| PlaySessionTableSegment | Entity bảng `PlaySessionTableSegments`: một đoạn chơi trên một bàn cụ thể, lưu đơn giá chốt tại thời điểm chơi của bàn đó (`HourlyRateSnapshot`), thời điểm bắt đầu (`StartAtUtc`) và kết thúc (`EndAtUtc`). Khi chuyển bàn, đoạn cũ được đóng và đoạn mới được mở |
+| BilliardTable | Entity bảng `BilliardTables`: đại diện cho bàn bida vật lý, mã bàn (`TableCode`), trạng thái (`Status`: Available, InUse, AwaitingPayment, Maintenance, Inactive) và tập hợp các phiên chơi |
+| TableType | Entity bảng `TableTypes`: danh mục loại bàn (Pool, Carom) và đơn giá theo giờ (`HourlyRate`) |
+| OpenSessionRequest | DTO nhận dữ liệu form mở bàn: `TableId`, `SessionMode`, `PlannedMinutes` (được rút khỏi hình để giữ giới hạn 11 hộp) |
+| CloseSessionRequest | DTO nhận dữ liệu form đóng bàn: `SessionId` (được rút khỏi hình) |
+| TransferSessionRequest | DTO nhận dữ liệu form chuyển bàn: `SessionId`, `NewTableId` (được rút khỏi hình) |
+| CloseSummaryViewModel | ViewModel chứa dữ liệu tóm tắt tạm tính trước khi đóng bàn: `SessionId`, `BillingStartAtUtc`, `BillingEndPreviewAtUtc`, `BilledMinutes`, `MinimumChargeApplied`, `EstimatedAmount` |
+| TableOperationResult | Đối tượng chuẩn hóa kết quả thao tác trả về cho client: `Success`, `ErrorCode`, `Message`, `AutoReload`, `Data`; khởi tạo nhanh qua hai phương thức tĩnh `Ok` và `Fail` |
 
 ---
 
-### 1.2 Sequence Diagram — Xem danh sách bàn và theo dõi thời gian thực
-
-**Actor:** Nhân viên (`Staff`) hoặc Quản trị viên (`Admin`).  
-**Route:** `GET /Table`, `GET /Table/GetTableCardsPartial`, `GET /Table/GetTableDetail`.  
-**Điều kiện trước:** Người dùng đã đăng nhập với Cookie xác thực hợp lệ và thuộc role `Staff` hoặc `Admin` (`[Authorize(Roles = "Staff,Admin")]`).  
-**Kết quả:** Hiển thị sơ đồ bàn POS; đồng hồ đếm giờ tự động cập nhật thời gian thực; panel chi tiết hiển thị đầy đủ thông tin bàn được chọn.
+### 1.2 Sequence Diagram: Mở bàn
 
 ```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#ffffff',
-    'primaryTextColor': '#000000',
-    'primaryBorderColor': '#000000',
-    'lineColor': '#000000',
-    'textColor': '#000000',
-    'actorBkg': '#ffffff',
-    'actorBorder': '#000000',
-    'actorTextColor': '#000000',
-    'actorLineColor': '#000000',
-    'signalColor': '#000000',
-    'signalTextColor': '#000000',
-    'labelBoxBkgColor': '#ffffff',
-    'labelBoxBorderColor': '#000000',
-    'labelTextColor': '#000000',
-    'noteBkgColor': '#ffffff',
-    'noteBorderColor': '#000000',
-    'noteTextColor': '#000000',
-    'activationBkgColor': '#ffffff',
-    'activationBorderColor': '#000000',
-    'fontFamily': 'Arial'
-  },
-  'sequence': {
-    'mirrorActors': false,
-    'showSequenceNumbers': false,
-    'actorMargin': 50,
-    'messageMargin': 35
-  }
-}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'textColor': '#000000', 'actorBkg': '#ffffff', 'actorBorder': '#000000', 'actorTextColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000', 'labelBoxBkgColor': '#ffffff', 'labelBoxBorderColor': '#000000', 'labelTextColor': '#000000', 'noteBkgColor': '#ffffff', 'noteBorderColor': '#000000', 'noteTextColor': '#000000', 'activationBkgColor': '#ffffff', 'activationBorderColor': '#000000', 'fontFamily': 'Arial'}, 'sequence': {'mirrorActors': false, 'showSequenceNumbers': false, 'wrap': true, 'width': 150, 'actorMargin': 30, 'messageMargin': 30, 'noteMargin': 10, 'boxMargin': 8, 'actorFontSize': 16, 'messageFontSize': 16, 'noteFontSize': 14}}}%%
 sequenceDiagram
-    actor Staff as Staff
-    participant View as View (table-management.js)
-    participant TableController as TableController
-    participant Auth as Auth pipeline
-    participant TableSessionService as TableSessionService
-    participant ApplicationDbContext as ApplicationDbContext
-    participant DB as SQL Server (BilliardDB)
+    actor NV as Nhân viên
+    participant GD as Giao diện
+    participant CT as TableController
+    participant XT as Xác thực
+    participant SV as TableSessionService
+    participant SQL as SQL Server
 
-    Staff->>View: 1 : Truy cập /Table
-    activate View
-    View->>TableController: 2 : GET /Table/Index
-    activate TableController
-    TableController->>Auth: 3 : Authorize(Roles = "Staff,Admin")
-    activate Auth
-    Auth--)Staff: 4 : [Chưa đăng nhập] 302 Redirect /Account/Login
-    Auth--)Staff: 5 : [Sai vai trò] 302 Redirect /Account/AccessDenied
-    Auth--)TableController: 6 : [Hợp lệ] Tiếp tục xử lý request
-    deactivate Auth
-    TableController->>TableSessionService: 7 : GetTableCardsAsync()
-    activate TableSessionService
-    TableSessionService->>ApplicationDbContext: 8 : LINQ query BilliardTables, TableTypes, PlaySessions
-    activate ApplicationDbContext
-    ApplicationDbContext->>DB: 9 : SELECT dữ liệu bàn và phiên Active
-    activate DB
-    DB--)TableSessionService: 10 : Trả về dữ liệu bàn và phiên Active
-    deactivate DB
-    deactivate ApplicationDbContext
-    TableSessionService--)TableController: 11 : List TableCardViewModel kèm ServerTimeUtc
-    deactivate TableSessionService
-    TableController--)View: 12 : View("Index", TableManagementViewModel)
-    deactivate TableController
-    View--)Staff: 13 : Hiển thị sơ đồ bàn và chạy đồng hồ thời gian thực
-    deactivate View
-
-    Note over View,TableController: JavaScript định kỳ gọi GET /Table/GetTableCardsPartial mỗi 10 giây (pollTableGrid) để cập nhật lưới bàn
-
-    Staff->>View: 14 : Click chọn thẻ bàn (handleTableSelect)
-    activate View
-    View->>TableController: 15 : GET /Table/GetTableDetail?tableId=id
-    activate TableController
-    TableController->>TableSessionService: 16 : GetTableDetailAsync(tableId)
-    activate TableSessionService
-    TableSessionService->>ApplicationDbContext: 17 : LINQ query BilliardTable, PlaySession, User
-    activate ApplicationDbContext
-    ApplicationDbContext->>DB: 18 : SELECT chi tiết bàn và thông tin khách
-    activate DB
-    DB--)TableSessionService: 19 : Trả về dữ liệu chi tiết bàn
-    deactivate DB
-    deactivate ApplicationDbContext
-    TableSessionService--)TableController: 20 : TableDetailViewModel
-    deactivate TableSessionService
-    TableController--)View: 21 : Json(detail)
-    deactivate TableController
-    View--)Staff: 22 : Hiển thị panel chi tiết bên phải
-    deactivate View
+    NV->>GD: 1 : Bấm mở bàn
+    activate GD
+    GD->>GD: 2 : Hiện form mở bàn
+    NV->>GD: 3 : Xác nhận mở bàn
+    GD->>CT: 4 : POST /Table/OpenSession
+    activate CT
+    CT->>XT: 5 : Kiểm tra quyền và token
+    activate XT
+    XT--)GD: 6 : [Từ chối] Chuyển hướng hoặc lỗi 400
+    GD--)NV: 7 : Báo phiên đăng nhập hết hạn
+    XT--)CT: 8 : [Hợp lệ] Cho phép thực thi
+    deactivate XT
+    CT->>CT: 9 : Lấy StaffId từ User
+    CT->>SV: 10 : OpenSessionAsync
+    activate SV
+    SV->>SQL: 11 : EXEC dbo.usp_OpenSession
+    activate SQL
+    SQL--)SV: 12 : [Thành công] Thông tin phiên mở
+    SQL--)SV: 13 : [Lỗi] Mã 51402, 51407, 51410
+    deactivate SQL
+    SV--)CT: 14 : TableOperationResult
+    deactivate SV
+    CT--)GD: 15 : JSON kết quả
+    deactivate CT
+    GD--)NV: 16 : Cập nhật lưới và chi tiết bàn
+    deactivate GD
 ```
 
-**Mô tả chi tiết các cơ chế phía trình duyệt (`table-management.js`):**
-1. **Đồng hồ thời gian thực và Bù lệch giờ (Clock Skew):**
-   - Khi tải trang hoặc nhận HTML từ polling, JavaScript đọc thuộc tính `data-server-time` của phần tử `#table-grid` để tính độ lệch thời gian: `deltaOffset = Date.now() - parsedServerTime`.
-   - Một hàm đếm nhịp `updateClocks` được kích hoạt mỗi 1 giây (`setInterval(updateClocks, 1000)`). Hàm này duyệt qua tất cả thẻ bàn có thuộc tính `data-session-start`, tính số giây đã trôi qua dựa trên `(Date.now() - deltaOffset) - startParsed`, định dạng thành chuỗi `HH:mm:ss` và cập nhật trực tiếp vào DOM (`.table-clock`).
-   - Nếu panel chi tiết bên phải đang hiển thị và bàn đang chọn có phiên Active, trường `Duration` của panel cũng được cập nhật đồng thời mỗi giây.
-2. **Page Visibility API:**
-   - Script lắng nghe sự kiện `visibilitychange` trên `document`. Khi người dùng chuyển sang tab khác (`document.hidden = true`), quá trình polling định kỳ và cập nhật đồng hồ được tạm hoãn để tiết kiệm tài nguyên. Ngay khi tab được kích hoạt trở lại, script lập tức cập nhật lại đồng hồ và gửi một yêu cầu polling để làm mới lưới bàn.
-3. **Quản lý Panel chi tiết bên phải:**
-   - Mặc định khi tải trang, panel chi tiết được ẩn bằng class `d-none`.
-   - Khi nhân viên click vào một thẻ bàn hoặc nhấn `Enter`/`Space`, panel được hiển thị (`classList.remove('d-none')`), thẻ bàn được gắn viền sáng (`selected`) và gửi yêu cầu `GetTableDetail`.
-   - Nhân viên có thể đóng panel bằng nút đóng ✕ (`#btn-close-detail`) hoặc nhấn phím `Escape`. Khi đóng, hàm `closeDetailPanel` dọn dẹp các trường dữ liệu, bỏ viền sáng thẻ bàn và tự động trả con trỏ focus về thẻ bàn vừa thao tác (`lastSelectedCardId.focus()`) nhằm hỗ trợ điều hướng bàn phím hoàn hảo.
-   - Nếu qua một chu kỳ polling mà bàn đang chọn không còn tồn tại trên sơ đồ, hàm `resetDetailPanel` sẽ tự động ẩn panel để tránh hiển thị sai lệch.
+**Hình II.2 — Sequence Diagram: Mở bàn.** Sơ đồ gồm 16 thông điệp, điều phối giữa 6 thành phần chính. Các lời gọi nội bộ của Giao diện được gộp thành "Hiện form", các nhánh từ chối xác thực được gom thành một luồng phản hồi báo hết hạn phiên, và các bước truy cập kết nối ADO.NET được mô tả chi tiết trong Bảng II.1.
+
+- **Actor:** Nhân viên thu ngân hoặc Quản trị viên (`Staff`, `Admin`) thao tác trên giao diện POS.
+- **Route:** `POST /Table/OpenSession`. Dữ liệu gửi lên dạng form urlencoded gồm `TableId`, `SessionMode` ("Open" hoặc "Timed"), `PlannedMinutes` và token CSRF `__RequestVerificationToken`.
+- **Điều kiện trước:** Người dùng đã đăng nhập với vai trò hợp lệ, đã chọn một bàn đang ở trạng thái Trống (`Available`).
+- **Kết quả:** Phiên chơi mới được tạo ở trạng thái `Active`, bàn chuyển sang `InUse`, giao diện hiển thị thông báo thành công (kèm mốc giờ tính tiền và giờ dự kiến nếu có), lưới bàn và thông tin chi tiết bàn được cập nhật tự động.
+
+**Bảng II.1: Giải thích các bước trong quy trình Mở bàn**
+
+| Bước | Giải thích |
+|---|---|
+| 1 đến 3 | Nhân viên bấm nút mở bàn trên thẻ bàn hoặc bảng chi tiết (`handleOpenTable` trong `table-management.js`). Giao diện gọi hàm nội bộ `showOpenForm` để hiển thị modal/panel mở bàn, tính toán xem trước mốc giờ tính tiền (`updateOpenFormPreview`). Nhân viên chọn hình thức mở bàn: không giới hạn thời gian (`Open`) hoặc đăng ký thời gian (`Timed` kèm số phút là bội số của 15 từ 15 đến 720 phút), sau đó bấm xác nhận (`handleConfirmOpenSession`) |
+| 4 | Trình duyệt gửi yêu cầu `POST /Table/OpenSession` mang theo `TableId`, `SessionMode`, `PlannedMinutes` và `__RequestVerificationToken`. Cờ `isProcessing` được bật để chống gửi trùng lặp yêu cầu |
+| 5 đến 8 | Pipeline của ASP.NET Core kiểm tra cookie xác thực, vai trò người dùng (`[Authorize(Roles = "Staff,Admin")]`) và token chống giả mạo (`[ValidateAntiForgeryToken]`). Nếu chưa đăng nhập hoặc cookie hết hạn, hệ thống trả mã 302 chuyển hướng về `/Account/Login`; nếu sai vai trò, trả 302 về `/Account/AccessDenied` (trình duyệt tự theo chuyển hướng khiến JS nhận phản hồi là trang HTML với thuộc tính `response.redirected = true`); nếu thiếu hoặc sai token CSRF, trả mã lỗi HTTP 400. Khi rơi vào một trong ba trường hợp này (bước 6), Giao diện nhận biết và hiển thị toast báo phiên đăng nhập đã hết hạn, đồng thời dừng tiến trình làm mới tự động (`stopPolling`) ở bước 7. Nếu hợp lệ (bước 8), yêu cầu được chuyển tiếp vào action `OpenSession` của `TableController` |
+| 9 | `TableController` kiểm tra `ModelState.IsValid`. Tiếp đó, controller tự gọi nội bộ phương thức `User.FindFirstValue(ClaimTypes.NameIdentifier)` để lấy mã định danh nhân viên (`StaffId`) từ token định danh an toàn trên server, tuyệt đối không nhận `StaffId` từ client |
+| 10 | Controller gọi phương thức `_tableSessionService.OpenSessionAsync(request.TableId, staffId, sessionMode, request.PlannedMinutes)` |
+| 11 | `TableSessionService` lấy kết nối `SqlConnection` qua `_context.Database.GetDbConnection()` và mở kết nối nếu đang đóng. Dịch vụ tạo `SqlCommand` kiểu `StoredProcedure` gọi `dbo.usp_OpenSession` với các tham số: `@TableId`, `@StaffId`, `@BookingId = NULL`, `@CustomerId = NULL`, `@SessionMode`, `@PlannedMinutes`. Trong thủ tục: khóa bản ghi bàn bằng cú pháp `SELECT ... WITH (UPDLOCK, HOLDLOCK)` để chống tranh chấp; kiểm tra bàn phải đang `Available` (lỗi 51402); kiểm tra không trùng phiên `Active` (lỗi 51403); kiểm tra bàn không nằm trong khung giờ giữ chỗ đặt bàn (lỗi 51407); kiểm tra số phút hợp lệ (lỗi 51410). Sau đó, thủ tục chèn bản ghi vào `PlaySessions` với giờ bắt đầu `SYSUTCDATETIME()`, giờ tính tiền làm tròn LÊN mốc 15 phút kế tiếp bằng hàm `fn_CeilTo15Min`, chèn đoạn bàn ban đầu vào `PlaySessionTableSegments` và cập nhật bàn sang `InUse` |
+| 12 đến 13 | Nếu thành công (bước 12), thủ tục trả về tập kết quả gồm `SessionId`, `BillingStartAtUtc`, `PlannedEndAtUtc`, `SessionMode`. Nếu vi phạm quy tắc nghiệp vụ (bước 13), thủ tục thực thi lệnh `THROW` với các mã lỗi tiêu biểu: 51402 (bàn không trống), 51407 (bàn đang giữ chỗ), 51410 (thời gian đăng ký không hợp lệ); các lỗi khác như 51401 (sai quyền tài khoản), 51409 (sai hình thức mở) hoặc lỗi mất kết nối cơ sở dữ liệu được xử lý tương tự |
+| 14 | Trong trường hợp lỗi, service gọi phương thức private `HandleSqlException`, ghi log cảnh báo nghiệp vụ (`_logger.LogWarning`) hoặc log lỗi hệ thống (`_logger.LogError`), gọi `MapErrorCode` dịch mã lỗi thành thông báo tiếng Việt có dấu, và đóng gói kết quả thành đối tượng `TableOperationResult.Fail(errorCode, message, autoReload)`. Khi thành công, trả về `TableOperationResult.Ok(...)` mang theo dữ liệu phiên mở |
+| 15 | `TableController` tuần tự hóa đối tượng `TableOperationResult` thành JSON gửi về cho Giao diện |
+| 16 | JavaScript xử lý kết quả: nếu thất bại, hiển thị toast lỗi (nếu `autoReload = true` thì tải lại lưới bàn). Nếu thành công, hiển thị toast thông báo mở bàn kèm mốc giờ tính tiền, gọi `reloadTableGrid` (`GET /Table/GetTableCardsPartial`) để cập nhật lại lưới thẻ bàn và gọi `handleTableSelect` (`GET /Table/GetTableDetail`) để nạp chi tiết phiên chơi mới lên giao diện cho nhân viên theo dõi |
 
 ---
 
-### 1.3 Sequence Diagram — Mở bàn và đóng phiên chơi (Sơ đồ gộp)
-
-**Actor:** Nhân viên (`Staff`) hoặc Quản trị viên (`Admin`).  
-
-**Route:**
-- **OPEN:** `POST /Table/OpenSession` (nhận `TableId` và `__RequestVerificationToken`).
-- **CLOSE:** `POST /Table/CloseSession` (nhận `SessionId` và `__RequestVerificationToken`).
-
-**Điều kiện trước:**
-- **OPEN:** Bàn đang ở trạng thái `Available` (Trống); Cookie phiên làm việc hợp lệ với role `Staff` hoặc `Admin`.
-- **CLOSE:** Bàn đang ở trạng thái `InUse` và phiên chơi đang có `Status = 'Active'`; Cookie phiên làm việc hợp lệ với role `Staff` hoặc `Admin`.
-
-**Kết quả:**
-- **OPEN:** Bàn chuyển sang `InUse`, tạo bản ghi phiên mới với `Status = 'Active'` trong `PlaySessions`; đồng hồ bắt đầu chạy; hoặc nhận thông báo lỗi tiếng Việt nếu thao tác bị từ chối.
-- **CLOSE:** Phiên chơi chuyển sang `Status = 'Closed'`, tiền giờ được chốt; bàn chuyển sang trạng thái `AwaitingPayment` (chờ thanh toán); hiển thị số tiền giờ phải thu trên giao diện.
+### 1.3 Sequence Diagram: Đóng bàn
 
 ```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#ffffff',
-    'primaryTextColor': '#000000',
-    'primaryBorderColor': '#000000',
-    'lineColor': '#000000',
-    'textColor': '#000000',
-    'actorBkg': '#ffffff',
-    'actorBorder': '#000000',
-    'actorTextColor': '#000000',
-    'actorLineColor': '#000000',
-    'signalColor': '#000000',
-    'signalTextColor': '#000000',
-    'labelBoxBkgColor': '#ffffff',
-    'labelBoxBorderColor': '#000000',
-    'labelTextColor': '#000000',
-    'noteBkgColor': '#ffffff',
-    'noteBorderColor': '#000000',
-    'noteTextColor': '#000000',
-    'activationBkgColor': '#ffffff',
-    'activationBorderColor': '#000000',
-    'fontFamily': 'Arial'
-  },
-  'sequence': {
-    'mirrorActors': false,
-    'showSequenceNumbers': false,
-    'actorMargin': 50,
-    'messageMargin': 35
-  }
-}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'textColor': '#000000', 'actorBkg': '#ffffff', 'actorBorder': '#000000', 'actorTextColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000', 'labelBoxBkgColor': '#ffffff', 'labelBoxBorderColor': '#000000', 'labelTextColor': '#000000', 'noteBkgColor': '#ffffff', 'noteBorderColor': '#000000', 'noteTextColor': '#000000', 'activationBkgColor': '#ffffff', 'activationBorderColor': '#000000', 'fontFamily': 'Arial'}, 'sequence': {'mirrorActors': false, 'showSequenceNumbers': false, 'wrap': true, 'width': 150, 'actorMargin': 30, 'messageMargin': 30, 'noteMargin': 10, 'boxMargin': 8, 'actorFontSize': 16, 'messageFontSize': 16, 'noteFontSize': 14}}}%%
 sequenceDiagram
-    actor Staff as Staff
-    participant View as View (table-management.js)
-    participant TableController as TableController
-    participant Auth as Auth pipeline
-    participant TableSessionService as TableSessionService
-    participant ApplicationDbContext as ApplicationDbContext
-    participant DB as SQL Server (BilliardDB)
+    actor NV as Nhân viên
+    participant GD as Giao diện
+    participant CT as TableController
+    participant XT as Xác thực
+    participant SV as TableSessionService
+    participant SQL as SQL Server
 
-    Note over Staff,View: OPEN: Bấm OPEN TABLE (handleOpenTable). CLOSE: Bấm CLOSE TABLE và xác nhận dialog confirm (handleCloseTable)
-
-    Staff->>View: 1 : Bấm OPEN TABLE hoặc CLOSE TABLE
-    activate View
-    View->>View: 2 : getVerificationToken()
-    View->>TableController: 3 : POST /Table/OpenSession hoặc CloseSession
-    activate TableController
-    TableController->>Auth: 4 : Kiểm tra AntiForgeryToken và Authorize
-    activate Auth
-    Auth--)View: 5 : [Thiếu hoặc sai token] HTTP 400 Bad Request
-    Auth--)Staff: 6 : [Chưa đăng nhập hoặc hết phiên] 302 Redirect /Account/Login
-    Auth--)Staff: 7 : [Sai vai trò] 302 Redirect /Account/AccessDenied
-    Auth--)TableController: 8 : [Hợp lệ] Tiếp tục xử lý request
-    deactivate Auth
-    TableController->>TableController: 9 : staffId = User.FindFirstValue(ClaimTypes.NameIdentifier)
-    TableController--)View: 10 : [StaffId rỗng] HTTP 401 Unauthorized
-    TableController->>TableSessionService: 11 : OpenSessionAsync(tableId, staffId) hoặc CloseSessionAsync(sessionId, staffId)
-    activate TableSessionService
-    TableSessionService->>ApplicationDbContext: 12 : Database.GetDbConnection()
-    activate ApplicationDbContext
-    ApplicationDbContext--)TableSessionService: 13 : Trả về SqlConnection
-    deactivate ApplicationDbContext
-    TableSessionService->>DB: 14 : EXEC dbo.usp_OpenSession hoặc dbo.usp_CloseSession
-    activate DB
-
-    Note over TableSessionService,DB: OPEN: Khóa UPDLOCK/HOLDLOCK bàn trống, chèn PlaySession Active, trả về SessionId. CLOSE: Khóa bàn và phiên, tính tiền giờ làm tròn giây, chuyển AwaitingPayment, trả về PlaytimeAmount
-
-    DB--)TableSessionService: 15 : [Thành công] ResultSet (SessionId hoặc PlaytimeAmount)
-    TableSessionService--)TableController: 16 : [Thành công] TableOperationResult.Ok(data)
-    TableController--)View: 17 : [Thành công] HTTP 200 Json(result)
-    View->>TableController: 18 : reloadTableGrid() gọi GET /Table/GetTableCardsPartial
-    activate TableController
-    TableController--)View: 19 : Trả về PartialView cập nhật lưới bàn
-    deactivate TableController
-    View--)Staff: 20 : [Thành công] Hiện toast xanh showToast và cập nhật lưới bàn
-
-    DB--)TableSessionService: 21 : [Lỗi nghiệp vụ 51402/51407/51502] Ném SqlException
-    deactivate DB
-    TableSessionService->>TableSessionService: 22 : HandleSqlException ghi LogWarning và MapErrorCode dịch lỗi
-    TableSessionService->>TableSessionService: 23 : [Lỗi hệ thống] LogError ghi log lỗi hệ thống
-    TableSessionService--)TableController: 24 : [Lỗi] TableOperationResult.Fail(code, msg, autoReload)
-    deactivate TableSessionService
-    TableController--)View: 25 : [Lỗi] HTTP 200 Json(result)
-    deactivate TableController
-    View--)Staff: 26 : [Lỗi] Hiện toast đỏ showToast (tải lại lưới nếu autoReload=true)
-    deactivate View
-
-    Note over View,DB: Mã lỗi nghiệp vụ tiêu biểu: 51402 (bàn không trống), 51407 (bàn giữ chỗ booking), 51502 (phiên đã đóng bởi người khác)
+    GD->>CT: 1 : GET /Table/GetCloseSummary
+    activate CT
+    CT--)GD: 2 : Tóm tắt tiền tạm tính
+    deactivate CT
+    NV->>GD: 3 : Xác nhận đóng bàn
+    activate GD
+    GD->>CT: 4 : POST /Table/CloseSession
+    activate CT
+    CT->>XT: 5 : Kiểm tra quyền và token
+    activate XT
+    XT--)GD: 6 : [Từ chối] Chuyển hướng hoặc lỗi 400
+    GD--)NV: 7 : Báo phiên đăng nhập hết hạn
+    XT--)CT: 8 : [Hợp lệ] Cho phép thực thi
+    deactivate XT
+    CT->>CT: 9 : Lấy StaffId từ User
+    CT->>SV: 10 : CloseSessionAsync
+    activate SV
+    SV->>SQL: 11 : EXEC dbo.usp_CloseSession
+    activate SQL
+    SQL--)SV: 12 : [Thành công] Tiền giờ và giờ chốt
+    SQL--)SV: 13 : [Lỗi] Mã 51502, 51699
+    deactivate SQL
+    SV--)CT: 14 : TableOperationResult
+    deactivate SV
+    CT--)GD: 15 : JSON kết quả
+    deactivate CT
+    GD--)NV: 16 : Cập nhật lưới và trạng thái bàn
+    deactivate GD
 ```
 
-**Mô tả chi tiết xử lý kỹ thuật:**
-- **Xác nhận người dùng và CSRF:** 
-  - Với thao tác mở bàn, nhân viên nhấn nút OPEN TABLE trên panel chi tiết (`handleOpenTable`).
-  - Với thao tác đóng phiên, JavaScript hiển thị hộp thoại xác nhận `window.confirm("Bạn có chắc chắn muốn đóng phiên cho bàn ...?")` (`handleCloseTable`) nhằm ngăn chặn đóng nhầm.
-  - Yêu cầu được gửi qua Fetch API với `Content-Type: application/x-www-form-urlencoded`. Token chống giả mạo được lấy từ phần tử ẩn `@Html.AntiForgeryToken()` bằng hàm `getVerificationToken()` và đóng gói cùng tham số qua `URLSearchParams`. `TableController` áp dụng bộ lọc `[ValidateAntiForgeryToken]`. Nếu thiếu hoặc sai token, ASP.NET Core từ chối ngay với HTTP 400 Bad Request.
-- **Bảo mật danh tính và quyền hạn:** Controller áp dụng `[Authorize(Roles = "Staff,Admin")]`. Nếu chưa đăng nhập hoặc cookie hết hạn, hệ thống chuyển hướng về `/Account/Login`. Nếu sai vai trò, chuyển hướng về `/Account/AccessDenied`. Controller tuyệt đối không nhận `StaffId` từ client mà trích xuất từ Claims qua `User.FindFirstValue(ClaimTypes.NameIdentifier)`. Nếu `StaffId` rỗng, controller trả về HTTP 401 Unauthorized.
-- **Thực thi Stored Procedure:** `TableSessionService` lấy đối tượng `SqlConnection` từ DbContext qua `Database.GetDbConnection()`, mở kết nối và gán tham số an toàn qua `SqlParameter`:
-  - `usp_OpenSession`: Đặt khóa `WITH (UPDLOCK, HOLDLOCK)` trên bản ghi bàn, kiểm tra `Status = 'Available'`, kiểm tra giữ chỗ booking, tạo bản ghi `PlaySessions` mới (`Status = 'Active'`) và trả về `SessionId`.
-  - `usp_CloseSession`: Đặt khóa trên bàn và phiên, tính tiền giờ làm tròn theo công thức $\text{ROUND}\left(\frac{\text{DATEDIFF\_BIG(second, StartAtUtc, EndAtUtc)} \times \text{HourlyRateSnapshot}}{3600.0}, 0\right)$, chuyển bàn sang `AwaitingPayment`, đóng phiên (`Status = 'Closed'`) và trả về `PlaytimeAmount`.
-- **Xử lý phản hồi và mã lỗi:**
-  - Khi thành công: Controller trả HTTP 200 kèm `TableOperationResult.Ok`. JavaScript hiển thị Toast xanh thông báo và tự động gọi `reloadTableGrid()` (`GET /Table/GetTableCardsPartial`) để làm mới lưới bàn.
-  - Khi gặp lỗi nghiệp vụ CSDL (mã `51402` bàn không trống, `51407` bàn giữ chỗ booking, hoặc `51502` phiên đã đóng bởi người khác): Service bắt `SqlException`, ghi nhật ký cảnh báo qua `_logger.LogWarning`, dịch mã lỗi sang thông báo tiếng Việt qua `MapErrorCode` và trả về `AutoReload = true`. Giao diện hiển thị Toast đỏ và tự động tải lại lưới bàn để đồng bộ trạng thái mới nhất.
-  - Khi gặp lỗi hệ thống không xác định: Service ghi nhật ký lỗi qua `_logger.LogError` và trả về `AutoReload = false`. Giao diện hiển thị Toast đỏ và giữ nguyên trạng thái màn hình.
+**Hình II.3 — Sequence Diagram: Đóng bàn.** Sơ đồ gồm 16 thông điệp. Phần lấy dữ liệu tóm tắt tiền tạm tính (`GetCloseSummary`) được gộp thành đúng 2 thông điệp (bước 1 và 2) ngay đầu sơ đồ; sau đó là thao tác xác nhận và gửi yêu cầu đóng phiên `POST /Table/CloseSession` theo chuẩn bảo mật.
 
+- **Actor:** Nhân viên thu ngân hoặc Quản trị viên (`Staff`, `Admin`).
+- **Route:** `GET /Table/GetCloseSummary?sessionId=...` (lấy tóm tắt tạm tính) và `POST /Table/CloseSession` (thực hiện đóng phiên chính thức, dữ liệu gồm `SessionId` và `__RequestVerificationToken`).
+- **Điều kiện trước:** Bàn đang ở trạng thái `InUse` và sở hữu một phiên chơi `Active`.
+- **Kết quả:** Phiên chơi chuyển sang `Closed`, chốt mốc giờ tính tiền kết thúc và tổng tiền giờ; bàn chuyển sang trạng thái chờ thanh toán (`AwaitingPayment`); hiển thị toast tiền giờ; lưới bàn được cập nhật.
+
+**Bảng II.2: Giải thích các bước trong quy trình Đóng bàn**
+
+| Bước | Giải thích |
+|---|---|
+| 1 đến 2 | Khi nhân viên bấm nút đóng bàn (`handleCloseTable`), giao diện gọi hàm `showCloseForm` và gửi yêu cầu `GET /Table/GetCloseSummary?sessionId=...` qua hàm `loadCloseSummary`. Yêu cầu GET áp dụng cùng cơ chế xác thực cookie và vai trò (`Staff,Admin`), nhưng không yêu cầu anti-forgery token. Dịch vụ `TableSessionService.GetCloseSummaryAsync` thực thi câu truy vấn `SELECT` trực tiếp trong SQL Server gọi hai hàm `dbo.fn_CeilTo15Min` và `dbo.fn_CalcPlaytimeAmount` để tính toán chính xác số phút và tiền giờ tạm tính tại thời điểm hiện tại. Nếu phiên không còn `Active` (đã được đóng bởi nhân viên khác), server trả mã lỗi 51502; nếu hợp lệ, trả về đối tượng `CloseSummaryViewModel` (bước 2) để giao diện hiển thị bảng xác nhận đóng bàn kèm số tiền tạm tính |
+| 3 | Nhân viên kiểm tra thông tin tiền tạm tính và bấm xác nhận đóng phiên trên modal (`handleConfirmCloseSession`) |
+| 4 | Trình duyệt gửi yêu cầu `POST /Table/CloseSession` mang theo `SessionId` và `__RequestVerificationToken` |
+| 5 đến 8 | Cơ chế bảo mật kiểm tra cookie xác thực, vai trò `Staff`/`Admin` và token chống CSRF. Nếu không hợp lệ (hết phiên đăng nhập, sai vai trò hoặc token không hợp lệ), pipeline trả về chuyển hướng 302 hoặc lỗi 400 (bước 6); Giao diện nhận biết qua phản hồi HTML và hiển thị toast báo phiên hết hạn, đồng thời dừng polling ở bước 7. Nếu hợp lệ (bước 8), cho phép thực thi action `CloseSession` |
+| 9 | `TableController` tự lấy mã nhân viên `StaffId` từ định danh người dùng đăng nhập (`User.FindFirstValue`) |
+| 10 | Controller gọi phương thức `_tableSessionService.CloseSessionAsync(request.SessionId, staffId)` |
+| 11 | `TableSessionService` lấy kết nối qua `_context.Database.GetDbConnection()` và gọi stored procedure `dbo.usp_CloseSession` với `@SessionId` và `@StaffId`. Trong thủ tục: khóa dòng phiên chơi bằng `WITH (UPDLOCK, HOLDLOCK)`, sau đó khóa dòng bàn tương ứng; kiểm tra phiên phải đang `Active` (nếu không THROW 51502); đóng đoạn bàn đang mở trong `PlaySessionTableSegments` bằng cách gán `EndAtUtc = SYSUTCDATETIME()`. Nếu không tìm thấy đoạn bàn mở, THROW lỗi toàn vẹn 51699. Tiếp tục tính tiền giờ bằng hàm `dbo.fn_CalcPlaytimeAmount` (làm tròn lên theo từng block 15 phút, tối thiểu 1 block 15 phút); cập nhật `PlaySessions` sang `Closed` kèm `PlaytimeAmount`, `BillingEndAtUtc`; và chuyển trạng thái bàn trong `BilliardTables` sang `AwaitingPayment` |
+| 12 đến 13 | Nếu thành công (bước 12), thủ tục trả về các trường `Id`, `StartAtUtc`, `EndAtUtc`, `HourlyRateSnapshot`, `PlaytimeAmount`, `Status`, `BillingStartAtUtc`, `BillingEndAtUtc`, `SessionMode`. Nếu thất bại (bước 13), thủ tục ném lỗi: 51502 (phiên không còn Active), 51699 (dữ liệu đoạn bàn không nhất quán); các lỗi quyền hạn (51501) hoặc lỗi hệ thống được xử lý tương tự |
+| 14 | Service chuyển đổi kết quả thành `TableOperationResult`: khi có ngoại lệ SQL thì ghi log qua `ILogger` và dịch mã qua `MapErrorCode`; khi thành công thì trả về kết quả `Ok` kèm số tiền giờ chính thức và các mốc thời gian chốt |
+| 15 | `TableController` trả dữ liệu JSON `TableOperationResult` cho Giao diện |
+| 16 | Giao diện đóng modal xác nhận; nếu lỗi 51502 thì báo lỗi và tải lại lưới; nếu thành công thì hiển thị toast thông báo hoàn tất đóng bàn kèm tiền giờ chơi, gọi `reloadTableGrid` để chuyển màu bàn sang trạng thái Chờ thanh toán (`AwaitingPayment`) và gọi `handleTableSelect` để cập nhật bảng chi tiết bàn |
+
+---
+
+### 1.4 Sequence Diagram: Chuyển bàn
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'textColor': '#000000', 'actorBkg': '#ffffff', 'actorBorder': '#000000', 'actorTextColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000', 'labelBoxBkgColor': '#ffffff', 'labelBoxBorderColor': '#000000', 'labelTextColor': '#000000', 'noteBkgColor': '#ffffff', 'noteBorderColor': '#000000', 'noteTextColor': '#000000', 'activationBkgColor': '#ffffff', 'activationBorderColor': '#000000', 'fontFamily': 'Arial'}, 'sequence': {'mirrorActors': false, 'showSequenceNumbers': false, 'wrap': true, 'width': 150, 'actorMargin': 30, 'messageMargin': 30, 'noteMargin': 10, 'boxMargin': 8, 'actorFontSize': 16, 'messageFontSize': 16, 'noteFontSize': 14}}}%%
+sequenceDiagram
+    actor NV as Nhân viên
+    participant GD as Giao diện
+    participant CT as TableController
+    participant XT as Xác thực
+    participant SV as TableSessionService
+    participant SQL as SQL Server
+
+    NV->>GD: 1 : Bấm chuyển bàn
+    activate GD
+    GD->>GD: 2 : Hiện form chuyển bàn
+    NV->>GD: 3 : Chọn bàn đích từ lưới
+    GD->>CT: 4 : POST /Table/TransferSession
+    activate CT
+    CT->>XT: 5 : Kiểm tra quyền và token
+    activate XT
+    XT--)GD: 6 : [Từ chối] Chuyển hướng hoặc lỗi 400
+    GD--)NV: 7 : Báo phiên đăng nhập hết hạn
+    XT--)CT: 8 : [Hợp lệ] Cho phép thực thi
+    deactivate XT
+    CT->>CT: 9 : Lấy StaffId từ User
+    CT->>SV: 10 : TransferSessionAsync
+    activate SV
+    SV->>SQL: 11 : EXEC dbo.usp_TransferSession
+    activate SQL
+    SQL--)SV: 12 : [Thành công] Bàn mới và giá mới
+    SQL--)SV: 13 : [Lỗi] Mã 51613, 51615, 51616
+    deactivate SQL
+    SV--)CT: 14 : TableOperationResult
+    deactivate SV
+    CT--)GD: 15 : JSON kết quả
+    deactivate CT
+    GD--)NV: 16 : Cập nhật lưới và chọn bàn mới
+    deactivate GD
+```
+
+**Hình II.4 — Sequence Diagram: Chuyển bàn.** Sơ đồ gồm 16 thông điệp. Bước chuẩn bị danh sách bàn đích được thực hiện hoàn toàn tại client thông qua lưới dữ liệu đang hiển thị, không gửi thêm yêu cầu tải dữ liệu tới máy chủ.
+
+- **Actor:** Nhân viên thu ngân hoặc Quản trị viên (`Staff`, `Admin`).
+- **Route:** `POST /Table/TransferSession`. Dữ liệu form gồm `SessionId`, `NewTableId` và `__RequestVerificationToken`.
+- **Điều kiện trước:** Bàn đang chơi (`InUse`) có phiên `Active` không gắn với lịch đặt trước (`BookingId IS NULL`), và trên giao diện có ít nhất một bàn khác đang ở trạng thái Trống (`Available`).
+- **Kết quả:** Phiên chơi giữ nguyên thời gian bắt đầu và được chuyển sang bàn đích; bàn cũ quay về `Available`; bàn mới chuyển sang `InUse`; đoạn bàn cũ được đóng và đoạn bàn mới được mở theo đơn giá bàn đích; giao diện tự động chọn bàn mới.
+
+**Bảng II.3: Giải thích các bước trong quy trình Chuyển bàn**
+
+| Bước | Giải thích |
+|---|---|
+| 1 đến 3 | Nhân viên bấm nút chuyển bàn trên panel chi tiết (`handleTransferTable`). Giao diện gọi hàm `showTransferForm`, đồng thời kích hoạt hàm `buildAvailableTableOptions` để trích xuất các bàn đang có trạng thái Trống (`Available`) trực tiếp từ cây DOM của lưới bàn đang hiển thị (thông qua hàm trợ giúp `getAvailableTablesFromGrid`), hoàn toàn không tạo thêm request tải danh sách về máy chủ. Nhân viên chọn bàn đích muốn chuyển đến từ danh sách chọn (bước 3) và bấm xác nhận chuyển bàn (`handleConfirmTransferSession`) |
+| 4 | Trình duyệt gửi yêu cầu `POST /Table/TransferSession` với dữ liệu form mang theo `SessionId`, `NewTableId` và `__RequestVerificationToken`. Cờ `isProcessing` và `isTransferring` được thiết lập |
+| 5 đến 8 | Pipeline xác thực cookie, vai trò `Staff`/`Admin` và anti-forgery token. Nếu phát hiện vi phạm bảo mật, pipeline trả về chuyển hướng 302 hoặc mã 400 (bước 6); Giao diện bắt phản hồi HTML và hiển thị toast báo hết phiên đăng nhập, dừng polling ở bước 7. Nếu hợp lệ (bước 8), cho phép action `TransferSession` thực thi |
+| 9 | `TableController` xác thực `ModelState.IsValid` và tự lấy `StaffId` từ `User.FindFirstValue(ClaimTypes.NameIdentifier)` |
+| 10 | Controller gọi phương thức `_tableSessionService.TransferSessionAsync(request.SessionId, request.NewTableId, staffId)` |
+| 11 | `TableSessionService` lấy kết nối qua `_context.Database.GetDbConnection()` và thực thi stored procedure `dbo.usp_TransferSession` với các tham số: `@SessionId`, `@NewTableId`, `@StaffId`. Trong thủ tục: khóa dòng phiên chơi trong `PlaySessions` bằng `WITH (UPDLOCK, HOLDLOCK)`; kiểm tra phiên phải đang `Active` (nếu không THROW 51612); kiểm tra phiên không gắn với đặt trước (nếu có `BookingId` THROW 51616 vì phiên đặt trước chưa hỗ trợ đổi bàn); kiểm tra bàn đích không trùng bàn cũ (nếu trùng THROW 51614). Kế tiếp, thủ tục thực hiện cơ chế khóa tài nguyên chống deadlock: khóa đồng thời cả hai bàn (bàn hiện tại và bàn đích) theo thứ tự `Id` tăng dần (`@FirstId`, `@SecondId`) với tùy chọn `WITH (UPDLOCK, HOLDLOCK)`. Sau khi giữ khóa, kiểm tra bàn đích phải tồn tại và đang `Available` (nếu không THROW 51613) và không bị giữ chỗ cho đặt bàn trong khung giờ hiện tại (nếu có THROW 51615). Sau đó, thủ tục đóng đoạn bàn cũ (`EndAtUtc = SYSUTCDATETIME()`), mở đoạn bàn mới trong `PlaySessionTableSegments` với đơn giá snapshot lấy từ loại bàn đích, cập nhật `PlaySessions.TableId = @NewTableId`, chuyển bàn cũ về `Available` và bàn mới sang `InUse` |
+| 12 đến 13 | Nếu thành công (bước 12), thủ tục trả về tập kết quả gồm `SessionId`, `OldTableId`, `NewTableId`, `NewTableCode`, `NewHourlyRate`, `TransferAtUtc`. Nếu thất bại (bước 13), thủ tục ném lỗi: 51613 (bàn đích không còn Trống), 51615 (bàn đích vướng lịch đặt), 51616 (phiên theo booking không cho phép chuyển); các lỗi 51611 (quyền hạn), 51612 (phiên không Active), 51614 (trùng bàn cũ), 51699 (lỗi đoạn bàn) hoặc lỗi kết nối SQL được xử lý tương tự |
+| 14 | Service bắt ngoại lệ, ghi log (`LogWarning` cho lỗi nghiệp vụ, `LogError` cho lỗi hệ thống), dịch mã lỗi qua `MapErrorCode` và trả về `TableOperationResult` |
+| 15 | `TableController` gửi JSON `TableOperationResult` về cho client |
+| 16 | Giao diện đóng form chuyển bàn: nếu lỗi, hiển thị toast tiếng Việt tương ứng (nếu lỗi liên quan đến trạng thái bàn như 51613, 51615 thì tự động tải lại lưới bàn). Nếu thành công, hiển thị toast thông báo đã chuyển sang bàn mới kèm đơn giá mới áp dụng, gọi `reloadTableGrid` để cập nhật trạng thái hai bàn và tự động gọi `handleTableSelect(newTableId)` để chọn và hiển thị chi tiết của bàn đích mới |

@@ -69,7 +69,6 @@ public class TableController : Controller
         return Json(TableOperationResult.Ok(summary));
     }
 
-
     // POST: /Table/OpenSession
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -86,25 +85,7 @@ public class TableController : Controller
             return Unauthorized();
         }
 
-        string sessionMode = "Open";
-        if (!string.IsNullOrWhiteSpace(request.SessionMode))
-        {
-            var trimmed = request.SessionMode.Trim();
-            if (string.Equals(trimmed, "Open", StringComparison.OrdinalIgnoreCase))
-            {
-                sessionMode = "Open";
-            }
-            else if (string.Equals(trimmed, "Timed", StringComparison.OrdinalIgnoreCase))
-            {
-                sessionMode = "Timed";
-            }
-            else
-            {
-                sessionMode = trimmed;
-            }
-        }
-
-        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, sessionMode, request.PlannedMinutes);
+        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, request.BookingId);
         return Json(result);
     }
 
@@ -120,26 +101,6 @@ public class TableController : Controller
         }
 
         var result = await _tableSessionService.CloseSessionAsync(request.SessionId, staffId);
-        return Json(result);
-    }
-
-    // POST: /Table/ExtendSession
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ExtendSession([FromForm] ExtendSessionRequest request)
-    {
-        if (!ModelState.IsValid)
-        {
-            return Json(TableOperationResult.Fail(null, "Dữ liệu gửi lên không hợp lệ.", false));
-        }
-
-        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrEmpty(staffId))
-        {
-            return Unauthorized();
-        }
-
-        var result = await _tableSessionService.ExtendSessionAsync(request.SessionId, request.AddMinutes, staffId);
         return Json(result);
     }
 

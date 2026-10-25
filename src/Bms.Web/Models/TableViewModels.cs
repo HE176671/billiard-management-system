@@ -18,9 +18,11 @@ public class TableCardViewModel
     public string DisplayStatus { get; set; } = string.Empty;
     public int? ActiveSessionId { get; set; }
     public DateTime? SessionStartUtc { get; set; }
-    public DateTime? BillingStartAtUtc { get; set; }
-    public string? SessionMode { get; set; }
-    public DateTime? PlannedEndAtUtc { get; set; }
+    public int? NextBookingId { get; set; }
+    public DateTime? NextBookingStartAtUtc { get; set; }
+    public DateTime? MustEndBeforeUtc { get; set; }
+    public string? NextBookingCustomerName { get; set; }
+    public string? NextBookingStatus { get; set; }
     public DateTime ServerTimeUtc { get; set; }
 }
 
@@ -33,17 +35,18 @@ public class TableDetailViewModel
     public string Status { get; set; } = string.Empty;
     public string DisplayStatus { get; set; } = string.Empty;
     public int? SessionId { get; set; }
-    public string? SessionMode { get; set; }
     public DateTime? StartAtUtc { get; set; }
     public DateTime? EndAtUtc { get; set; }
-    public DateTime? PlannedEndAtUtc { get; set; }
-    public DateTime? BillingStartAtUtc { get; set; }
-    public DateTime? BillingEndAtUtc { get; set; }
     public decimal? HourlyRateSnapshot { get; set; }
     public decimal? PlaytimeAmount { get; set; }
     public decimal? EstimatedAmount { get; set; }
     public string? CustomerFullName { get; set; }
     public bool IsBookingSession { get; set; }
+    public int? NextBookingId { get; set; }
+    public DateTime? NextBookingStartAtUtc { get; set; }
+    public DateTime? MustEndBeforeUtc { get; set; }
+    public string? NextBookingCustomerName { get; set; }
+    public string? NextBookingStatus { get; set; }
     public List<SessionSegmentViewModel> Segments { get; set; } = new();
     public DateTime ServerTimeUtc { get; set; }
 }
@@ -60,19 +63,12 @@ public class SessionSegmentViewModel
 public class OpenSessionRequest
 {
     public int TableId { get; set; }
-    public string? SessionMode { get; set; } = "Open";
-    public int? PlannedMinutes { get; set; }
+    public int? BookingId { get; set; }
 }
 
 public class CloseSessionRequest
 {
     public int SessionId { get; set; }
-}
-
-public class ExtendSessionRequest
-{
-    public int SessionId { get; set; }
-    public int AddMinutes { get; set; }
 }
 
 public class TransferSessionRequest
@@ -111,13 +107,8 @@ public class CloseSummaryViewModel
 {
     public int SessionId { get; set; }
     public string TableCode { get; set; } = string.Empty;
-    public string SessionMode { get; set; } = string.Empty;
     public DateTime StartAtUtc { get; set; }
-    public DateTime BillingStartAtUtc { get; set; }
     public DateTime ServerNowUtc { get; set; }
-    public DateTime BillingEndPreviewAtUtc { get; set; }
     public int BilledMinutes { get; set; }
-    public bool MinimumChargeApplied { get; set; }
     public decimal? EstimatedAmount { get; set; }
 }
-

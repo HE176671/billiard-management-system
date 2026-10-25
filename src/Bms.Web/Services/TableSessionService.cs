@@ -21,6 +21,8 @@ public class TableSessionService : ITableSessionService
     public async Task<List<TableCardViewModel>> GetTableCardsAsync()
     {
         var serverTimeUtc = DateTime.UtcNow;
+        var holdThresholdUtc = serverTimeUtc.AddMinutes(-15);
+        var horizonUtc = serverTimeUtc.AddHours(24);
 
         var query = from table in _context.BilliardTables.AsNoTracking()
                     join type in _context.TableTypes.AsNoTracking() on table.TableTypeId equals type.Id
@@ -37,41 +39,65 @@ public class TableSessionService : ITableSessionService
                         table.FloorNumber,
                         table.Status,
                         ActiveSessionId = (int?)activeSession.Id,
-                        SessionStartUtc = (DateTime?)activeSession.StartAtUtc,
-                        BillingStartAtUtc = (DateTime?)activeSession.BillingStartAtUtc,
-                        SessionMode = activeSession != null ? activeSession.SessionMode : null,
-                        PlannedEndAtUtc = (DateTime?)activeSession.PlannedEndAtUtc
+                        SessionStartUtc = (DateTime?)activeSession.StartAtUtc
                     };
 
         var items = await query.ToListAsync();
 
-        return items.Select(x => new TableCardViewModel
+        // Fetch upcoming/active bookings for these tables that do not have a PlaySession yet
+        var upcomingBookings = await (from b in _context.Bookings.AsNoTracking()
+                                      join u in _context.Users.AsNoTracking() on b.CustomerId equals u.Id
+                                      where (b.Status == "CheckedIn" || (b.Status == "Confirmed" && b.StartAtUtc >= holdThresholdUtc && b.StartAtUtc <= horizonUtc))
+                                            && !_context.PlaySessions.Any(s => s.BookingId == b.Id)
+                                      orderby b.StartAtUtc
+                                      select new
+                                      {
+                                          b.Id,
+                                          b.TableId,
+                                          b.StartAtUtc,
+                                          b.Status,
+                                          CustomerFullName = u.FullName
+                                      }).ToListAsync();
+
+        var nextBookingByTable = upcomingBookings
+            .GroupBy(b => b.TableId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        return items.Select(x =>
         {
-            Id = x.Id,
-            TableCode = x.TableCode,
-            TableTypeName = x.TableTypeName,
-            HourlyRate = x.HourlyRate,
-            FloorNumber = x.FloorNumber,
-            Status = x.Status,
-            DisplayStatus = MapDisplayStatus(x.Status),
-            ActiveSessionId = x.ActiveSessionId,
-            SessionStartUtc = x.SessionStartUtc.HasValue
-                ? DateTime.SpecifyKind(x.SessionStartUtc.Value, DateTimeKind.Utc)
-                : null,
-            BillingStartAtUtc = x.BillingStartAtUtc.HasValue
-                ? DateTime.SpecifyKind(x.BillingStartAtUtc.Value, DateTimeKind.Utc)
-                : null,
-            SessionMode = x.SessionMode,
-            PlannedEndAtUtc = x.PlannedEndAtUtc.HasValue
-                ? DateTime.SpecifyKind(x.PlannedEndAtUtc.Value, DateTimeKind.Utc)
-                : null,
-            ServerTimeUtc = serverTimeUtc
+            nextBookingByTable.TryGetValue(x.Id, out var nextBooking);
+            DateTime? nextStartUtc = nextBooking != null
+                ? DateTime.SpecifyKind(nextBooking.StartAtUtc, DateTimeKind.Utc)
+                : null;
+            DateTime? mustEndBeforeUtc = nextStartUtc?.AddMinutes(-5);
+
+            return new TableCardViewModel
+            {
+                Id = x.Id,
+                TableCode = x.TableCode,
+                TableTypeName = x.TableTypeName,
+                HourlyRate = x.HourlyRate,
+                FloorNumber = x.FloorNumber,
+                Status = x.Status,
+                DisplayStatus = MapDisplayStatus(x.Status),
+                ActiveSessionId = x.ActiveSessionId,
+                SessionStartUtc = x.SessionStartUtc.HasValue
+                    ? DateTime.SpecifyKind(x.SessionStartUtc.Value, DateTimeKind.Utc)
+                    : null,
+                NextBookingId = nextBooking?.Id,
+                NextBookingStartAtUtc = nextStartUtc,
+                MustEndBeforeUtc = mustEndBeforeUtc,
+                NextBookingCustomerName = nextBooking?.CustomerFullName,
+                NextBookingStatus = nextBooking?.Status,
+                ServerTimeUtc = serverTimeUtc
+            };
         }).ToList();
     }
 
     public async Task<TableDetailViewModel?> GetTableDetailAsync(int tableId)
     {
         var serverTimeUtc = DateTime.UtcNow;
+        var holdThresholdUtc = serverTimeUtc.AddMinutes(-15);
 
         var query = from table in _context.BilliardTables.AsNoTracking()
                     where table.Id == tableId
@@ -94,10 +120,6 @@ public class TableSessionService : ITableSessionService
                         EndAtUtc = (DateTime?)activeSession.EndAtUtc,
                         HourlyRateSnapshot = (decimal?)activeSession.HourlyRateSnapshot,
                         CustomerFullName = customerUser != null ? customerUser.FullName : null,
-                        SessionMode = activeSession != null ? activeSession.SessionMode : null,
-                        PlannedEndAtUtc = (DateTime?)activeSession.PlannedEndAtUtc,
-                        BillingStartAtUtc = (DateTime?)activeSession.BillingStartAtUtc,
-                        BillingEndAtUtc = (DateTime?)activeSession.BillingEndAtUtc,
                         BookingId = (int?)activeSession.BookingId
                     };
 
@@ -118,16 +140,6 @@ public class TableSessionService : ITableSessionService
         decimal? estimatedAmount = null;
         string? customerFullName = raw.CustomerFullName;
         int? sessionId = raw.SessionId;
-        string? sessionMode = raw.SessionMode;
-        DateTime? plannedEndAtUtc = raw.PlannedEndAtUtc.HasValue
-            ? DateTime.SpecifyKind(raw.PlannedEndAtUtc.Value, DateTimeKind.Utc)
-            : null;
-        DateTime? billingStartAtUtc = raw.BillingStartAtUtc.HasValue
-            ? DateTime.SpecifyKind(raw.BillingStartAtUtc.Value, DateTimeKind.Utc)
-            : null;
-        DateTime? billingEndAtUtc = raw.BillingEndAtUtc.HasValue
-            ? DateTime.SpecifyKind(raw.BillingEndAtUtc.Value, DateTimeKind.Utc)
-            : null;
         List<SessionSegmentViewModel> segments = new();
 
         if (raw.Status == "InUse" && raw.SessionId.HasValue)
@@ -168,10 +180,6 @@ public class TableSessionService : ITableSessionService
                                           s.EndAtUtc,
                                           s.HourlyRateSnapshot,
                                           s.PlaytimeAmount,
-                                          s.SessionMode,
-                                          s.PlannedEndAtUtc,
-                                          s.BillingStartAtUtc,
-                                          s.BillingEndAtUtc,
                                           CustomerFullName = customerUser != null ? customerUser.FullName : null
                                       }).FirstOrDefaultAsync();
 
@@ -185,14 +193,6 @@ public class TableSessionService : ITableSessionService
                 playtimeAmount = latestClosed.PlaytimeAmount;
                 estimatedAmount = latestClosed.PlaytimeAmount;
                 customerFullName = latestClosed.CustomerFullName;
-                sessionMode = latestClosed.SessionMode;
-                plannedEndAtUtc = latestClosed.PlannedEndAtUtc.HasValue
-                    ? DateTime.SpecifyKind(latestClosed.PlannedEndAtUtc.Value, DateTimeKind.Utc)
-                    : null;
-                billingStartAtUtc = DateTime.SpecifyKind(latestClosed.BillingStartAtUtc, DateTimeKind.Utc);
-                billingEndAtUtc = latestClosed.BillingEndAtUtc.HasValue
-                    ? DateTime.SpecifyKind(latestClosed.BillingEndAtUtc.Value, DateTimeKind.Utc)
-                    : null;
 
                 segments = await (from seg in _context.PlaySessionTableSegments.AsNoTracking()
                                   where seg.SessionId == latestClosed.Id
@@ -214,6 +214,25 @@ public class TableSessionService : ITableSessionService
             sessionId = null;
         }
 
+        // Next upcoming booking on this table without a session yet
+        var nextBooking = await (from b in _context.Bookings.AsNoTracking()
+                                 join u in _context.Users.AsNoTracking() on b.CustomerId equals u.Id
+                                 where b.TableId == tableId
+                                       && (b.Status == "CheckedIn" || (b.Status == "Confirmed" && b.StartAtUtc >= holdThresholdUtc))
+                                       && !_context.PlaySessions.Any(s => s.BookingId == b.Id)
+                                 orderby b.StartAtUtc
+                                 select new
+                                 {
+                                     b.Id,
+                                     b.StartAtUtc,
+                                     b.Status,
+                                     CustomerFullName = u.FullName
+                                 }).FirstOrDefaultAsync();
+
+        DateTime? nextBookingStartUtc = nextBooking != null
+            ? DateTime.SpecifyKind(nextBooking.StartAtUtc, DateTimeKind.Utc)
+            : null;
+
         return new TableDetailViewModel
         {
             TableId = raw.TableId,
@@ -223,17 +242,18 @@ public class TableSessionService : ITableSessionService
             Status = raw.Status,
             DisplayStatus = MapDisplayStatus(raw.Status),
             SessionId = sessionId,
-            SessionMode = sessionMode,
             StartAtUtc = startAtUtc,
             EndAtUtc = endAtUtc,
-            PlannedEndAtUtc = plannedEndAtUtc,
-            BillingStartAtUtc = billingStartAtUtc,
-            BillingEndAtUtc = billingEndAtUtc,
             HourlyRateSnapshot = hourlyRateSnapshot,
             PlaytimeAmount = playtimeAmount,
             EstimatedAmount = estimatedAmount,
-            CustomerFullName = customerFullName,
+            CustomerFullName = customerFullName ?? nextBooking?.CustomerFullName,
             IsBookingSession = (raw.Status == "InUse" && raw.BookingId.HasValue),
+            NextBookingId = nextBooking?.Id,
+            NextBookingStartAtUtc = nextBookingStartUtc,
+            MustEndBeforeUtc = nextBookingStartUtc?.AddMinutes(-5),
+            NextBookingCustomerName = nextBooking?.CustomerFullName,
+            NextBookingStatus = nextBooking?.Status,
             Segments = segments,
             ServerTimeUtc = serverTimeUtc
         };
@@ -249,7 +269,7 @@ public class TableSessionService : ITableSessionService
         _ => status
     };
 
-    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string sessionMode = "Open", int? plannedMinutes = null)
+    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, int? bookingId = null)
     {
         if (tableId <= 0)
         {
@@ -277,32 +297,22 @@ public class TableSessionService : ITableSessionService
 
             cmd.Parameters.Add(new SqlParameter("@TableId", SqlDbType.Int) { Value = tableId });
             cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
-            cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = DBNull.Value });
+            cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = (object?)bookingId ?? DBNull.Value });
             cmd.Parameters.Add(new SqlParameter("@CustomerId", SqlDbType.NVarChar, 450) { Value = DBNull.Value });
-            cmd.Parameters.Add(new SqlParameter("@SessionMode", SqlDbType.VarChar, 10) { Value = (object?)sessionMode ?? DBNull.Value });
-            cmd.Parameters.Add(new SqlParameter("@PlannedMinutes", SqlDbType.Int) { Value = (object?)plannedMinutes ?? DBNull.Value });
 
             using var reader = await cmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
                 int sessionIdOrdinal = reader.GetOrdinal("SessionId");
-                int billingStartOrdinal = reader.GetOrdinal("BillingStartAtUtc");
-                int plannedEndOrdinal = reader.GetOrdinal("PlannedEndAtUtc");
-                int sessionModeOrdinal = reader.GetOrdinal("SessionMode");
+                int startOrdinal = reader.GetOrdinal("StartAtUtc");
 
                 int sessionId = reader.GetInt32(sessionIdOrdinal);
-                DateTime billingStartAtUtc = DateTime.SpecifyKind(reader.GetDateTime(billingStartOrdinal), DateTimeKind.Utc);
-                DateTime? plannedEndAtUtc = reader.IsDBNull(plannedEndOrdinal)
-                    ? null
-                    : DateTime.SpecifyKind(reader.GetDateTime(plannedEndOrdinal), DateTimeKind.Utc);
-                string sessionModeResult = reader.GetString(sessionModeOrdinal);
+                DateTime startAtUtc = DateTime.SpecifyKind(reader.GetDateTime(startOrdinal), DateTimeKind.Utc);
 
                 return TableOperationResult.Ok(new
                 {
                     SessionId = sessionId,
-                    SessionMode = sessionModeResult,
-                    BillingStartAtUtc = billingStartAtUtc,
-                    PlannedEndAtUtc = plannedEndAtUtc
+                    StartAtUtc = startAtUtc
                 });
             }
 
@@ -363,19 +373,13 @@ public class TableSessionService : ITableSessionService
                 int endOrdinal = reader.GetOrdinal("EndAtUtc");
                 int rateOrdinal = reader.GetOrdinal("HourlyRateSnapshot");
                 int amountOrdinal = reader.GetOrdinal("PlaytimeAmount");
-                int billStartOrdinal = reader.GetOrdinal("BillingStartAtUtc");
-                int billEndOrdinal = reader.GetOrdinal("BillingEndAtUtc");
-                int modeOrdinal = reader.GetOrdinal("SessionMode");
 
                 int id = reader.GetInt32(idOrdinal);
                 DateTime startAtUtc = DateTime.SpecifyKind(reader.GetDateTime(startOrdinal), DateTimeKind.Utc);
                 DateTime endAtUtc = DateTime.SpecifyKind(reader.GetDateTime(endOrdinal), DateTimeKind.Utc);
                 decimal hourlyRateSnapshot = reader.GetDecimal(rateOrdinal);
                 decimal playtimeAmount = reader.GetDecimal(amountOrdinal);
-                DateTime billingStartAtUtc = DateTime.SpecifyKind(reader.GetDateTime(billStartOrdinal), DateTimeKind.Utc);
-                DateTime billingEndAtUtc = DateTime.SpecifyKind(reader.GetDateTime(billEndOrdinal), DateTimeKind.Utc);
-                string sessionMode = reader.GetString(modeOrdinal);
-                int billedMinutes = (int)(billingEndAtUtc - billingStartAtUtc).TotalMinutes;
+                int billedMinutes = Math.Max(1, (int)Math.Ceiling((endAtUtc - startAtUtc).TotalSeconds / 60.0));
 
                 return TableOperationResult.Ok(new
                 {
@@ -384,9 +388,6 @@ public class TableSessionService : ITableSessionService
                     HourlyRateSnapshot = hourlyRateSnapshot,
                     StartAtUtc = startAtUtc,
                     EndAtUtc = endAtUtc,
-                    BillingStartAtUtc = billingStartAtUtc,
-                    BillingEndAtUtc = billingEndAtUtc,
-                    SessionMode = sessionMode,
                     BilledMinutes = billedMinutes
                 });
             }
@@ -433,11 +434,8 @@ public class TableSessionService : ITableSessionService
 SELECT 
     s.Id AS SessionId,
     t.TableCode,
-    s.SessionMode,
     s.StartAtUtc,
-    s.BillingStartAtUtc,
     CAST(SYSUTCDATETIME() AS datetime2(0)) AS ServerNowUtc,
-    dbo.fn_CeilTo15Min(CAST(SYSUTCDATETIME() AS datetime2(0))) AS CeilNowUtc,
     dbo.fn_CalcPlaytimeAmount(s.Id, CAST(SYSUTCDATETIME() AS datetime2(0))) AS EstimatedAmount
 FROM dbo.PlaySessions s
 JOIN dbo.BilliardTables t ON t.Id = s.TableId
@@ -450,50 +448,26 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
             {
                 int sessionIdOrdinal = reader.GetOrdinal("SessionId");
                 int tableCodeOrdinal = reader.GetOrdinal("TableCode");
-                int sessionModeOrdinal = reader.GetOrdinal("SessionMode");
                 int startOrdinal = reader.GetOrdinal("StartAtUtc");
-                int billStartOrdinal = reader.GetOrdinal("BillingStartAtUtc");
                 int serverNowOrdinal = reader.GetOrdinal("ServerNowUtc");
-                int ceilNowOrdinal = reader.GetOrdinal("CeilNowUtc");
                 int estAmountOrdinal = reader.GetOrdinal("EstimatedAmount");
 
                 int resultSessionId = reader.GetInt32(sessionIdOrdinal);
                 string tableCode = reader.GetString(tableCodeOrdinal);
-                string sessionMode = reader.GetString(sessionModeOrdinal);
                 DateTime startAtUtc = DateTime.SpecifyKind(reader.GetDateTime(startOrdinal), DateTimeKind.Utc);
-                DateTime billingStartAtUtc = DateTime.SpecifyKind(reader.GetDateTime(billStartOrdinal), DateTimeKind.Utc);
                 DateTime serverNowUtc = DateTime.SpecifyKind(reader.GetDateTime(serverNowOrdinal), DateTimeKind.Utc);
-                DateTime ceilNowUtc = DateTime.SpecifyKind(reader.GetDateTime(ceilNowOrdinal), DateTimeKind.Utc);
                 decimal? estimatedAmount = reader.IsDBNull(estAmountOrdinal) ? null : reader.GetDecimal(estAmountOrdinal);
 
-                DateTime billingEndPreviewUtc;
-                int billedMinutes;
-                bool minimumChargeApplied;
-
-                if (ceilNowUtc > billingStartAtUtc)
-                {
-                    billingEndPreviewUtc = ceilNowUtc;
-                    billedMinutes = (int)(ceilNowUtc - billingStartAtUtc).TotalMinutes;
-                    minimumChargeApplied = false;
-                }
-                else
-                {
-                    billingEndPreviewUtc = billingStartAtUtc.AddMinutes(15);
-                    billedMinutes = 15;
-                    minimumChargeApplied = true;
-                }
+                var elapsedSeconds = Math.Max(0, (serverNowUtc - startAtUtc).TotalSeconds);
+                int billedMinutes = Math.Max(1, (int)Math.Ceiling(elapsedSeconds / 60.0));
 
                 return new CloseSummaryViewModel
                 {
                     SessionId = resultSessionId,
                     TableCode = tableCode,
-                    SessionMode = sessionMode,
                     StartAtUtc = startAtUtc,
-                    BillingStartAtUtc = billingStartAtUtc,
                     ServerNowUtc = serverNowUtc,
-                    BillingEndPreviewAtUtc = billingEndPreviewUtc,
                     BilledMinutes = billedMinutes,
-                    MinimumChargeApplied = minimumChargeApplied,
                     EstimatedAmount = estimatedAmount
                 };
             }
@@ -504,72 +478,6 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         {
             _logger.LogError(ex, "Lỗi khi lấy tóm tắt đóng phiên GetCloseSummaryAsync cho phiên {SessionId}.", sessionId);
             return null;
-        }
-        finally
-        {
-            if (openedHere && conn.State == ConnectionState.Open)
-            {
-                await conn.CloseAsync();
-            }
-        }
-    }
-
-    public async Task<TableOperationResult> ExtendSessionAsync(int sessionId, int addMinutes, string staffId)
-    {
-        if (sessionId <= 0)
-        {
-            return TableOperationResult.Fail(null, "Mã phiên chơi không hợp lệ.", autoReload: false);
-        }
-
-        if (string.IsNullOrWhiteSpace(staffId))
-        {
-            return TableOperationResult.Fail(null, "Thông tin nhân viên thực hiện không hợp lệ.", autoReload: false);
-        }
-
-        var conn = (SqlConnection)_context.Database.GetDbConnection();
-        var openedHere = conn.State == ConnectionState.Closed;
-
-        try
-        {
-            if (openedHere)
-            {
-                await conn.OpenAsync();
-            }
-
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "dbo.usp_ExtendSession";
-            cmd.CommandType = CommandType.StoredProcedure;
-
-            cmd.Parameters.Add(new SqlParameter("@SessionId", SqlDbType.Int) { Value = sessionId });
-            cmd.Parameters.Add(new SqlParameter("@AddMinutes", SqlDbType.Int) { Value = addMinutes });
-            cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-            {
-                int sessionIdOrdinal = reader.GetOrdinal("SessionId");
-                int plannedEndOrdinal = reader.GetOrdinal("PlannedEndAtUtc");
-
-                int resultSessionId = reader.GetInt32(sessionIdOrdinal);
-                DateTime plannedEndAtUtc = DateTime.SpecifyKind(reader.GetDateTime(plannedEndOrdinal), DateTimeKind.Utc);
-
-                return TableOperationResult.Ok(new
-                {
-                    SessionId = resultSessionId,
-                    PlannedEndAtUtc = plannedEndAtUtc
-                });
-            }
-
-            return TableOperationResult.Fail(null, "Không nhận được phản hồi từ hệ thống cơ sở dữ liệu khi gia hạn phiên.", autoReload: true);
-        }
-        catch (SqlException ex)
-        {
-            return HandleSqlException(ex, "ExtendSessionAsync", sessionId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Lỗi không xác định khi thực hiện ExtendSessionAsync cho phiên {SessionId} bởi nhân viên {StaffId}.", sessionId, staffId);
-            return TableOperationResult.Fail(null, "Đã xảy ra lỗi không xác định trên hệ thống. Vui lòng thử lại sau.", autoReload: false);
         }
         finally
         {
@@ -692,13 +600,13 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
 
     private static bool IsKnownDomainError(int errorNumber) => errorNumber switch
     {
-        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51409 or 51410 or 51501 or 51502 or 51601 or 51602 or 51603 or 51611 or 51612 or 51613 or 51614 or 51615 or 51616 or 51699 => true,
+        51401 or 51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51408 or 51501 or 51502 or 51611 or 51612 or 51613 or 51614 or 51615 or 51616 or 51699 => true,
         _ => false
     };
 
     private static bool IsAutoReloadError(int errorNumber) => errorNumber switch
     {
-        51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51502 or 51602 or 51612 or 51613 or 51615 or 51699 => true,
+        51402 or 51403 or 51404 or 51405 or 51406 or 51407 or 51502 or 51612 or 51613 or 51615 or 51699 => true,
         _ => false
     };
 
@@ -707,24 +615,19 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         51401 => "Thao tác yêu cầu tài khoản Nhân viên hoặc Quản trị viên đang hoạt động.",
         51402 => "Bàn hiện không ở trạng thái Trống để có thể mở phiên.",
         51403 => "Bàn này đã có một phiên chơi đang hoạt động.",
-        51404 => "Lượt đặt bàn không hợp lệ (chưa check-in, sai bàn hoặc đã hết hạn giữ chỗ).",
+        51404 => "Lượt đặt bàn không hợp lệ (chưa check-in hoặc đã hết hạn giữ chỗ).",
         51405 => "Khách hàng không khớp với thông tin người đặt trước.",
         51406 => "Lượt đặt bàn này đã được mở phiên chơi trước đó.",
-        51407 => "Bàn đang được giữ chỗ cho khách đặt trước trong khung giờ này.",
+        51407 => "Bàn đang được giữ chỗ cho khách đặt trước (hoặc còn dưới 5 phút là tới giờ booking).",
         51408 => "Tài khoản hội viên của khách hàng không tồn tại hoặc đang bị khóa.",
-        51409 => "Hình thức mở bàn không hợp lệ.",
-        51410 => "Thời gian đăng ký không hợp lệ: phải là bội số của 15 phút, từ 15 đến 720 phút, và phiên không giới hạn thì không được kèm số phút.",
         51501 => "Thao tác đóng phiên yêu cầu quyền Nhân viên hoặc Quản trị viên đang hoạt động.",
         51502 => "Phiên chơi không còn ở trạng thái Hoạt động (có thể đã được nhân viên khác đóng).",
-        51601 => "Thao tác gia hạn yêu cầu tài khoản Nhân viên hoặc Quản trị viên đang hoạt động.",
-        51602 => "Chỉ gia hạn được phiên đăng ký thời gian đang chơi (có thể phiên đã được đóng hoặc không phải loại đăng ký thời gian).",
-        51603 => "Thời gian gia hạn không hợp lệ: phải là bội số của 15 phút, từ 15 đến 240 phút.",
         51611 => "Thao tác chuyển bàn yêu cầu tài khoản Nhân viên hoặc Quản trị viên đang hoạt động.",
         51612 => "Chỉ chuyển bàn được khi phiên đang chơi (phiên có thể đã được đóng).",
         51613 => "Bàn đích không tồn tại hoặc không còn ở trạng thái Trống.",
         51614 => "Bàn đích trùng với bàn hiện tại của phiên.",
-        51615 => "Bàn đích đang được giữ chỗ cho khách đặt trước.",
-        51616 => "Phiên mở theo đặt bàn chưa hỗ trợ chuyển bàn.",
+        51615 => "Bàn đích đang được giữ chỗ cho khách đặt trước (hoặc còn dưới 5 phút là tới giờ booking).",
+        51616 => "Phiên này không thể chuyển bàn.",
         51699 => "Dữ liệu phiên chơi không nhất quán (không có đoạn bàn đang mở). Vui lòng báo quản trị viên.",
         _ => "Đã xảy ra lỗi khi kết nối hoặc xử lý cơ sở dữ liệu. Vui lòng thử lại sau."
     };

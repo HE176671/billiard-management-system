@@ -1,119 +1,92 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'textColor': '#000000', 'noteBkgColor': '#ffffff', 'noteBorderColor': '#000000', 'noteTextColor': '#000000', 'fontFamily': 'Arial'}}}%%
 classDiagram
-    class TableController {
-        -ITableSessionService _tableSessionService
-        +Index() Task~IActionResult~
-        +GetTableCardsPartial() Task~IActionResult~
-        +GetTableDetail(int tableId) Task~IActionResult~
-        +OpenSession(OpenSessionRequest request) Task~IActionResult~
-        +CloseSession(CloseSessionRequest request) Task~IActionResult~
+    direction TB
+
+    class Controller {
+        <<framework>>
     }
-    class StaffController {
-        +Index() IActionResult
+    class TableController {
+        +OpenSession(request) Task
+        +CloseSession(request) Task
+        +GetCloseSummary(sessionId) Task
+        +TransferSession(request) Task
     }
     class ITableSessionService {
         <<interface>>
-        +GetTableCardsAsync() Task~List~TableCardViewModel~~
-        +GetTableDetailAsync(int tableId) Task~TableDetailViewModel?~
-        +OpenSessionAsync(int tableId, string staffId) Task~TableOperationResult~
-        +CloseSessionAsync(int sessionId, string staffId) Task~TableOperationResult~
+        +OpenSessionAsync(tableId, staffId, mode, minutes) Task
+        +CloseSessionAsync(sessionId, staffId) Task
+        +GetCloseSummaryAsync(sessionId) Task
+        +TransferSessionAsync(sessionId, newTableId, staffId) Task
     }
     class TableSessionService {
-        -ApplicationDbContext _context
-        -ILogger _logger
-        +GetTableCardsAsync() Task~List~TableCardViewModel~~
-        +GetTableDetailAsync(int tableId) Task~TableDetailViewModel?~
-        +OpenSessionAsync(int tableId, string staffId) Task~TableOperationResult~
-        +CloseSessionAsync(int sessionId, string staffId) Task~TableOperationResult~
-        +MapDisplayStatus(string status)$ string
-        -HandleSqlException(SqlException ex, string operationName, int targetId) TableOperationResult
-        -MapErrorCode(int errorNumber)$ string
+        +OpenSessionAsync(tableId, staffId, mode, minutes) Task
+        +CloseSessionAsync(sessionId, staffId) Task
+        +GetCloseSummaryAsync(sessionId) Task
+        +TransferSessionAsync(sessionId, newTableId, staffId) Task
     }
     class ApplicationDbContext {
-        +DbSet~TableType~ TableTypes
-        +DbSet~BilliardTable~ BilliardTables
-        +DbSet~PlaySession~ PlaySessions
-    }
-    class ILogger {
-        <<interface>>
+        +DbSet TableTypes
+        +DbSet BilliardTables
+        +DbSet PlaySessions
+        +DbSet PlaySessionTableSegments
     }
     class TableType {
         +int Id
         +string Name
-        +decimal HourlyRate
-        +ICollection~BilliardTable~ BilliardTables
+        +ICollection BilliardTables
     }
     class BilliardTable {
         +int Id
         +string TableCode
-        +int TableTypeId
         +string Status
-        +TableType TableType
-        +ICollection~PlaySession~ PlaySessions
+        +ICollection PlaySessions
     }
     class PlaySession {
         +int Id
         +int TableId
         +string Status
-        +DateTime StartAtUtc
-        +DateTime? EndAtUtc
-        +decimal? PlaytimeAmount
-        +decimal HourlyRateSnapshot
-        +int? BookingId
-        +string? CustomerId
-        +string OpenedById
-        +string? ClosedById
-        +BilliardTable BilliardTable
+        +decimal PlaytimeAmount
+        +ICollection Segments
     }
-    class TableCardViewModel {
-        +int Id
-        +string TableCode
-        +string Status
-        +string DisplayStatus
-        +int? ActiveSessionId
-        +DateTime? SessionStartUtc
-        +DateTime ServerTimeUtc
-    }
-    class TableDetailViewModel {
-        +int TableId
-        +string TableCode
-        +string Status
-        +string DisplayStatus
-        +int? SessionId
-        +DateTime? StartAtUtc
-        +DateTime? EndAtUtc
-        +decimal? PlaytimeAmount
-        +string? CustomerFullName
-        +DateTime ServerTimeUtc
-    }
-    class OpenSessionRequest {
-        +int TableId
-    }
-    class CloseSessionRequest {
+    class PlaySessionTableSegment {
         +int SessionId
+        +int TableId
+        +decimal HourlyRateSnapshot
+        +DateTime StartAtUtc
+        +DateTime EndAtUtc
+    }
+    class CloseSummaryViewModel {
+        +int SessionId
+        +DateTime BillingStartAtUtc
+        +DateTime BillingEndPreviewAtUtc
+        +int BilledMinutes
+        +decimal EstimatedAmount
     }
     class TableOperationResult {
         +bool Success
-        +int? ErrorCode
-        +string? Message
-        +bool AutoReload
-        +object? Data
-        +Ok(object? data, string? message)$ TableOperationResult
-        +Fail(int? errorCode, string? message, bool autoReload)$ TableOperationResult
+        +int ErrorCode
+        +string Message
+        +Ok(data, message) TableOperationResult
+        +Fail(code, message, reload) TableOperationResult
     }
 
-    StaffController ..> TableController : redirects
-    TableController --> ITableSessionService : _tableSessionService
-    TableController ..> OpenSessionRequest : input
-    TableController ..> CloseSessionRequest : input
-    TableController ..> TableOperationResult : output JSON
-    ITableSessionService <|.. TableSessionService : implements
-    TableSessionService --> ApplicationDbContext : _context
-    TableSessionService --> ILogger : _logger
-    TableSessionService ..> TableCardViewModel : produces
-    TableSessionService ..> TableDetailViewModel : produces
-    TableSessionService ..> TableOperationResult : produces
-    TableType "1" <-- "0..*" BilliardTable : TableType / BilliardTables
-    BilliardTable "1" <-- "0..*" PlaySession : BilliardTable / PlaySessions
-    ApplicationDbContext ..> TableType : DbSet
-    ApplicationDbContext ..> BilliardTable : DbSet
-    ApplicationDbContext ..> PlaySession : DbSet
+    Controller <|-- TableController
+    ITableSessionService <|.. TableSessionService
+
+    TableController --> ITableSessionService : "dùng qua DI"
+    TableSessionService --> ApplicationDbContext : "dùng qua DI"
+    ApplicationDbContext --> TableType : "DbSet"
+    ApplicationDbContext --> BilliardTable : "DbSet"
+    ApplicationDbContext --> PlaySession : "DbSet"
+    ApplicationDbContext --> PlaySessionTableSegment : "DbSet"
+    PlaySessionTableSegment --> BilliardTable : "thuộc bàn"
+
+    TableType "1" o-- "*" BilliardTable : "có nhiều bàn"
+    BilliardTable "1" o-- "*" PlaySession : "có nhiều phiên"
+    PlaySession "1" o-- "*" PlaySessionTableSegment : "có nhiều đoạn bàn"
+
+    TableController ..> TableOperationResult : "trả về JSON"
+    ITableSessionService ..> TableOperationResult : "kiểu trả về"
+    ITableSessionService ..> CloseSummaryViewModel : "kiểu trả về"
+    TableSessionService ..> TableOperationResult : "tạo kết quả"
+    TableSessionService ..> CloseSummaryViewModel : "tạo tóm tắt"
