@@ -92,7 +92,7 @@ public class CustomerController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> ToggleLock(string id)
+    public async Task<IActionResult> ToggleLock(string id, string? returnTo = null)
     {
         var user = await _userManager.FindByIdAsync(id);
         if (user == null || !await _userManager.IsInRoleAsync(user, "Customer"))
@@ -111,7 +111,92 @@ public class CustomerController : Controller
         TempData["Success"] = user.IsActive
             ? $"Đã mở khóa tài khoản {user.FullName}."
             : $"Đã khóa tài khoản {user.FullName}.";
-        return RedirectToAction(nameof(Index));
+        return returnTo == "details" ? RedirectToAction(nameof(Details), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    #endregion
+
+    #region UC35 - Xem chi tiet va sua thong tin khach hang
+
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Details(string id)
+    {
+        var user = await GetCustomerOrNull(id);
+        return user == null ? NotFound() : View(await ToEditModelAsync(user));
+    }
+
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Edit(string id)
+    {
+        var user = await GetCustomerOrNull(id);
+        return user == null ? NotFound() : View(await ToEditModelAsync(user));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Edit(EditCustomerViewModel model)
+    {
+        var user = await GetCustomerOrNull(model.Id);
+        if (user == null) return NotFound();
+
+        var email = model.Email?.Trim() ?? "";
+        var phone = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
+        if (phone != null && await _userManager.Users.AnyAsync(u => u.PhoneNumber == phone && u.Id != user.Id))
+            ModelState.AddModelError(nameof(model.PhoneNumber), "Số điện thoại đã được tài khoản khác sử dụng.");
+        if (ModelState.IsValid)
+        {
+            var owner = await _userManager.FindByEmailAsync(email);
+            if (owner != null && owner.Id != user.Id)
+                ModelState.AddModelError(nameof(model.Email), "Email đã được tài khoản khác sử dụng.");
+        }
+        if (!ModelState.IsValid) return View(await RefillAsync(user, model));
+
+        user.FullName = model.FullName.Trim();
+        user.PhoneNumber = phone;
+        IdentityResult result;
+        try
+        {
+            // SetEmailAsync cũng lưu FullName/PhoneNumber vì cùng entity đang theo dõi.
+            result = !string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase)
+                ? await _userManager.SetEmailAsync(user, email)
+                : await _userManager.UpdateAsync(user);
+        }
+        catch (DbUpdateException)
+        {
+            result = IdentityResult.Failed(new IdentityError { Description = "Email hoặc số điện thoại vừa được tài khoản khác sử dụng." });
+        }
+        if (!result.Succeeded)
+        {
+            foreach (var err in result.Errors)
+                ModelState.AddModelError(string.Empty, err.Code == "DuplicateEmail" ? "Email đã được tài khoản khác sử dụng." : err.Description);
+            return View(await RefillAsync(user, model));
+        }
+
+        TempData["Success"] = $"Đã cập nhật thông tin khách hàng {user.FullName}.";
+        return RedirectToAction(nameof(Details), new { id = user.Id });
+    }
+
+    private async Task<ApplicationUser?> GetCustomerOrNull(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        var user = await _userManager.FindByIdAsync(id);
+        return user != null && await _userManager.IsInRoleAsync(user, "Customer") ? user : null;
+    }
+
+    private async Task<EditCustomerViewModel> ToEditModelAsync(ApplicationUser user) => new()
+    {
+        Id = user.Id, FullName = user.FullName, Email = user.Email ?? "", PhoneNumber = user.PhoneNumber,
+        UserName = user.UserName, RewardPoints = user.RewardPoints, IsActive = user.IsActive,
+        CreatedAtUtc = user.CreatedAtUtc,
+        TierName = user.TierId == null ? null
+            : await _context.MembershipTiers.Where(t => t.Id == user.TierId).Select(t => t.TierName).FirstOrDefaultAsync()
+    };
+
+    private async Task<EditCustomerViewModel> RefillAsync(ApplicationUser user, EditCustomerViewModel posted)
+    {
+        var vm = await ToEditModelAsync(user);
+        vm.FullName = posted.FullName; vm.Email = posted.Email; vm.PhoneNumber = posted.PhoneNumber;
+        return vm;
     }
 
     #endregion

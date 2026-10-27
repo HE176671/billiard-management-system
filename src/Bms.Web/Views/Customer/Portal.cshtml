@@ -9,5 +9,8 @@
         <dt class="col-sm-3">Hạng thành viên</dt><dd class="col-sm-9">@(Model.TierName ?? "Chưa có hạng")</dd>
         <dt class="col-sm-3">Điểm tích lũy</dt><dd class="col-sm-9">@Model.RewardPoints.ToString("N0")</dd>
     </dl>
-    <a asp-controller="Profile" asp-action="ChangePassword" class="btn btn-outline-primary align-self-start">Đổi mật khẩu</a>
+    <div class="d-flex gap-2">
+        <a asp-controller="Profile" asp-action="Index" class="btn btn-outline-primary">Sửa hồ sơ</a>
+        <a asp-controller="Profile" asp-action="ChangePassword" class="btn btn-outline-primary">Đổi mật khẩu</a>
+    </div>
 </div>

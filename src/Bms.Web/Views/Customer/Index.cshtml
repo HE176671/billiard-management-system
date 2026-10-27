@@ -95,7 +95,9 @@
                             <span class="badge-inactive">Bị khóa</span>
                         }
                     </td>
-                    <td>
+                    <td class="text-nowrap">
+                        <a asp-action="Details" asp-route-id="@c.Id" class="btn-sm-icon" title="Chi tiết"><i class="bi bi-eye"></i></a>
+                        <a asp-action="Edit" asp-route-id="@c.Id" class="btn-sm-icon" title="Sửa"><i class="bi bi-pencil"></i></a>
                         <form asp-action="ToggleLock" asp-route-id="@c.Id" method="post" class="d-inline">
                             @Html.AntiForgeryToken()
                             <button type="submit"
