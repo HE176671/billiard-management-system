@@ -32,9 +32,20 @@ public class RevenueController : Controller
         var model = CreateRange(from, to, groupBy);
         if (!ModelState.IsValid) return BadRequest("Khoảng ngày hoặc kiểu nhóm không hợp lệ.");
         await PopulateAsync(model);
-        var csv = new StringBuilder("Ky,Doanh thu VND,So giao dich\r\n");
+        // Cùng ba phần như màn hình: tổng quan, theo kỳ, theo phương thức.
+        var inv = CultureInfo.InvariantCulture;
+        var csv = new StringBuilder();
+        csv.Append("Bao cao doanh thu,").Append(model.From.ToString("yyyy-MM-dd")).Append(',')
+           .Append(model.To.ToString("yyyy-MM-dd")).Append(',').Append(model.GroupBy).Append("\r\n");
+        csv.Append("Tong doanh thu VND,").Append(model.TotalRevenue.ToString(inv))
+           .Append(",So giao dich,").Append(model.PaymentCount)
+           .Append(",So hoa don,").Append(model.InvoiceCount).Append("\r\n\r\n");
+        csv.Append("Ky,Doanh thu VND,So giao dich\r\n");
         foreach (var row in model.Periods)
-            csv.AppendLine($"{row.Period},{row.Revenue.ToString(CultureInfo.InvariantCulture)},{row.PaymentCount}");
+            csv.Append($"{row.Period},{row.Revenue.ToString(inv)},{row.PaymentCount}\r\n");
+        csv.Append("\r\nPhuong thuc,Doanh thu VND,So giao dich\r\n");
+        foreach (var row in model.Methods)
+            csv.Append($"{row.Method},{row.Revenue.ToString(inv)},{row.PaymentCount}\r\n");
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray();
         return File(bytes, "text/csv; charset=utf-8", $"doanh-thu-{model.From:yyyyMMdd}-{model.To:yyyyMMdd}.csv");
     }

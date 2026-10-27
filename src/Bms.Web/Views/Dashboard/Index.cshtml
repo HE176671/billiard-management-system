@@ -2,11 +2,17 @@
 @{ ViewData["Title"] = "Dashboard tổng quan"; Layout = "~/Views/Shared/_AdminLayout.cshtml"; }
 <p class="text-muted">Số liệu trực tiếp từ hệ thống. Ngày và tháng tính theo giờ Việt Nam (UTC+7).</p>
 <div class="row g-3 mb-4">
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.TodayRevenue.ToString("N0") ₫</div><div class="stat-label">Doanh thu hôm nay</div></div></div></div>
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.MonthRevenue.ToString("N0") ₫</div><div class="stat-label">Doanh thu tháng này</div></div></div></div>
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.TotalTables</div><div class="stat-label">Tổng số bàn · @Model.AvailableTables trống · @Model.InUseTables đang chơi</div></div></div></div>
-    <div class="col-md-6"><div class="stat-card"><div><div class="stat-value">@Model.StaffCount</div><div class="stat-label">Nhân viên</div></div></div></div>
-    <div class="col-md-6"><div class="stat-card"><div><div class="stat-value">@Model.CustomerCount</div><div class="stat-label">Khách hàng</div></div></div></div>
+    <div class="col-md-4"><div class="stat-card"><div class="stat-icon green"><i class="bi bi-cash-stack"></i></div><div><div class="stat-value">@Model.TodayRevenue.ToString("N0") ₫</div><div class="stat-label">Doanh thu hôm nay</div></div></div></div>
+    <div class="col-md-4"><div class="stat-card"><div class="stat-icon blue"><i class="bi bi-calendar-month"></i></div><div><div class="stat-value">@Model.MonthRevenue.ToString("N0") ₫</div><div class="stat-label">Doanh thu tháng này</div></div></div></div>
+    <div class="col-md-4">
+        <a asp-controller="Shift" asp-action="Manage" class="text-decoration-none text-reset">
+            <div class="stat-card"><div class="stat-icon amber"><i class="bi bi-clipboard-check"></i></div><div><div class="stat-value">@Model.ActiveShiftCount</div>
+                <div class="stat-label">Ca đang mở@(Model.TodayShiftsWithDifference > 0 ? $" · {Model.TodayShiftsWithDifference} ca lệch tiền hôm nay" : "")</div></div></div>
+        </a>
+    </div>
+    <div class="col-md-12"><div class="stat-card"><div class="stat-icon red"><i class="bi bi-grid-3x3"></i></div><div><div class="stat-value">@Model.TotalTables bàn</div>
+        <div class="stat-label">@Model.AvailableTables trống · @Model.InUseTables đang chơi · @Model.AwaitingPaymentTables chờ thanh toán · @Model.UnavailableTables bảo trì/ngừng</div></div></div></div>
+    <div class="col-md-6"><div class="stat-card"><div class="stat-icon blue"><i class="bi bi-people"></i></div><div><div class="stat-value">@Model.StaffCount</div><div class="stat-label">Nhân viên</div></div></div></div>
+    <div class="col-md-6"><div class="stat-card"><div class="stat-icon green"><i class="bi bi-person-vcard"></i></div><div><div class="stat-value">@Model.CustomerCount</div><div class="stat-label">Khách hàng</div></div></div></div>
 </div>
 <a asp-controller="Revenue" asp-action="Index" class="btn-primary-bms">Xem báo cáo doanh thu</a>
-

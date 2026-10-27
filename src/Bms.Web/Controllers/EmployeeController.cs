@@ -102,6 +102,10 @@ public class EmployeeController : Controller
             ? await GenerateNextEmployeeCodeAsync()
             : model.EmployeeCode.Trim().ToUpper();
 
+        await ValidateUniqueAsync(model.PhoneNumber, empCode, excludeUserId: null,
+            nameof(model.PhoneNumber), nameof(model.EmployeeCode));
+        if (!ModelState.IsValid) return View(model);
+
         var user = new ApplicationUser
         {
             UserName     = model.UserName.Trim(),
@@ -178,14 +182,30 @@ public class EmployeeController : Controller
         var user = await GetStaffOrNull(model.Id);
         if (user == null) return NotFound();
 
+        var newCode = string.IsNullOrWhiteSpace(model.EmployeeCode)
+            ? await GenerateNextEmployeeCodeAsync()
+            : model.EmployeeCode.Trim().ToUpper();
+        await ValidateUniqueAsync(model.PhoneNumber, newCode, user.Id,
+            nameof(model.PhoneNumber), nameof(model.EmployeeCode));
+        if (!ModelState.IsValid)
+        {
+            model.UserName = user.UserName;
+            model.Email    = user.Email;
+            return View(model);
+        }
+
         user.FullName     = model.FullName.Trim();
         user.PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
-        user.EmployeeCode = string.IsNullOrWhiteSpace(model.EmployeeCode) 
-            ? await GenerateNextEmployeeCodeAsync() 
-            : model.EmployeeCode.Trim().ToUpper();
+        user.EmployeeCode = newCode;
         user.HireDate     = model.HireDate;
 
-        var result = await _userManager.UpdateAsync(user);
+        IdentityResult result;
+        try { result = await _userManager.UpdateAsync(user); }
+        catch (DbUpdateException)
+        {
+            // Request đồng thời lấy cùng SĐT/mã: unique index SQL chặn, không để lỗi 500.
+            result = IdentityResult.Failed(new IdentityError { Description = "Số điện thoại hoặc mã nhân viên vừa được người khác sử dụng." });
+        }
         if (!result.Succeeded)
         {
             foreach (var err in result.Errors)
@@ -323,6 +343,17 @@ public class EmployeeController : Controller
         "PasswordRequiresUpper"           => "Mật khẩu phải có ít nhất 1 chữ hoa.",
         _ => err.Description
     };
+
+    /// <summary>Kiểm tra trước unique index UX_User_Phone / UX_User_EmployeeCode để báo lỗi rõ ràng.</summary>
+    private async Task ValidateUniqueAsync(string? phone, string? code, string? excludeUserId,
+        string phoneField, string codeField)
+    {
+        phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
+        if (phone != null && await _userManager.Users.AnyAsync(u => u.PhoneNumber == phone && u.Id != excludeUserId))
+            ModelState.AddModelError(phoneField, "Số điện thoại đã được tài khoản khác sử dụng.");
+        if (!string.IsNullOrEmpty(code) && await _userManager.Users.AnyAsync(u => u.EmployeeCode == code && u.Id != excludeUserId))
+            ModelState.AddModelError(codeField, "Mã nhân viên đã tồn tại.");
+    }
 
     /// <summary>Tự động sinh mã nhân viên tiếp theo (NV001, NV002...)</summary>
     private async Task<string> GenerateNextEmployeeCodeAsync()
