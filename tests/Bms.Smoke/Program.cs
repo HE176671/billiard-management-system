@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Bms.Web.Controllers;
 using Bms.Web.Data;
 using Bms.Web.Models;
+using Bms.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -114,6 +115,44 @@ try
     Check(await report.Export(new(2035,1,3),new(2035,1,1)) is BadRequestObjectResult, "Reversed report range rejected");
     var dashboard = Prepare(new DashboardController(db));
     Check(((ViewResult)await dashboard.Index()).Model is DashboardViewModel { TotalTables: > 0 }, "Dashboard live SQL queries");
+
+    // TV5 ca làm (cần 08_AddWorkShiftReconciliation.sql). Ngoại tx đang mở nên service dùng chung tx.
+    var shiftService = new ShiftService(db);
+    var opened = await shiftService.OpenShiftAsync(staff.Id, 500000, "smoke");
+    Check(opened.Status == WorkShift.StatusActive && opened.StartingCash == 500000, "Shift open");
+    var secondRejected = false;
+    try { await shiftService.OpenShiftAsync(staff.Id, 0, null); } catch (ShiftException e) { secondRejected = e.Code == "ALREADY_OPEN"; }
+    Check(secondRejected, "Second active shift for same staff rejected");
+    var negativeRejected = false;
+    try { await shiftService.OpenShiftAsync(customer.Id, -1, null); } catch (ShiftException) { negativeRejected = true; }
+    Check(negativeRejected, "Negative starting cash rejected");
+    Check(await shiftService.RequireActiveShiftIdForCashAsync(staff.Id) == opened.Id, "Cash payment locks the active shift");
+    await db.Database.ExecuteSqlInterpolatedAsync($@"
+        DECLARE @table int = (SELECT TOP(1) Id FROM dbo.BilliardTables);
+        INSERT dbo.PlaySessions(TableId,OpenedById,ClosedById,StartAtUtc,EndAtUtc,HourlyRateSnapshot,PlaytimeAmount,Status)
+        VALUES(@table,{staff.Id},{staff.Id},'2035-03-01','2035-03-01T01:00:00',50000,50000,'Closed');
+        INSERT dbo.Invoices(SessionId,TotalPlaytime,Status) VALUES(SCOPE_IDENTITY(),200000,'Paid');
+        DECLARE @invoice int = SCOPE_IDENTITY();
+        INSERT dbo.PaymentTransactions(InvoiceId,PaymentMethod,AmountPaid,WorkShiftId,ReceivedById) VALUES
+        (@invoice,'Cash',120000,{opened.Id},{staff.Id}),
+        (@invoice,'VNPay',80000,{opened.Id},NULL);");
+    var live = (await shiftService.GetSummaryAsync(opened.Id))!;
+    Check(live.CashCollected == 120000 && live.NonCashCollected == 80000 && live.ExpectedCash == 620000, "Shift expected cash excludes VNPay");
+    var noteRequired = false;
+    try { await shiftService.CloseShiftAsync(opened.Id, staff.Id, 600000, null); } catch (ShiftException e) { noteRequired = e.Code == "NOTE_REQUIRED"; }
+    Check(noteRequired, "Cash difference requires a note");
+    var closed = await shiftService.CloseShiftAsync(opened.Id, staff.Id, 600000, "Thiếu tiền lẻ");
+    Check(!closed.IsActive && closed.Difference == -20000 && closed.Shift.ExpectedCash == 620000, "Shift close snapshots expected cash and difference");
+    var closeTwice = false;
+    try { await shiftService.CloseShiftAsync(opened.Id, staff.Id, 620000, null); } catch (ShiftException e) { closeTwice = e.Code == "ALREADY_CLOSED"; }
+    Check(closeTwice, "Closing twice rejected");
+    var noShift = false;
+    try { await shiftService.RequireActiveShiftIdForCashAsync(staff.Id); } catch (ShiftException e) { noShift = e.Code == "NO_ACTIVE_SHIFT"; }
+    Check(noShift, "Cash payment after close rejected");
+    var dashboardWithShift = (DashboardViewModel)((ViewResult)await Prepare(new DashboardController(db)).Index()).Model!;
+    Check(dashboardWithShift.TotalTables == dashboardWithShift.AvailableTables + dashboardWithShift.InUseTables
+        + dashboardWithShift.AwaitingPaymentTables + dashboardWithShift.UnavailableTables, "Dashboard table statuses add up");
+
     staff.TierId = null; customer.TierId = null; await db.SaveChangesAsync();
     await tierController.Delete(tier.Id);
     Check(!await db.MembershipTiers.AnyAsync(t => t.Id == tier.Id), "Unreferenced tier deletion");
