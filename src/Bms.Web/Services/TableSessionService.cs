@@ -22,7 +22,7 @@ public class TableSessionService : ITableSessionService
     {
         var serverTimeUtc = DateTime.UtcNow;
         var holdThresholdUtc = serverTimeUtc.AddMinutes(-15);
-        var horizonUtc = serverTimeUtc.AddHours(24);
+        var horizonUtc = serverTimeUtc.AddHours(12);
 
         var query = from table in _context.BilliardTables.AsNoTracking()
                     join type in _context.TableTypes.AsNoTracking() on table.TableTypeId equals type.Id
@@ -214,20 +214,28 @@ public class TableSessionService : ITableSessionService
             sessionId = null;
         }
 
-        // Next upcoming booking on this table without a session yet
-        var nextBooking = await (from b in _context.Bookings.AsNoTracking()
-                                 join u in _context.Users.AsNoTracking() on b.CustomerId equals u.Id
-                                 where b.TableId == tableId
-                                       && (b.Status == "CheckedIn" || (b.Status == "Confirmed" && b.StartAtUtc >= holdThresholdUtc))
-                                       && !_context.PlaySessions.Any(s => s.BookingId == b.Id)
-                                 orderby b.StartAtUtc
-                                 select new
-                                 {
-                                     b.Id,
-                                     b.StartAtUtc,
-                                     b.Status,
-                                     CustomerFullName = u.FullName
-                                 }).FirstOrDefaultAsync();
+        // Next upcoming booking on this table within the next 12 hours without a session yet
+        var horizonUtc = serverTimeUtc.AddHours(12);
+        var allTableUpcomingBookings = await (from b in _context.Bookings.AsNoTracking()
+                                              join u in _context.Users.AsNoTracking() on b.CustomerId equals u.Id
+                                              where b.TableId == tableId
+                                                    && (b.Status == "CheckedIn" || (b.Status == "Confirmed" && b.StartAtUtc >= holdThresholdUtc))
+                                                    && !_context.PlaySessions.Any(s => s.BookingId == b.Id)
+                                              orderby b.StartAtUtc
+                                              select new
+                                              {
+                                                  b.Id,
+                                                  b.StartAtUtc,
+                                                  b.Status,
+                                                  CustomerFullName = u.FullName
+                                              }).ToListAsync();
+
+        var nextBooking = allTableUpcomingBookings
+            .FirstOrDefault(b => b.Status == "CheckedIn" || b.StartAtUtc <= horizonUtc);
+
+        var otherBookingsCount = nextBooking != null
+            ? allTableUpcomingBookings.Count - 1
+            : allTableUpcomingBookings.Count;
 
         DateTime? nextBookingStartUtc = nextBooking != null
             ? DateTime.SpecifyKind(nextBooking.StartAtUtc, DateTimeKind.Utc)
@@ -254,6 +262,7 @@ public class TableSessionService : ITableSessionService
             MustEndBeforeUtc = nextBookingStartUtc?.AddMinutes(-5),
             NextBookingCustomerName = nextBooking?.CustomerFullName,
             NextBookingStatus = nextBooking?.Status,
+            OtherBookingsCount = otherBookingsCount,
             Segments = segments,
             ServerTimeUtc = serverTimeUtc
         };

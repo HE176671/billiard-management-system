@@ -577,6 +577,28 @@
             }
         }
 
+        const otherBookingsCount = Number(detail.otherBookingsCount ?? detail.OtherBookingsCount ?? 0);
+        const rowOtherBookings = document.getElementById('detail-other-bookings-row');
+        const spanOtherCount = document.getElementById('detail-other-bookings-count');
+        const linkOtherBookings = document.getElementById('link-other-bookings');
+        const btnGoBookings = document.getElementById('btn-go-bookings');
+        const bookingFilterUrl = currentSelectedTable.code
+            ? `/Booking?keyword=${encodeURIComponent(currentSelectedTable.code)}`
+            : '/Booking';
+
+        if (btnGoBookings) {
+            btnGoBookings.setAttribute('href', bookingFilterUrl);
+        }
+        if (rowOtherBookings && spanOtherCount && linkOtherBookings) {
+            if (otherBookingsCount > 0) {
+                spanOtherCount.textContent = String(otherBookingsCount);
+                linkOtherBookings.setAttribute('href', bookingFilterUrl);
+                rowOtherBookings.classList.remove('d-none');
+            } else {
+                rowOtherBookings.classList.add('d-none');
+            }
+        }
+
         if (elStartTime) {
             elStartTime.textContent = currentSelectedTable.startAtUtc ? formatVnDateTime(currentSelectedTable.startAtUtc) : '--';
         }

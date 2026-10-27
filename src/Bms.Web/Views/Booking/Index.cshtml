@@ -142,16 +142,17 @@
 
                         var (shortTag, tagClass) = item.ScenarioCode switch
                         {
-                            "ON_TIME" => ("Đúng giờ", "badge-soft-green"),
-                            "LATE_WITHIN_15M" => ("Muộn ≤ 15p", "badge-soft-amber"),
-                            "DUE_NO_TABLE" => ("Bàn đang bận", "badge-soft-amber"),
-                            "EARLY_AVAILABLE" => ("Đến sớm", "badge-soft-blue"),
-                            "EARLY_WAIT" => ("Chưa tới giờ", "badge-soft-gray"),
-                            "ALREADY_CHECKED_IN" when item.LinkedSessionId == null => ("Đã Check-in • Chờ bàn", "badge-soft-amber"),
-                            "ALREADY_CHECKED_IN" => ("Đang chơi", "badge-soft-green"),
-                            "NO_SHOW_OVER_15M" => ("Quá hạn 15p", "badge-soft-red"),
-                            "CANCELLED" => ("Đã hủy", "badge-soft-gray"),
-                            "COMPLETED" => ("Hoàn tất", "badge-soft-gray"),
+                            "OnTime" => ("Đúng giờ", "badge-soft-green"),
+                            "LateUnder15m" => ("Muộn ≤ 15p", "badge-soft-amber"),
+                            "OnTimeNoTableYet" => ("Bàn đang bận", "badge-soft-amber"),
+                            "EarlyArrival" when item.CanCheckInEarly => ("Đến sớm", "badge-soft-blue"),
+                            "EarlyArrival" => ("Chưa tới giờ", "badge-soft-gray"),
+                            "CheckedInReadyToAssign" => ("Đã Check-in • Chờ bàn", "badge-soft-amber"),
+                            "CheckedInWaitingTable" => ("Chờ bàn trống", "badge-soft-amber"),
+                            "AlreadyCheckedInPlaying" => ("Đang chơi", "badge-soft-green"),
+                            "LateOver15m" => ("Quá hạn 15p", "badge-soft-red"),
+                            "Cancelled" => ("Đã hủy", "badge-soft-gray"),
+                            "Completed" => ("Hoàn tất", "badge-soft-gray"),
                             _ => (item.DisplayStatus, "badge-soft-gray")
                         };
 

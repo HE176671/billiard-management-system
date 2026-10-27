@@ -378,8 +378,8 @@ BEGIN
         IF @Status <> 'Confirmed'
             THROW 51302, N'Only a Confirmed booking can be checked in.', 1;
 
-        -- Early arrival check: if > 15 minutes before start and staff hasn't explicitly enabled @AllowEarly
-        IF @AllowEarly = 0 AND @Now < DATEADD(minute, -15, @Start)
+        -- Early arrival check: if > 5 minutes before start and staff hasn't explicitly enabled @AllowEarly
+        IF @AllowEarly = 0 AND @Now < DATEADD(minute, -5, @Start)
             THROW 51303, N'Outside the check-in window (customer arrived early; confirm early service if table is ready).', 1;
 
         UPDATE dbo.Bookings

@@ -479,7 +479,7 @@ public class BookingService : IBookingService
 
         var minutesDiff = (nowUtc - item.StartAtUtc).TotalMinutes; // âm: đến sớm, dương: đến muộn
 
-        if (minutesDiff < -15)
+        if (minutesDiff < -5)
         {
             item.ScenarioCode = "EarlyArrival";
             item.ScenarioTitle = "Khách đến sớm";

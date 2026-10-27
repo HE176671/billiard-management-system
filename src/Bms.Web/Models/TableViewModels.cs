@@ -47,6 +47,7 @@ public class TableDetailViewModel
     public DateTime? MustEndBeforeUtc { get; set; }
     public string? NextBookingCustomerName { get; set; }
     public string? NextBookingStatus { get; set; }
+    public int OtherBookingsCount { get; set; }
     public List<SessionSegmentViewModel> Segments { get; set; } = new();
     public DateTime ServerTimeUtc { get; set; }
 }
