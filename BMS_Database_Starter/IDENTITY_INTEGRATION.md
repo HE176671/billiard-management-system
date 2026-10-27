@@ -1,10 +1,10 @@
 # Nối ASP.NET Core Identity vào database này
 
-Đây là hướng dẫn tham khảo cho người dựng project, **không phải project C# hoàn chỉnh**. Chưa có controller/view/login/registration trong bộ database. Chọn một phiên bản .NET còn được hỗ trợ và dùng các package EF Core/Identity EF cùng major tương thích; với project mới có thể dùng .NET 10. Không trộn package 8/9/10 tùy ý.
+Các đoạn C# dưới đây là hướng dẫn tham khảo của bộ starter. Repo hiện đã có MVC .NET 8 tại `src/Bms.Web`, dùng EF Core/Identity major 8; đọc code hiện tại và `docs/PROJECT_CONTEXT.md` trước khi áp dụng. Database hiện tên **BilliardDB**, schema mở rộng 24 bảng. Model minh họa bên dưới chỉ ánh xạ phần tài khoản ban đầu; chưa bao gồm TierId/RewardPoints hoặc combo. Không trộn package 8/9/10 tùy ý hoặc tạo lại nền dự án theo ví dụ cũ.
 
 ## Một nguồn quản lý schema
 
-Bộ này chủ động dùng **SQL-first**: các file SQL tạo database trước; C# ánh xạ đến bảng đã tồn tại. Không gọi `Database.EnsureCreated()`, `Database.Migrate()` hay `Update-Database` để khởi tạo lại những bảng đó. Template Individual Accounts có thể chứa migration khởi tạo riêng: không áp dụng migration đó lên BMS_Starter.
+Bộ này chủ động dùng **SQL-first**: các file SQL tạo database trước; C# ánh xạ đến bảng đã tồn tại. Không gọi `Database.EnsureCreated()`, `Database.Migrate()` hay `Update-Database` để khởi tạo lại những bảng đó. Template Individual Accounts có thể chứa migration khởi tạo riêng: không áp dụng migration đó lên BilliardDB.
 
 Nếu sau này nhóm muốn chuyển sang EF migrations, cần dựng đầy đủ model khớp schema (cả constraints/indexes), làm baseline và kiểm tra script migration trước khi áp dụng. Không chỉ tạo một migration Identity mới rồi chạy trên database này.
 
@@ -115,7 +115,7 @@ Ví dụ `appsettings.Development.json` dùng Windows Authentication trên máy 
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=localhost\\SQLEXPRESS;Database=BMS_Starter;Trusted_Connection=True;Encrypt=True;TrustServerCertificate=True;"
+    "DefaultConnection": "Server=localhost;Database=BilliardDB;Trusted_Connection=True;Encrypt=True;TrustServerCertificate=True;"
   }
 }
 ```

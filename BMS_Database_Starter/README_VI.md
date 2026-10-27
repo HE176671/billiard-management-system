@@ -1,18 +1,20 @@
 # BMS — Database khởi đầu cho nhóm 5 người
 
-Phiên bản 1 • 28/09/2026 • SQL Server 2019 trở lên.
+Schema mở rộng • 01/10/2026 • SQL Server 2019 trở lên • **BilliardDB: 24 bảng nghiệp vụ, 5 procedure**.
 
 ## 1. Bạn mở file nào trước?
 
-Bạn đang bắt đầu từ số 0. Bộ này là **database và hướng dẫn nối tài khoản**, chưa phải website có giao diện đăng nhập hay quản lý nhân viên.
+Bộ này chứa SQL tạo database local cho từng thành viên. Repo đã có project MVC .NET 8 ở `src/Bms.Web`; SQL vẫn là nguồn quản lý schema. Git chia sẻ script và dữ liệu mẫu, không đồng bộ dữ liệu đang chạy trên SQL Server của các máy.
 
 Thực hiện theo thứ tự:
 
 1. Cài **SQL Server** (dịch vụ lưu dữ liệu).
 2. Cài **SQL Server Management Studio — SSMS** (phần mềm mở và chạy SQL).
 3. Mở SSMS, kết nối vào SQL Server trên máy.
-4. Chạy lần lượt `01_CreateDatabase.sql`, `02_BusinessProcedures.sql`, `03_DemoData.sql`, `04_Verify.sql`.
-5. Sau đó mới tạo project C# và nối database. Hướng dẫn kỹ thuật cho bước này nằm trong `IDENTITY_INTEGRATION.md`.
+4. Đọc mục 3 rồi chọn đúng cách cài mới hoặc nâng cấp; không chạy mọi file SQL theo thứ tự tên.
+5. Nối project C# đến đúng instance/database trên máy mình. Đọc `IDENTITY_INTEGRATION.md` và bối cảnh mới nhất trong `../docs/PROJECT_CONTEXT.md`.
+
+Các file `01_CreateDatabase.sql` đến `04_Verify.sql` đã được gộp và không còn trong phiên bản hiện tại.
 
 Chỉ cài SSMS thì chưa có SQL Server để lưu dữ liệu.
 
@@ -32,22 +34,26 @@ Liên kết tải chính thức:
 
 Tên server là ví dụ, không phải tên chắc chắn trên máy bạn. Nếu kết nối thất bại, kiểm tra dịch vụ SQL Server đang chạy và instance đã chọn khi cài.
 
-## 3. Chạy bốn script
+## 3. Chọn đúng script theo database trên máy
 
-Trong SSMS chọn **File → Open → File**, mở từng file. Không bôi đen một phần script; nhấn **Execute** hoặc F5 để chạy toàn bộ.
+Trong SSMS chọn **File → Open → File** và mở file SQL tải từ repo. Với file Full chỉ dùng cho database chưa có bảng, không bôi đen một phần; nhấn **Execute** hoặc F5. Nếu xuất hiện lỗi, dừng và kiểm tra toàn bộ tab Messages trước khi chạy tiếp. Không bỏ qua lỗi vì có thông báo thành công ở các batch sau.
 
-| Thứ tự | File | Kết quả |
+| Tình trạng máy | File cần chạy | Kết quả |
 |---|---|---|
-| 1 | `01_CreateDatabase.sql` | Tạo database `BMS_Starter` và 13 bảng |
-| 2 | `02_BusinessProcedures.sql` | Tạo 5 thủ tục xử lý đặt bàn và phiên chơi |
-| 3 | `03_DemoData.sql` | Thêm role, người dùng và dữ liệu nghiệp vụ giả lập |
-| 4 | `04_Verify.sql` | Chỉ đọc và hiển thị số lượng, dữ liệu và các kiểm tra nhất quán |
+| Chưa có BilliardDB, hoặc database hoàn toàn trống | `BilliardDB_Full.sql` một lần | Tạo 24 bảng, 5 procedure, dữ liệu mẫu và chạy verify |
+| Đã có schema mở rộng 21 bảng, có Combos nhưng chưa có 3 bảng liên kết | `05_AddComboRelations.sql` một lần, sau đó `Verify_BilliardDB.sql` | Thêm 3 bảng trống, giữ dữ liệu cũ |
+| Đã có cả ComboItems, SessionCombos, SessionComboItems | Chỉ `Verify_BilliardDB.sql` | Kiểm tra chỉ đọc; không tạo/seed lại |
+| Bản 13 bảng cũ hoặc schema không xác định | Dừng và kiểm tra schema, báo người phụ trách database | Chưa có script nâng từ bản 13 lên bản 24; không chạy Full/05 để thay thế |
 
 Nếu một file báo lỗi, dừng và sửa lỗi trước khi chạy file tiếp theo. Không tiếp tục chỉ vì thấy vài thông báo “completed”.
 
-Sau khi chạy, tại Object Explorer: **Databases → Refresh → BMS_Starter → Tables**.
+Sau khi chạy thành công: **Databases → Refresh → BilliardDB → Tables → Refresh**. Verify phải báo `DatabaseName=BilliardDB`, `TableCount_Expected24=24`, `ProcedureCount_Expected5=5`. SSMS có thể tạo thêm `dbo.sysdiagrams`; verify loại bảng hỗ trợ này khỏi bộ đếm.
 
-`01` chỉ dùng khởi tạo database trống. Nếu chạy lại khi đã có bảng, script chủ động báo lỗi và không xóa bảng. `03` cũng không ghi đè dữ liệu cũ. Đây không phải lỗi cần giải quyết bằng DROP DATABASE. Khi thay đổi thiết kế sau này, viết script nâng cấp mới.
+Không DROP database hoặc chạy seed lại để xử lý lỗi. File Full có nhiều batch: không chạy trên database đã có bảng. Script 05 từ chối nếu bảng nâng cấp đã tồn tại; không cố chạy lại khi đã áp dụng thành công.
+
+Trên máy Hùng, bản mới đã có ở **localhost / BilliardDB**. Instance **localhost\\SQLEXPRESS** có database cùng tên nhưng là bản 13 bảng độc lập. Mỗi thành viên kiểm tra server của mình; không copy tên instance mà chưa kiểm tra. Không cần lưu `.bak`, `.mdf`, `.ldf`, mật khẩu hoặc connection string cá nhân lên Git.
+
+Để hiện quan hệ combo trong Database Diagram: chuột phải vùng trắng → Add Table → thêm ComboItems, SessionCombos, SessionComboItems → Save.
 
 ## 4. Phạm vi đúng với 5 người đã chia
 
@@ -59,7 +65,9 @@ Sau khi chạy, tại Object Explorer: **Databases → Refresh → BMS_Starter �
 | 4 | Admin thực đơn/tồn kho | `ProductCategories`, `Products` |
 | 5 — bạn | Admin quản lý nhân viên | `AspNetUsers`, `AspNetRoles`, `AspNetUserRoles` |
 
-Chưa có bảng Order, OrderDetail, Invoice, PaymentTransaction, combo, hạng thành viên hay ca làm. Đó là phạm vi đợt sau; bộ này không được mô tả là database đầy đủ cho toàn bộ SRS.
+Bảng trên ghi phạm vi màn hình của giai đoạn đầu. Schema nay đã có MembershipTiers, PricingConfigs, Orders, OrderDetails, Invoices, PaymentTransactions, Combos, WorkShifts và 3 bảng liên kết combo. Có bảng không có nghĩa chức năng đã được triển khai. Phân công SDS mở rộng và trạng thái code xem `../docs/PROJECT_CONTEXT.md`.
+
+Combo có giờ chơi và đồ ăn/nước uống: ComboItems nối Combos–Products; SessionCombos nối PlaySessions–Combos–AspNetUsers; SessionComboItems lưu thành phần lúc mua. Ba bảng mới thuộc TV4, phối hợp TV1 (giờ chơi) và TV3 (hóa đơn). Thiết kế chi tiết và phần tính tiền còn phải làm: `../docs/COMBO_DESIGN.md`.
 
 Không có bảng Employee chứa tài khoản độc lập: thông tin nhân viên nằm trong `AspNetUsers`, xác định bằng role Staff. Như vậy tài khoản do bạn tạo dùng được chung với màn đăng nhập.
 
@@ -115,7 +123,7 @@ Check-in là xác nhận khách đã đến, không tự tạo phiên. Đóng ph
 - Bản này dùng bảng và khóa tài khoản chuẩn Identity; không sao chép nguyên `UserId int/RoleID` từ ERD cũ. UserId là `nvarchar(450)`; quan hệ role qua `AspNetUserRoles`. ERD phải cập nhật theo nếu nhóm nhận thiết kế này.
 - SQL scripts quản lý schema trong giai đoạn đầu. Không chạy đồng thời migrations khởi tạo Identity lên các bảng SQL đã tạo. Xem hướng dẫn tích hợp trước khi dùng `Update-Database`.
 - Giá giờ cố định theo loại bàn; khi mở phiên chụp giá vào `HourlyRateSnapshot`, thay giá danh mục sau đó không làm đổi giá phiên cũ.
-- Tiền giờ = giây thực tế × đơn giá/3600, làm tròn đến 1 VND; chưa có phí tối thiểu, làm tròn block thời gian hoặc combo.
+- Procedure đóng phiên hiện tính tiền giờ = giây thực tế × đơn giá/3600, làm tròn đến 1 VND; chưa áp dụng quyền lợi combo dù schema combo đã có.
 - Check-in được phép từ 15 phút trước giờ hẹn đến trước giờ kết thúc booking. Đây là đề xuất v1, không phải quy tắc đã được thầy duyệt; có thể sửa điều kiện trong procedure.
 - Không áp dụng auto-cancel 5 phút; trạng thái NoShow được dự phòng nhưng chưa có tác vụ tự chuyển.
 - Booking dùng khoảng nửa mở: `[StartAtUtc, EndAtUtc)`. Một lượt kết thúc 15:00 và lượt sau bắt đầu 15:00 không trùng.
@@ -154,11 +162,19 @@ Walk-in chưa có giờ kết thúc dự kiến. Backend cần hiển thị book
 
 ## 11. Kết quả kiểm tra của bộ file
 
-Đã soát xét quan hệ, trạng thái và đường đi của các procedure; kiểm tra tĩnh được ghi trong `VALIDATION.txt`. Môi trường tạo file không có SQL Server/.NET nên **chưa chạy thực tế các script trên SQL Server và chưa biên dịch phần C# tham khảo**. `04_Verify.sql` là bước kiểm tra tại máy bạn, không phải bằng chứng rằng database đã được cài trên máy bạn.
+Lịch sử kiểm tra nằm trong `VALIDATION.txt`. Ngày 01/10/2026 đã chạy script nâng cấp combo trên localhost / BilliardDB: verify đạt 24 bảng/5 procedure, số lượng seed đúng và 3 truy vấn nhất quán trả 0 dòng. Cả 7 FK combo mới đều bật/trusted.
+
+`tests/ComboRelations_Rollback.sql` kiểm tra lưu thông tin lúc mua, đổi danh mục không đổi lịch sử và từ chối FK/số lượng sai. Dữ liệu thử rollback; IDENTITY có thể tăng dù rollback. File test không phải bước cài đặt bắt buộc. Chưa kiểm thử nghiệp vụ bán combo, tồn kho hoặc hóa đơn trong C#.
+
+Các số lượng `ExpectedAfterSeed` chỉ đúng ngay sau seed. Khi nhóm thêm dữ liệu thật, số lượng khác không tự có nghĩa là lỗi.
 
 ## 12. Bước tiếp theo
 
-Sau khi 4 script chạy thành công, tạo project ASP.NET Core MVC, kết nối BMS_Starter và tích hợp Identity theo file đi kèm. Sau đó làm màn quản lý nhân viên của bạn. Các thành viên khác clone project nền và dùng cùng schema, nhưng mỗi người có database local riêng để phát triển.
+Các thành viên lấy file từ **nhánh main** của repo và thực hiện mục 3. Nếu đang ở main và không có thay đổi local, dùng `git pull --ff-only origin main`. Nếu đang làm trên nhánh riêng, có thể tải file SQL từ main trên GitHub và mở bằng SSMS; không cần chuyển nhánh hoặc ghi đè code đang làm để cài database.
+
+Mỗi người dùng database local riêng, cùng schema. Chọn đúng server/database trong cấu hình local của MVC; repo dùng .NET 8 và package EF/Identity major 8. Không chạy migration khởi tạo lên các bảng đã tồn tại. Tài khoản seed chưa có mật khẩu: đặt bằng UserManager theo hướng dẫn Identity.
+
+Nguồn SQL mới đã sửa các chữ tiếng Việt bị lỗi trong dữ liệu mẫu. Thay đổi file không sửa các dòng đã seed trên database cũ; không chạy lại seed để sửa dấu.
 
 Nguồn kỹ thuật chính thức:
 - Identity model: https://learn.microsoft.com/en-us/aspnet/core/security/authentication/customize-identity-model

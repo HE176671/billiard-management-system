@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    actor A as Admin
+    participant C as EmployeeController
+    participant CTX as ApplicationDbContext
+    participant UM as UserManager
+    participant DB as SQL Server
+
+    A->>C: Gửi form thêm nhân viên
+    Note over A,C: Chỉ Admin mới vào được, token form phải hợp lệ
+
+    alt Form bị lỗi (thiếu / sai thông tin)
+        C-->>A: Trả lại form, hiện lỗi
+    else Form hợp lệ
+        C->>C: Chuẩn bị dữ liệu nhân viên mới
+        C->>CTX: Bắt đầu giao dịch DB
+        CTX->>DB: BEGIN TRANSACTION
+        C->>UM: Tạo tài khoản (user + mật khẩu)
+        UM->>DB: Lưu tài khoản vào database
+        DB-->>UM: Thành công hoặc lỗi
+        UM-->>C: Kết quả tạo tài khoản
+
+        alt Tạo tài khoản thất bại
+            C->>CTX: Hủy giao dịch
+            CTX->>DB: ROLLBACK
+            C-->>A: Báo lỗi (trùng tên, trùng email, v.v.)
+        else Tạo tài khoản thành công
+            C->>UM: Gán quyền Staff
+            UM->>DB: Lưu quyền vào database
+            DB-->>UM: Thành công hoặc lỗi
+            UM-->>C: Kết quả gán quyền
+
+            alt Gán quyền thất bại
+                C->>CTX: Hủy giao dịch (xóa cả tài khoản vừa tạo)
+                CTX->>DB: ROLLBACK
+                C-->>A: Báo không tạo được nhân viên
+            else Gán quyền thành công
+                C->>CTX: Xác nhận giao dịch
+                CTX->>DB: COMMIT
+                C-->>A: Thông báo thành công, về danh sách nhân viên
+            end
+        end
+    end

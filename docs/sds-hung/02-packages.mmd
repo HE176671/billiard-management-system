@@ -1,0 +1,22 @@
+flowchart LR
+    Root["Bms.Web<br/>Program.cs — composition root"]
+    C["«namespace» Bms.Web.Controllers<br/>Account, Employee, Profile<br/>Home, Dashboard, Staff, Customer"]
+    M["«namespace» Bms.Web.Models<br/>LoginViewModel<br/>CreateEmployeeViewModel<br/>ChangePasswordViewModel"]
+    V["«folder» Views<br/>Account / Employee / Profile / Shared"]
+    W["«folder» wwwroot<br/>CSS / JS / Bootstrap"]
+    D["«namespace» Bms.Web.Data<br/>ApplicationUser<br/>ApplicationDbContext<br/>DbInitializer"]
+    I["«framework» Microsoft.AspNetCore.Identity"]
+    EF["«framework» Identity.EntityFrameworkCore<br/>Microsoft.EntityFrameworkCore.SqlServer"]
+    Future["«proposed namespace» Bms.Web.Integrations.VNPay<br/>TV3 thiết kế, chưa có trong source"]
+    Root -.->|"đăng ký DI"| C
+    Root -.-> D
+    Root -.-> I
+    C -.->|"nhận/trả model"| M
+    C -.->|"sử dụng entity/context"| D
+    C -.->|"gọi manager"| I
+    C -.->|"chọn view"| V
+    V -.->|"strongly typed model"| M
+    V -.->|"tham chiếu tài nguyên"| W
+    D -.->|"kế thừa IdentityUser"| I
+    D -.->|"kế thừa IdentityDbContext"| EF
+    C -.->|"tích hợp dự kiến"| Future

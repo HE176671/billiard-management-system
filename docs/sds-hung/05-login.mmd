@@ -1,0 +1,44 @@
+sequenceDiagram
+    autonumber
+    actor U as Người dùng
+    participant B as Browser / Login View
+    participant C as AccountController
+    participant UM as UserManager
+    participant SM as SignInManager
+    participant DB as SQL Server
+
+    U->>B: Nhập tên đăng nhập, mật khẩu
+    B->>C: Gửi form đăng nhập
+    Note over B,C: Anti-forgery token được kiểm tra tự động
+
+    alt Form bị lỗi (thiếu thông tin)
+        C-->>B: Trả lại form, hiện lỗi
+    else Form hợp lệ
+        C->>UM: Tìm tài khoản theo tên đăng nhập
+        UM->>DB: Tìm trong database
+        DB-->>UM: Trả tài khoản hoặc không có
+        UM-->>C: Tài khoản hoặc không có
+
+        alt Không tìm thấy hoặc tài khoản bị vô hiệu
+            C-->>B: Báo sai thông tin đăng nhập
+        else Tài khoản hợp lệ
+            C->>SM: Kiểm tra mật khẩu
+            SM->>DB: Đọc và ghi lịch sử đăng nhập
+            DB-->>SM: Kết quả
+            SM-->>C: Kết quả kiểm tra
+
+            alt Mật khẩu đúng
+                SM-->>B: Ghi cookie phiên đăng nhập
+                SM-->>C: Thành công
+                C->>UM: Lấy vai trò người dùng
+                UM-->>C: Vai trò (Admin / Staff / Customer)
+                C-->>B: Chuyển đến trang theo vai trò
+            else Tài khoản đang bị khóa tạm
+                SM-->>C: Bị khóa tạm
+                C-->>B: Báo tài khoản bị khóa, không đăng nhập được
+            else Sai mật khẩu
+                SM-->>C: Thất bại
+                C-->>B: Báo sai thông tin đăng nhập
+            end
+        end
+    end

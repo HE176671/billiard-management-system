@@ -1,5 +1,8 @@
 BMS database starter v1 — 2026-09-28
 
+HISTORICAL NOTES BELOW: these refer to the original 13-table starter.
+For the current 24-table schema, see the 2026-10-01 update at the end.
+
 Static checks completed:
 - All 4 SQL files parsed successfully with SQLFluff T-SQL dialect.
 - 13 unique table declarations.
@@ -25,3 +28,20 @@ Local execution update — 2026-09-28:
 - Composite Identity primary keys produced maximum-key-length warnings; sample inserts succeeded.
 - Business procedure behavior/concurrency and C# integration remain untested.
 - Do not rerun 01/03 against this initialized local database; use 04 for read-only checks.
+
+Expanded schema update — 2026-10-01:
+- Added ComboItems, SessionCombos and SessionComboItems with 7 foreign keys.
+- Applied 05_AddComboRelations.sql to existing localhost / BilliardDB.
+- Verify_BilliardDB.sql passed: 24 business tables, 5 procedures, original seed counts unchanged;
+  three consistency checks returned zero rows and all sample PasswordHash values were NULL.
+- SSMS's dbo.sysdiagrams is excluded from the business-table count.
+- All 7 new foreign keys are enabled and trusted, with NO_ACTION on delete.
+- ComboRelations_Rollback.sql passed on the existing database: catalog edits preserve purchase
+  snapshots, invalid product/quantity and referenced deletion are rejected; test rows rolled back.
+- Corrected mojibake in the Full SQL seed source. Existing live seed rows were not edited/reseeded.
+- Executed the updated Full SQL on a separate, newly created temporary SQL Server database:
+  24 tables, 5 procedures, seed counts, correct Vietnamese text, NULL passwords and 7 trusted FKs.
+- ComboRelations_Rollback.sql also passed on that fresh database.
+- Removed only that newly created temporary database after verification; existing BilliardDB unchanged.
+- C# combo purchase/stock/billing and concurrent business workflows remain unimplemented/untested.
+- Current install instructions: README_VI.md. Old filenames 01–04 above are historical only.
