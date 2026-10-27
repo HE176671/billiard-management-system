@@ -1,0 +1,41 @@
+sequenceDiagram
+    autonumber
+    actor U as Người dùng
+    participant B as Trang đăng nhập
+    participant C as AccountController
+    participant UM as UserManager
+    participant SM as SignInManager
+    participant DB as Cơ sở dữ liệu
+    U->>B: Nhập tên đăng nhập và mật khẩu
+    B->>C: Gửi thông tin đăng nhập
+    Note over B,C: Kiểm tra yêu cầu hợp lệ trước khi xử lý
+    alt Thông tin nhập chưa hợp lệ
+        C-->>B: Hiện lỗi để người dùng nhập lại
+    else Thông tin nhập hợp lệ
+        C->>UM: Tìm tài khoản theo tên đăng nhập
+        UM->>DB: Tra cứu tài khoản
+        DB-->>UM: Có tài khoản hoặc không tìm thấy
+        UM-->>C: Có tài khoản hoặc không tìm thấy
+        alt Không tìm thấy tài khoản hoặc bị vô hiệu hóa
+            C-->>B: Báo đăng nhập không thành công
+        else Tài khoản hoạt động
+            C->>SM: Yêu cầu kiểm tra đăng nhập
+            SM->>UM: Kiểm tra khóa tạm và mật khẩu
+            UM->>DB: Đọc và cập nhật thông tin bảo mật
+            DB-->>UM: Trả kết quả xử lý
+            UM-->>SM: Kết quả kiểm tra
+            alt Mật khẩu hợp lệ và được phép đăng nhập
+                SM-->>B: Ghi nhận đăng nhập trên trình duyệt
+                SM-->>C: Đăng nhập thành công
+                C->>UM: Lấy quyền khi cần chọn trang mở
+                UM-->>C: Quyền của tài khoản
+                C-->>B: Mở trang nội bộ phù hợp
+            else Đang bị khóa tạm
+                SM-->>C: Tài khoản bị khóa tạm
+                C-->>B: Báo khóa tạm, không cho đăng nhập
+            else Sai mật khẩu hoặc chưa được phép đăng nhập
+                SM-->>C: Không thành công
+                C-->>B: Báo lỗi, không cho đăng nhập
+            end
+        end
+    end
