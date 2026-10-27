@@ -247,7 +247,7 @@ else
             <!-- Bộ lọc danh mục món -->
             <div class="category-pills">
                 <button type="button" class="category-pill-btn active" data-category="all">Tất cả</button>
-                @foreach (var cat in Model.Categories)
+                @foreach (CategoryMenuViewModel cat in Model.Categories)
                 {
                     <button type="button" class="category-pill-btn" data-category="cat-@cat.Id">@cat.Name (@cat.Products.Count)</button>
                 }

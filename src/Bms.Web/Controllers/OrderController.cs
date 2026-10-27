@@ -188,6 +188,7 @@ public class OrderController : Controller
                 .ToDictionaryAsync(p => p.Id);
 
             // Kiểm tra từng món: tồn tại, đang bán, còn hàng
+            
             foreach (var item in aggregatedItems)
             {
                 if (!products.TryGetValue(item.ProductId, out var product) 
