@@ -15,6 +15,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PricingConfig>   PricingConfigs    => Set<PricingConfig>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<BilliardTable> BilliardTables => Set<BilliardTable>();
+    public DbSet<WorkShift> WorkShifts => Set<WorkShift>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -70,6 +71,27 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.AmountPaid).HasColumnType("decimal(18,2)");
             e.Property(x => x.PaymentMethod).HasMaxLength(20).IsUnicode(false);
             e.Property(x => x.TransactionTimeUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ReceivedById).HasMaxLength(450);
+            e.HasOne<WorkShift>().WithMany().HasForeignKey(x => x.WorkShiftId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ReceivedById).OnDelete(DeleteBehavior.Restrict);
+        });
+        // WorkShifts — cột snapshot đối soát thêm bởi 08_AddWorkShiftReconciliation.sql
+        builder.Entity<WorkShift>(e =>
+        {
+            e.ToTable("WorkShifts");
+            e.Property(x => x.StaffId).HasMaxLength(450).IsRequired();
+            e.Property(x => x.ClosedById).HasMaxLength(450);
+            e.Property(x => x.StartTimeUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.EndTimeUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.StartingCash).HasColumnType("decimal(18,2)");
+            e.Property(x => x.EndingCash).HasColumnType("decimal(18,2)");
+            e.Property(x => x.CashCollected).HasColumnType("decimal(18,2)");
+            e.Property(x => x.ExpectedCash).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Notes).HasMaxLength(500);
+            e.Ignore(x => x.CashDifference);
+            e.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ClosedBy).WithMany().HasForeignKey(x => x.ClosedById).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<BilliardTable>(e =>
         {

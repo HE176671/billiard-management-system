@@ -221,37 +221,40 @@
         <div class="logo">🎱 BMS</div>
         <span class="logo-sub">Billiard Management System</span>
     </div>
+    @{
+        var curController = ViewContext.RouteData.Values["controller"]?.ToString();
+        var curAction = ViewContext.RouteData.Values["action"]?.ToString();
+        var isAdmin = User.IsInRole("Admin");
+        string Active(string c, string? a = null) =>
+            curController == c && (a == null || curAction == a) ? "active" : "";
+    }
     <div class="sidebar-nav">
-        <div class="nav-section-label">Admin</div>
-        @foreach (var item in new[] { ("Dashboard", "Tổng quan"), ("Customer", "Khách hàng"), ("MemberTier", "Hạng thành viên"), ("Pricing", "Bảng giá"), ("Revenue", "Báo cáo doanh thu") })
+        @if (isAdmin)
         {
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == item.Item1 ? "active" : "")" asp-controller="@item.Item1" asp-action="Index">@item.Item2</a>
+            <div class="nav-section-label">Admin</div>
+            <a class="sidebar-link @Active("Dashboard")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2"></i> Tổng quan</a>
+            <a class="sidebar-link @Active("Revenue")" asp-controller="Revenue" asp-action="Index"><i class="bi bi-graph-up"></i> Báo cáo doanh thu</a>
+            <a class="sidebar-link @Active("Shift", "Manage")" asp-controller="Shift" asp-action="Manage"><i class="bi bi-clipboard-check"></i> Quản lý ca</a>
+            <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index"><i class="bi bi-people"></i> Nhân viên</a>
+            <a class="sidebar-link @Active("Customer")" asp-controller="Customer" asp-action="Index"><i class="bi bi-person-vcard"></i> Khách hàng</a>
+            <a class="sidebar-link @Active("MemberTier")" asp-controller="MemberTier" asp-action="Index"><i class="bi bi-award"></i> Hạng thành viên</a>
+            <a class="sidebar-link @Active("Pricing")" asp-controller="Pricing" asp-action="Index"><i class="bi bi-tags"></i> Bảng giá</a>
         }
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
-           asp-controller="Employee" asp-action="Index">
-            <i class="bi bi-people"></i> Nhân viên
-        </a>
 
         <div class="nav-section-label">Nghiệp vụ</div>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
-           href="#">
-            <i class="bi bi-grid-3x3"></i> Quản lý bàn
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
-           href="#">
-            <i class="bi bi-calendar-check"></i> Đặt bàn
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Menu" ? "active" : "")"
-           href="#">
-            <i class="bi bi-cup-straw"></i> Thực đơn
-        </a>
+        <a class="sidebar-link @Active("Staff")" asp-controller="Staff" asp-action="Index"><i class="bi bi-house"></i> Trang nhân viên</a>
+        <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
+        @* TV1/TV4 thay href="#" bằng asp-controller khi có màn hình *@
+        <a class="sidebar-link @Active("Table")" href="#"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
+        <a class="sidebar-link @Active("Booking")" href="#"><i class="bi bi-calendar-check"></i> Đặt bàn</a>
+        <a class="sidebar-link @Active("Menu")" href="#"><i class="bi bi-cup-straw"></i> Thực đơn</a>
     </div>
     <div class="sidebar-footer">
         <div class="user-chip">
             <div class="user-avatar">@(User.Identity?.Name?.FirstOrDefault().ToString().ToUpper() ?? "?")</div>
             <div>
                 <div class="user-name">@User.Identity?.Name</div>
-                <div class="user-role">Administrator</div>
+                <div class="user-role">@(isAdmin ? "Quản trị viên" : User.IsInRole("Staff") ? "Nhân viên" : "Khách hàng")</div>
             </div>
         </div>
     </div>
@@ -262,6 +265,9 @@
     <div class="topbar">
         <span class="topbar-title">@ViewData["Title"]</span>
         <div class="topbar-actions">
+            <a asp-controller="Profile" asp-action="Index" class="btn-logout" title="Hồ sơ cá nhân">
+                <i class="bi bi-person-circle"></i> Hồ sơ
+            </a>
             <a asp-controller="Profile" asp-action="ChangePassword" class="btn-logout" title="Đổi mật khẩu">
                 <i class="bi bi-shield-lock"></i> Đổi mật khẩu
             </a>

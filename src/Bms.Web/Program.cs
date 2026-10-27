@@ -1,4 +1,5 @@
 using Bms.Web.Data;
+using Bms.Web.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,16 +29,13 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
-builder.Services.ConfigureApplicationCookie(options =>
-{
-    options.LoginPath = "/Account/Login";
-    options.AccessDeniedPath = "/Account/AccessDenied";
-});
-// Revalidate the stamp and IsActive on every authenticated request.
+// Revalidate SecurityStamp va IsActive moi request: khoa tai khoan la mat quyen ngay.
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     options.ValidationInterval = TimeSpan.Zero);
 builder.Services.ConfigureApplicationCookie(options =>
 {
+    options.LoginPath = "/Account/Login";
+    options.AccessDeniedPath = "/Account/AccessDenied";
     options.Events.OnValidatePrincipal = async context =>
     {
         await SecurityStampValidator.ValidatePrincipalAsync(context);
@@ -53,6 +51,9 @@ builder.Services.ConfigureApplicationCookie(options =>
         }
     };
 });
+
+// TV5: dich vu ca lam dung chung (TV3 goi khi ghi nhan tien mat)
+builder.Services.AddScoped<IShiftService, ShiftService>();
 
 #endregion
 

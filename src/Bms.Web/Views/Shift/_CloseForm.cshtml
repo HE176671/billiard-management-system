@@ -1,0 +1,42 @@
+@model Bms.Web.Models.CloseShiftViewModel
+@* Form đóng ca; dùng ở trang Ca của tôi và trang chi tiết (Admin đóng hộ). *@
+@{
+    var expected = (decimal)(ViewData["ExpectedCash"] ?? 0m);
+    var prefill = TempData["CloseEndingCash"] as string;
+}
+<form asp-controller="Shift" asp-action="Close" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="Close.ShiftId" value="@Model.ShiftId" />
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label class="form-label" for="Close_EndingCash">Tiền mặt đếm thực tế (₫)</label>
+            <input id="Close_EndingCash" name="Close.EndingCash" type="number" min="0" max="1000000000" step="1000"
+                   class="form-control" required value="@prefill" placeholder="@expected.ToString("0")" />
+            <div class="form-text">Kỳ vọng hiện tại: <strong>@expected.ToString("N0") ₫</strong>. Lệch tiền thì bắt buộc ghi lý do.</div>
+            <div id="closeDiff" class="form-text"></div>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="Close_Notes">Ghi chú / lý do chênh lệch</label>
+            <textarea id="Close_Notes" name="Close.Notes" maxlength="500" rows="3" class="form-control"></textarea>
+        </div>
+        <div class="col-12">
+            <button type="submit" class="btn-primary-bms"
+                    onclick="return confirm('Đóng ca? Sau khi đóng không thể thu tiền mặt vào ca này nữa.')">
+                <i class="bi bi-lock"></i> Đóng ca và đối soát
+            </button>
+        </div>
+    </div>
+</form>
+<script>
+(function () {
+    var input = document.getElementById('Close_EndingCash'), out = document.getElementById('closeDiff');
+    var expected = @expected.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    function show() {
+        if (input.value === '') { out.textContent = ''; return; }
+        var d = Number(input.value) - expected;
+        out.textContent = d === 0 ? 'Khớp tiền.' : (d > 0 ? 'Thừa ' : 'Thiếu ') + Math.abs(d).toLocaleString('vi-VN') + ' ₫';
+        out.style.color = d === 0 ? '#16a34a' : '#dc2626';
+    }
+    input.addEventListener('input', show); show();
+})();
+</script>
