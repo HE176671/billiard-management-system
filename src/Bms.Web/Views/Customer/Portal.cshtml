@@ -1,0 +1,13 @@
+@model Bms.Web.Models.CustomerRowViewModel
+@{ ViewData["Title"] = "Tài khoản của tôi"; }
+<div class="card p-4">
+    <h1 class="h4">Xin chào, @Model.FullName</h1>
+    <dl class="row mt-3">
+        <dt class="col-sm-3">Tên đăng nhập</dt><dd class="col-sm-9">@Model.UserName</dd>
+        <dt class="col-sm-3">Email</dt><dd class="col-sm-9">@Model.Email</dd>
+        <dt class="col-sm-3">Số điện thoại</dt><dd class="col-sm-9">@Model.PhoneNumber</dd>
+        <dt class="col-sm-3">Hạng thành viên</dt><dd class="col-sm-9">@(Model.TierName ?? "Chưa có hạng")</dd>
+        <dt class="col-sm-3">Điểm tích lũy</dt><dd class="col-sm-9">@Model.RewardPoints.ToString("N0")</dd>
+    </dl>
+    <a asp-controller="Profile" asp-action="ChangePassword" class="btn btn-outline-primary align-self-start">Đổi mật khẩu</a>
+</div>

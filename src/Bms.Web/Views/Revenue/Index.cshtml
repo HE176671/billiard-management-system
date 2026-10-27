@@ -1,0 +1,22 @@
+@model Bms.Web.Models.RevenueReportViewModel
+@{ ViewData["Title"] = "Báo cáo doanh thu — UC46"; Layout = "~/Views/Shared/_AdminLayout.cshtml"; }
+<p class="text-muted">Doanh thu thực thu từ PaymentTransactions theo thời điểm giao dịch (giờ Việt Nam UTC+7).</p>
+<form method="get" class="row g-3 mb-4">
+    <div class="col-md-3"><label for="from" class="form-label">Từ ngày</label><input id="from" name="from" type="date" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" required /></div>
+    <div class="col-md-3"><label for="to" class="form-label">Đến ngày</label><input id="to" name="to" type="date" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" required /></div>
+    <div class="col-md-3"><label for="groupBy" class="form-label">Nhóm theo</label><select id="groupBy" name="groupBy" class="form-select"><option value="day" selected="@(Model.GroupBy == "day")">Ngày</option><option value="month" selected="@(Model.GroupBy == "month")">Tháng</option></select></div>
+    <div class="col-md-3 d-flex align-items-end gap-2"><button class="btn-primary-bms" type="submit">Xem báo cáo</button><a asp-action="Export" asp-route-from="@Model.From.ToString("yyyy-MM-dd")" asp-route-to="@Model.To.ToString("yyyy-MM-dd")" asp-route-groupBy="@Model.GroupBy" class="btn-outline-bms">Xuất CSV</a></div>
+</form>
+<div asp-validation-summary="All" class="text-danger mb-3"></div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.TotalRevenue.ToString("N0") ₫</div><div class="stat-label">Tổng doanh thu</div></div></div></div>
+    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.PaymentCount</div><div class="stat-label">Giao dịch thanh toán</div></div></div></div>
+    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.InvoiceCount</div><div class="stat-label">Hóa đơn có thanh toán</div></div></div></div>
+</div>
+@if (Model.PaymentCount == 0) { <div class="alert alert-info">Chưa có giao dịch trong khoảng ngày đã chọn.</div> }
+<div class="data-card mb-4"><div class="data-card-header"><span class="data-card-title">Doanh thu theo kỳ</span></div><div class="table-responsive"><table class="table"><thead><tr><th>Kỳ</th><th>Doanh thu</th><th>Giao dịch</th></tr></thead><tbody>
+@foreach (var row in Model.Periods) { <tr><td>@row.Period</td><td>@row.Revenue.ToString("N0") ₫</td><td>@row.PaymentCount</td></tr> }
+</tbody></table></div></div>
+<div class="data-card"><div class="data-card-header"><span class="data-card-title">Theo phương thức thanh toán</span></div><table class="table"><thead><tr><th>Phương thức</th><th>Doanh thu</th><th>Giao dịch</th></tr></thead><tbody>
+@foreach (var row in Model.Methods) { <tr><td>@row.Method</td><td>@row.Revenue.ToString("N0") ₫</td><td>@row.PaymentCount</td></tr> }
+</tbody></table></div>

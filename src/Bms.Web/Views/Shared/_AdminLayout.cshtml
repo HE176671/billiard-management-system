@@ -203,6 +203,14 @@
         }
         .form-text { font-size: 0.75rem; color: #94a3b8; }
         .field-error { font-size: 0.78rem; color: #dc2626; margin-top: 3px; }
+        @@media (max-width: 767px) {
+            .sidebar { position: static; width: 100%; height: auto; }
+            .sidebar-nav { display: flex; flex-wrap: wrap; padding: 0.5rem; }
+            .sidebar-footer, .nav-section-label { display: none; }
+            .main-wrapper { margin-left: 0; }
+            .topbar { height: auto; min-height: 56px; gap: 0.5rem; flex-wrap: wrap; padding: 0.5rem 1rem; }
+            .page-content { padding: 1rem; overflow-x: auto; }
+        }
     </style>
 </head>
 <body>
@@ -214,13 +222,11 @@
         <span class="logo-sub">Billiard Management System</span>
     </div>
     <div class="sidebar-nav">
-        <div class="nav-section-label">Hệ thống</div>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Dashboard" ? "active" : "")"
-           asp-controller="Dashboard" asp-action="Index">
-            <i class="bi bi-speedometer2"></i> Bảng điều khiển
-        </a>
-        
         <div class="nav-section-label">Admin</div>
+        @foreach (var item in new[] { ("Dashboard", "Tổng quan"), ("Customer", "Khách hàng"), ("MemberTier", "Hạng thành viên"), ("Pricing", "Bảng giá"), ("Revenue", "Báo cáo doanh thu") })
+        {
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == item.Item1 ? "active" : "")" asp-controller="@item.Item1" asp-action="Index">@item.Item2</a>
+        }
         <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
            asp-controller="Employee" asp-action="Index">
             <i class="bi bi-people"></i> Nhân viên

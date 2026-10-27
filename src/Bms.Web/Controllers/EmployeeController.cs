@@ -20,6 +20,8 @@ public class EmployeeController : Controller
         _context = context;
     }
 
+    #region UC43 - Danh sach, tim kiem, loc va phan trang
+
     // GET /Employee
     public async Task<IActionResult> Index(string? search, string? status, int page = 1)
     {
@@ -79,7 +81,10 @@ public class EmployeeController : Controller
         return View(vm);
     }
 
-    // GET /Employee/Create
+    #endregion
+
+    #region UC43 - Tao nhan vien va gan role Staff
+ 
     public async Task<IActionResult> Create()
     {
         var vm = new CreateEmployeeViewModel();
@@ -87,7 +92,6 @@ public class EmployeeController : Controller
         return View(vm);
     }
 
-    // POST /Employee/Create
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(CreateEmployeeViewModel model)
@@ -110,7 +114,6 @@ public class EmployeeController : Controller
             CreatedAtUtc = DateTime.UtcNow
         };
 
-        // Dùng DB transaction thực sự: CreateAsync + AddToRoleAsync phải thành công cùng nhau
         await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -144,7 +147,10 @@ public class EmployeeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // GET /Employee/Edit/id
+    #endregion
+
+    #region UC43 - Sua thong tin nhan vien
+
     public async Task<IActionResult> Edit(string id)
     {
         var user = await GetStaffOrNull(id);
@@ -163,7 +169,6 @@ public class EmployeeController : Controller
         return View(vm);
     }
 
-    // POST /Employee/Edit
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(EditEmployeeViewModel model)
@@ -194,7 +199,10 @@ public class EmployeeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // POST /Employee/ToggleLock
+    #endregion
+
+    #region UC43 - Khoa va mo khoa nhan vien
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ToggleLock(string id)
@@ -204,15 +212,22 @@ public class EmployeeController : Controller
 
         user.IsActive = !user.IsActive;
         // Đổi SecurityStamp để cookie phiên hiện tại mất hiệu lực ngay
-        await _userManager.UpdateSecurityStampAsync(user);
-        await _userManager.UpdateAsync(user);
+        var result = await _userManager.UpdateSecurityStampAsync(user);
+        if (!result.Succeeded)
+        {
+            TempData["Error"] = "Không lưu được trạng thái tài khoản. Vui lòng thử lại.";
+            return RedirectToAction(nameof(Index));
+        }
 
         var action = user.IsActive ? "mở khóa" : "khóa";
         TempData["Success"] = $"Đã {action} tài khoản {user.FullName}.";
         return RedirectToAction(nameof(Index));
     }
 
-    // POST /Employee/Delete
+    #endregion
+
+    #region UC43 - Xoa nhan vien
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(string id)
@@ -244,7 +259,10 @@ public class EmployeeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // GET /Employee/ResetPassword/id
+    #endregion
+
+    #region UC44 - Reset mat khau nhan vien
+
     public async Task<IActionResult> ResetPassword(string id)
     {
         var user = await GetStaffOrNull(id);
@@ -257,7 +275,6 @@ public class EmployeeController : Controller
         });
     }
 
-    // POST /Employee/ResetPassword
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ResetPassword(ResetStaffPasswordViewModel model)
@@ -267,11 +284,9 @@ public class EmployeeController : Controller
         var user = await GetStaffOrNull(model.UserId);
         if (user == null) return NotFound();
 
-        // Xóa mật khẩu cũ (nếu có) rồi đặt mới
-        if (await _userManager.HasPasswordAsync(user))
-            await _userManager.RemovePasswordAsync(user);
-
-        var result = await _userManager.AddPasswordAsync(user, model.NewPassword);
+        // Validate and replace atomically: a rejected password must preserve the old one.
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await _userManager.ResetPasswordAsync(user, token, model.NewPassword);
         if (!result.Succeeded)
         {
             foreach (var err in result.Errors)
@@ -282,6 +297,10 @@ public class EmployeeController : Controller
         TempData["Success"] = $"Đã đặt lại mật khẩu cho {user.FullName}.";
         return RedirectToAction(nameof(Index));
     }
+
+    #endregion
+
+    #region Ham ho tro: kiem tra Staff, dich loi, sinh ma
 
     // ── Helpers ──
 
@@ -323,4 +342,5 @@ public class EmployeeController : Controller
         }
         return $"NV{(maxNumber + 1).ToString("D3")}";
     }
+    #endregion
 }

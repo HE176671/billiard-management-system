@@ -2,6 +2,7 @@ using Bms.Web.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+#region Cau hinh MVC, SQL Server, Identity va cookie
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -32,7 +33,30 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.LoginPath = "/Account/Login";
     options.AccessDeniedPath = "/Account/AccessDenied";
 });
+// Revalidate the stamp and IsActive on every authenticated request.
+builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+    options.ValidationInterval = TimeSpan.Zero);
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Events.OnValidatePrincipal = async context =>
+    {
+        await SecurityStampValidator.ValidatePrincipalAsync(context);
+        if (context.Principal?.Identity?.IsAuthenticated == true)
+        {
+            var users = context.HttpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.GetUserAsync(context.Principal);
+            if (user == null || !user.IsActive)
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.RequestServices.GetRequiredService<SignInManager<ApplicationUser>>().SignOutAsync();
+            }
+        }
+    };
+});
 
+#endregion
+
+#region Thu tu middleware va dinh tuyen MVC
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -54,6 +78,9 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
+#endregion
+
+#region Mat khau admin demo chi trong Development
 // Đặt mật khẩu admin.demo chỉ trong môi trường Development
 if (app.Environment.IsDevelopment())
 {
@@ -63,5 +90,7 @@ if (app.Environment.IsDevelopment())
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DbInitializer.SeedDevelopmentPasswordsAsync(userManager, config, logger);
 }
+
+#endregion
 
 app.Run();

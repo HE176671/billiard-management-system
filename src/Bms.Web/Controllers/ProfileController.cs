@@ -1,4 +1,4 @@
-﻿using Bms.Web.Data;
+using Bms.Web.Data;
 using Bms.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -19,7 +19,8 @@ public class ProfileController : Controller
         _signInManager = signInManager;
     }
 
-    // GET /Profile/ChangePassword  (UC03)
+    #region UC03 - Hien thi form doi mat khau
+
     [HttpGet]
     public IActionResult ChangePassword()
     {
@@ -27,7 +28,10 @@ public class ProfileController : Controller
         return View(new ChangePasswordViewModel());
     }
 
-    // POST /Profile/ChangePassword
+    #endregion
+
+    #region UC03 - Kiem tra mat khau cu va luu mat khau moi
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
@@ -51,11 +55,14 @@ public class ProfileController : Controller
             return View(model);
         }
 
-        // Refresh cookie sau khi đổi mật khẩu thành công
         await _signInManager.RefreshSignInAsync(user);
         TempData["Success"] = "Đổi mật khẩu thành công!";
         return RedirectToAction(nameof(ChangePassword));
     }
+
+    #endregion
+
+    #region Dich loi Identity
 
     private static string TranslateIdentityError(IdentityError err) => err.Code switch
     {
@@ -65,4 +72,5 @@ public class ProfileController : Controller
         "PasswordRequiresUpper"           => "Mật khẩu phải có ít nhất 1 chữ hoa.",
         _ => err.Description
     };
+    #endregion
 }
