@@ -10,9 +10,9 @@ namespace Bms.Web.Controllers;
 public class DashboardController : Controller
 {
     private readonly ApplicationDbContext _context;
-    private readonly ILogger<DashboardController> _logger;
+    private readonly ILogger<DashboardController>? _logger;
 
-    public DashboardController(ApplicationDbContext context, ILogger<DashboardController> logger)
+    public DashboardController(ApplicationDbContext context, ILogger<DashboardController>? logger = null)
     {
         _context = context;
         _logger = logger;

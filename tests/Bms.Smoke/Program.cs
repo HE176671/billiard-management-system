@@ -15,9 +15,27 @@ using Microsoft.Extensions.DependencyInjection;
 var services = new ServiceCollection();
 services.AddLogging();
 services.AddDataProtection().UseEphemeralDataProtectionProvider();
-services.AddDbContext<ApplicationDbContext>(o => o.UseSqlServer(
-    Environment.GetEnvironmentVariable("BMS_TEST_CONNECTION") ??
-    "Server=localhost;Database=BilliardDB;Trusted_Connection=True;Encrypt=True;TrustServerCertificate=True;"));
+var connString = Environment.GetEnvironmentVariable("BMS_TEST_CONNECTION");
+if (string.IsNullOrWhiteSpace(connString))
+{
+    var devSettings = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "src", "Bms.Web", "appsettings.Development.json");
+    if (File.Exists(devSettings))
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(devSettings));
+            if (doc.RootElement.TryGetProperty("ConnectionStrings", out var cs) &&
+                cs.TryGetProperty("DefaultConnection", out var dc))
+            {
+                connString = dc.GetString();
+            }
+        }
+        catch { }
+    }
+}
+connString ??= "Server=localhost\\SQLEXPRESS;Database=BilliardDB;Trusted_Connection=True;Encrypt=True;TrustServerCertificate=True;";
+
+services.AddDbContext<ApplicationDbContext>(o => o.UseSqlServer(connString));
 services.AddIdentity<ApplicationUser, IdentityRole>(o => o.Stores.MaxLengthForKeys = 128)
     .AddEntityFrameworkStores<ApplicationDbContext>().AddDefaultTokenProviders();
 await using var provider = services.BuildServiceProvider();

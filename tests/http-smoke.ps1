@@ -1,5 +1,6 @@
-param([string]$BaseUrl = 'http://localhost:5080', [switch]$CheckPresentationData)
+param([string]$BaseUrl = 'http://localhost:5000', [string]$SqlServer = 'localhost\SQLEXPRESS', [switch]$CheckPresentationData)
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Net.Http
 $checks = 0
 function Assert-Check($condition, [string]$label) {
     if (-not $condition) { throw "FAIL: $label" }
@@ -109,7 +110,7 @@ try {
 }
 finally {
     # Only remove this run's unique test account, with no business history.
-    & sqlcmd -S localhost -d BilliardDB -E -C -b -Q "SET QUOTED_IDENTIFIER ON; BEGIN TRAN; DELETE ur FROM dbo.AspNetUserRoles ur JOIN dbo.AspNetUsers u ON ur.UserId=u.Id WHERE u.UserName=N'$fixtureName' AND u.Email=N'$fixtureName@example.invalid'; DELETE FROM dbo.AspNetUsers WHERE UserName=N'$fixtureName' AND Email=N'$fixtureName@example.invalid'; COMMIT;" | Out-Null
+    & sqlcmd -S $SqlServer -d BilliardDB -E -C -b -Q "SET QUOTED_IDENTIFIER ON; BEGIN TRAN; DELETE ur FROM dbo.AspNetUserRoles ur JOIN dbo.AspNetUsers u ON ur.UserId=u.Id WHERE u.UserName=N'$fixtureName' AND u.Email=N'$fixtureName@example.invalid'; DELETE FROM dbo.AspNetUsers WHERE UserName=N'$fixtureName' AND Email=N'$fixtureName@example.invalid'; COMMIT;" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Test account cleanup failed' }
     $admin.Dispose(); $customer.Dispose()
     $password = $null; $secret = $null; $fixturePassword = $null

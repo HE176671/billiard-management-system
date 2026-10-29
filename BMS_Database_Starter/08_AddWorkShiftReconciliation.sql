@@ -12,6 +12,8 @@
 --    Cả hai NULL được: giao dịch VNPay/IPN không có nhân viên thu.
 USE BilliardDB;
 GO
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
 SET XACT_ABORT ON;
 BEGIN TRANSACTION;
 
@@ -29,7 +31,8 @@ IF COL_LENGTH('dbo.WorkShifts', 'ClosedById') IS NULL
     ALTER TABLE dbo.WorkShifts ADD ClosedById nvarchar(450) NULL;
 COMMIT TRANSACTION;
 GO
-
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
 SET XACT_ABORT ON;
 BEGIN TRANSACTION;
 IF OBJECT_ID('dbo.FK_Shift_ClosedBy', 'F') IS NULL
@@ -65,7 +68,8 @@ IF COL_LENGTH('dbo.PaymentTransactions', 'ReceivedById') IS NULL
     ALTER TABLE dbo.PaymentTransactions ADD ReceivedById nvarchar(450) NULL;
 COMMIT TRANSACTION;
 GO
-
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
 SET XACT_ABORT ON;
 BEGIN TRANSACTION;
 IF OBJECT_ID('dbo.FK_Payment_WorkShift', 'F') IS NULL
