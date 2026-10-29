@@ -68,5 +68,29 @@ public static class DbInitializer
                 }
             }
         }
+
+        // Đặt mật khẩu demo cho tài khoản Nhân viên (Staff)
+        var staffPassword = config["DevSeed:StaffPassword"] ?? "Staff@123";
+        var demoStaff = new[] { "staff.demo01", "staff.demo02" };
+        foreach (var staffUsername in demoStaff)
+        {
+            var staff = await userManager.FindByNameAsync(staffUsername);
+            if (staff != null)
+            {
+                if (!await userManager.HasPasswordAsync(staff))
+                {
+                    var result = await userManager.AddPasswordAsync(staff, staffPassword);
+                    if (result.Succeeded)
+                        logger.LogInformation("Đã đặt mật khẩu cho {StaffUsername}.", staffUsername);
+                    else
+                        logger.LogError("Đặt mật khẩu {StaffUsername} thất bại: {Errors}", staffUsername,
+                            string.Join("; ", result.Errors.Select(e => e.Description)));
+                }
+                else
+                {
+                    logger.LogInformation("{StaffUsername} đã có mật khẩu, bỏ qua.", staffUsername);
+                }
+            }
+        }
     }
 }
