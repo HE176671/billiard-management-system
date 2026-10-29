@@ -2,6 +2,34 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Bms.Web.Models;
 
+// =========================================================================
+// PHẦN 1: HẰNG SỐ QUY TẮC ĐẶT BÀN & CHUYỂN ĐỔI MÚI GIỜ VIỆT NAM
+// =========================================================================
+
+public static class BookingPolicy
+{
+    public const int MaxAdvanceDays = 15;
+    public const int HoldMinutes = 15;
+    public const int PreBookingBufferMinutes = 5;
+    public const int DefaultSlotHours = 2;
+    public const int TableDashboardHorizonHours = 12;
+    public const int AutoExpireCheckSeconds = 30;
+    public const int VnTimeZoneOffsetHours = 7;
+
+    public static DateTime NowVietnam() =>
+        DateTime.UtcNow.AddHours(VnTimeZoneOffsetHours);
+
+    public static DateTime ToVietnamTime(DateTime utcTime) =>
+        DateTime.SpecifyKind(utcTime, DateTimeKind.Utc).AddHours(VnTimeZoneOffsetHours);
+
+    public static DateTime ToUtcFromVietnamTime(DateTime vnLocalTime) =>
+        DateTime.SpecifyKind(vnLocalTime.AddHours(-VnTimeZoneOffsetHours), DateTimeKind.Utc);
+}
+
+// =========================================================================
+// PHẦN 2: VIEWMODELS & REQUEST MODELS DÀNH CHO KHÁCH HÀNG (CUSTOMER)
+// =========================================================================
+
 public class CustomerBookingDashboardViewModel
 {
     public DateTime DefaultStartLocal { get; set; }
@@ -52,6 +80,10 @@ public class CustomerBookingItemViewModel
     public string? CancellationReason { get; set; }
     public bool CanCancel { get; set; }
 }
+
+// =========================================================================
+// PHẦN 3: VIEWMODELS & REQUEST MODELS DÀNH CHO NHÂN VIÊN (STAFF / ADMIN)
+// =========================================================================
 
 public class StaffBookingManagementViewModel
 {

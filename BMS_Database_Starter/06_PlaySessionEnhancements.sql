@@ -1,12 +1,11 @@
 /* BMS V2 - Booking & Play Session Enhancements (06). SQL Server 2019+, database BilliardDB.
    Additive and re-runnable (idempotent) upgrade.
    Implements:
-     1. Clean removal of legacy Timed mode / 15-minute block billing columns and objects if present.
-     2. PlaySessionTableSegments table for tracking table transfers.
-     3. Minute-based billing via dbo.fn_CalcPlaytimeAmount (only records StartAtUtc and EndAtUtc).
-     4. Automatic 15-minute No-Show expiration via dbo.usp_AutoExpireBookings.
-     5. Booking rules: max 7 days in advance, 15-minute hold, 5-minute buffer before booking start,
-        check-in workflow handling all 8 business scenarios, and staff table assignment after check-in.
+     1. PlaySessionTableSegments table for tracking table transfers.
+     2. Minute-based billing via dbo.fn_CalcPlaytimeAmount (records StartAtUtc and EndAtUtc).
+     3. Automatic 15-minute No-Show expiration via dbo.usp_AutoExpireBookings.
+     4. Booking rules: max 15 days in advance, 15-minute hold, 5-minute buffer before booking start,
+        check-in workflow, and staff table assignment after check-in.
 */
 USE [BilliardDB];
 GO
@@ -36,78 +35,7 @@ BEGIN
 END
 GO
 
--- Step 2. Remove legacy Timed mode and 15-minute block billing objects/columns if they exist.
-IF OBJECT_ID(N'dbo.usp_ExtendSession', N'P') IS NOT NULL
-BEGIN
-    DROP PROCEDURE dbo.usp_ExtendSession;
-    PRINT N'Dropped legacy procedure dbo.usp_ExtendSession.';
-END
-GO
-
-IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Session_Billing' AND parent_object_id = OBJECT_ID(N'dbo.PlaySessions'))
-BEGIN
-    ALTER TABLE dbo.PlaySessions DROP CONSTRAINT CK_Session_Billing;
-    PRINT N'Dropped constraint CK_Session_Billing.';
-END
-GO
-
-IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Session_Planned' AND parent_object_id = OBJECT_ID(N'dbo.PlaySessions'))
-BEGIN
-    ALTER TABLE dbo.PlaySessions DROP CONSTRAINT CK_Session_Planned;
-    PRINT N'Dropped constraint CK_Session_Planned.';
-END
-GO
-
-IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Session_Mode' AND parent_object_id = OBJECT_ID(N'dbo.PlaySessions'))
-BEGIN
-    ALTER TABLE dbo.PlaySessions DROP CONSTRAINT CK_Session_Mode;
-    PRINT N'Dropped constraint CK_Session_Mode.';
-END
-GO
-
-IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_Session_Mode' AND parent_object_id = OBJECT_ID(N'dbo.PlaySessions'))
-BEGIN
-    ALTER TABLE dbo.PlaySessions DROP CONSTRAINT DF_Session_Mode;
-    PRINT N'Dropped default constraint DF_Session_Mode.';
-END
-GO
-
-IF COL_LENGTH(N'dbo.PlaySessions', N'BillingEndAtUtc') IS NOT NULL
-BEGIN
-    ALTER TABLE dbo.PlaySessions DROP COLUMN BillingEndAtUtc;
-    PRINT N'Dropped legacy column PlaySessions.BillingEndAtUtc.';
-END
-GO
-
-IF COL_LENGTH(N'dbo.PlaySessions', N'BillingStartAtUtc') IS NOT NULL
-BEGIN
-    ALTER TABLE dbo.PlaySessions DROP COLUMN BillingStartAtUtc;
-    PRINT N'Dropped legacy column PlaySessions.BillingStartAtUtc.';
-END
-GO
-
-IF COL_LENGTH(N'dbo.PlaySessions', N'PlannedEndAtUtc') IS NOT NULL
-BEGIN
-    ALTER TABLE dbo.PlaySessions DROP COLUMN PlannedEndAtUtc;
-    PRINT N'Dropped legacy column PlaySessions.PlannedEndAtUtc.';
-END
-GO
-
-IF COL_LENGTH(N'dbo.PlaySessions', N'SessionMode') IS NOT NULL
-BEGIN
-    ALTER TABLE dbo.PlaySessions DROP COLUMN SessionMode;
-    PRINT N'Dropped legacy column PlaySessions.SessionMode.';
-END
-GO
-
-IF OBJECT_ID(N'dbo.fn_CeilTo15Min', N'FN') IS NOT NULL
-BEGIN
-    DROP FUNCTION dbo.fn_CeilTo15Min;
-    PRINT N'Dropped legacy function dbo.fn_CeilTo15Min.';
-END
-GO
-
--- Step 3. Table PlaySessionTableSegments: one row per table a session used (for table transfers).
+-- Step 2. Table PlaySessionTableSegments: one row per table a session used (for table transfers).
 IF OBJECT_ID(N'dbo.PlaySessionTableSegments', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.PlaySessionTableSegments (
@@ -170,27 +98,38 @@ BEGIN
 END
 GO
 
--- Step 4. dbo.fn_CalcPlaytimeAmount: Minute-based billing (records only StartAtUtc and EndAtUtc).
+-- Step 3. dbo.fn_CalcPlaytimeAmount: Minute-based billing (records only StartAtUtc and EndAtUtc).
 /* dbo.fn_CalcPlaytimeAmount(@SessionId, @AtUtc)
-   Calculates total playtime charge in whole VND based on actual minutes played per table segment.
-   Each segment's elapsed seconds are converted to minutes (rounded up to the nearest whole minute:
-   (seconds + 59) / 60). If total minutes across all segments is 0 (e.g. closed in the same second),
-   minimum 1 minute on the latest segment is billed.
-   Formula per segment: ROUND(BilledMinutes * HourlyRateSnapshot / 60.0, 0).
+   Calculates total playtime charge in VND following real-world billiard club rules:
+   1. Grace period (<= 2 minutes / 120 seconds): 0 VND (accidental open or immediate cancellation).
+   2. Minimum playtime block (> 2 minutes up to 15 minutes): billed at minimum 15 minutes.
+   3. Over 15 minutes: billed by actual minutes played per table segment ((seconds + 59) / 60).
+   4. Cash rounding: rounded to the nearest 1,000 VND (ROUND(Amount, -3)).
 */
 CREATE OR ALTER FUNCTION dbo.fn_CalcPlaytimeAmount (@SessionId int, @AtUtc datetime2(0))
 RETURNS decimal(18,2)
 AS
 BEGIN
     IF @SessionId IS NULL OR @AtUtc IS NULL RETURN NULL;
-    DECLARE @SegmentCount int, @TotalMinutes bigint, @Amount decimal(18,2), @LastRate decimal(18,2);
+    DECLARE @SegmentCount int,
+            @TotalSeconds bigint,
+            @TotalMinutes bigint,
+            @RawAmount decimal(18,2),
+            @LastRate decimal(18,2),
+            @RoundedAmount decimal(18,2);
 
     SELECT @SegmentCount = COUNT(*),
+           @TotalSeconds = SUM(x.ElapsedSeconds),
            @TotalMinutes = SUM(x.BilledMinutes),
-           @Amount = SUM(ROUND(CONVERT(decimal(18,2), x.BilledMinutes) * g.HourlyRateSnapshot / 60.0, 0))
+           @RawAmount = SUM(CONVERT(decimal(18,2), x.BilledMinutes) * g.HourlyRateSnapshot / 60.0)
       FROM dbo.PlaySessionTableSegments g
      CROSS APPLY (
          SELECT CASE
+                    WHEN COALESCE(g.EndAtUtc, @AtUtc) > g.StartAtUtc
+                    THEN DATEDIFF_BIG(second, g.StartAtUtc, COALESCE(g.EndAtUtc, @AtUtc))
+                    ELSE CONVERT(bigint, 0)
+                END AS ElapsedSeconds,
+                CASE
                     WHEN COALESCE(g.EndAtUtc, @AtUtc) > g.StartAtUtc
                     THEN (DATEDIFF_BIG(second, g.StartAtUtc, COALESCE(g.EndAtUtc, @AtUtc)) + 59) / 60
                     ELSE CONVERT(bigint, 0)
@@ -199,17 +138,30 @@ BEGIN
      WHERE g.SessionId = @SessionId;
 
     IF @SegmentCount = 0 RETURN NULL;
-    IF @TotalMinutes > 0 RETURN @Amount;
+
+    -- Rule 1: Grace period <= 2 minutes (120 seconds) => Free (0 VND)
+    IF @TotalSeconds <= 120
+        RETURN CONVERT(decimal(18,2), 0);
 
     SELECT TOP (1) @LastRate = g.HourlyRateSnapshot
       FROM dbo.PlaySessionTableSegments g
      WHERE g.SessionId = @SessionId
      ORDER BY g.StartAtUtc DESC, g.Id DESC;
-    RETURN CONVERT(decimal(18,2), ROUND(CONVERT(decimal(18,2), 1) * @LastRate / 60.0, 0));
+
+    -- Rule 2: Minimum charge of 15 minutes once past the 2-minute grace period
+    IF @TotalMinutes < 15
+        SET @RawAmount = @RawAmount + (CONVERT(decimal(18,2), 15 - @TotalMinutes) * @LastRate / 60.0);
+
+    -- Rule 3: Round to the nearest 1,000 VND for practical cash/QR payment
+    SET @RoundedAmount = ROUND(@RawAmount, -3);
+    IF @RoundedAmount < 1000
+        SET @RoundedAmount = 1000;
+
+    RETURN CONVERT(decimal(18,2), @RoundedAmount);
 END;
 GO
 
--- Step 5. dbo.usp_AutoExpireBookings: Automatically transition Confirmed bookings > 15 minutes past StartAtUtc to NoShow.
+-- Step 4. dbo.usp_AutoExpireBookings: Automatically transition Confirmed bookings > 15 minutes past StartAtUtc to NoShow.
 CREATE OR ALTER PROCEDURE dbo.usp_AutoExpireBookings
 AS
 BEGIN
@@ -223,9 +175,9 @@ BEGIN
 END;
 GO
 
--- Step 6. dbo.usp_CreateBooking:
+-- Step 5. dbo.usp_CreateBooking:
 --   1. Must be an active Customer account (51102).
---   2. StartAtUtc must be in the future (51101) and at most 7 days ahead (51105).
+--   2. StartAtUtc must be in the future (51101) and at most 15 days ahead (51105).
 --   3. EndAtUtc defaults to StartAtUtc + 2 hours if omitted (used for reservation window).
 --   4. Table must be bookable (not Maintenance/Inactive, 51103) and have no overlapping booking
 --      or active session within 5 minutes of StartAtUtc (51104).
@@ -257,7 +209,6 @@ BEGIN
 
     BEGIN TRY
         BEGIN TRANSACTION;
-        -- Expire overdue bookings first so abandoned slots become free
         UPDATE dbo.Bookings
            SET Status = 'NoShow'
          WHERE Status = 'Confirmed'
@@ -268,7 +219,6 @@ BEGIN
         IF @TableStatus IS NULL OR @TableStatus IN ('Maintenance','Inactive')
             THROW 51103, N'Table is not bookable.', 1;
 
-        -- If table is currently InUse, booking start must be at least 5 minutes in the future to allow closing/transferring
         IF @TableStatus = 'InUse' AND @StartAtUtc < DATEADD(minute, 5, @Now)
             THROW 51104, N'Table is currently in use and requires at least 5 minutes buffer before booking time.', 1;
 
@@ -290,7 +240,7 @@ BEGIN
 END;
 GO
 
--- Step 7. dbo.usp_CancelBooking:
+-- Step 6. dbo.usp_CancelBooking:
 CREATE OR ALTER PROCEDURE dbo.usp_CancelBooking
     @BookingId int, @ActorId nvarchar(450), @Reason nvarchar(300) = NULL
 AS
@@ -309,15 +259,18 @@ BEGIN
         SELECT @LockedId = Id FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TableId;
         SELECT @CustomerId = CustomerId, @Status = Status, @Start = StartAtUtc
           FROM dbo.Bookings WITH (UPDLOCK) WHERE Id = @BookingId;
+
         IF @Status IS NULL OR @Status <> 'Confirmed'
             THROW 51201, N'Only a Confirmed booking can be cancelled.', 1;
         IF NOT EXISTS (SELECT 1 FROM dbo.AspNetUsers WHERE Id = @ActorId AND IsActive = 1)
             THROW 51202, N'Active account required.', 1;
+
         DECLARE @IsStaff bit = 0;
         IF EXISTS (SELECT 1 FROM dbo.AspNetUserRoles ur JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
             WHERE ur.UserId = @ActorId AND r.Name IN (N'Admin',N'Staff')) SET @IsStaff = 1;
         IF @IsStaff = 0 AND (@CustomerId <> @ActorId OR @Start <= @Now)
             THROW 51203, N'Customers can cancel only their own upcoming bookings.', 1;
+
         UPDATE dbo.Bookings SET Status = 'Cancelled', CancelledAtUtc = @Now,
             CancelledById = @ActorId, CancellationReason = @Reason WHERE Id = @BookingId;
         COMMIT;
@@ -329,16 +282,14 @@ BEGIN
 END;
 GO
 
--- Step 8. dbo.usp_CheckInBooking:
+-- Step 7. dbo.usp_CheckInBooking:
 --   Handles check-in scenarios:
 --     51300: Booking not found
 --     51301: Active Staff or Admin required
 --     51302: Booking is Cancelled
 --     51306: Booking was already CheckedIn or Completed
 --     51307: Customer arrived > 15 minutes late (NoShow)
---     51303: Customer arrived early (> 15m before start) and @AllowEarly = 0
---   Note: Check-in records customer arrival (Status = 'CheckedIn') even if the reserved table is
---   currently finishing up; staff then selects/assigns the table to open the play session.
+--     51303: Customer arrived early (> 5m before start) and @AllowEarly = 0
 CREATE OR ALTER PROCEDURE dbo.usp_CheckInBooking
     @BookingId int,
     @StaffId nvarchar(450),
@@ -354,19 +305,18 @@ BEGIN
         BEGIN TRANSACTION;
         DECLARE @Now datetime2(0) = SYSUTCDATETIME();
 
-        -- Auto-expire bookings > 15 minutes past StartAtUtc
         UPDATE dbo.Bookings
            SET Status = 'NoShow'
          WHERE Status = 'Confirmed'
            AND @Now > DATEADD(minute, 15, StartAtUtc);
 
-        DECLARE @TableId int, @LockedId int, @Status varchar(20), @Start datetime2(0), @End datetime2(0);
+        DECLARE @TableId int, @LockedId int, @Status varchar(20), @Start datetime2(0);
         SELECT @TableId = TableId FROM dbo.Bookings WHERE Id = @BookingId;
         IF @TableId IS NULL
             THROW 51300, N'Booking not found.', 1;
 
         SELECT @LockedId = Id FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TableId;
-        SELECT @Status = Status, @Start = StartAtUtc, @End = EndAtUtc
+        SELECT @Status = Status, @Start = StartAtUtc
           FROM dbo.Bookings WITH (UPDLOCK) WHERE Id = @BookingId;
 
         IF @Status = 'Cancelled'
@@ -375,10 +325,7 @@ BEGIN
             THROW 51306, N'Booking has already been checked in.', 1;
         IF @Status = 'NoShow' OR @Now > DATEADD(minute, 15, @Start)
             THROW 51307, N'Booking exceeded the 15-minute hold window (No-Show).', 1;
-        IF @Status <> 'Confirmed'
-            THROW 51302, N'Only a Confirmed booking can be checked in.', 1;
 
-        -- Early arrival check: if > 5 minutes before start and staff hasn't explicitly enabled @AllowEarly
         IF @AllowEarly = 0 AND @Now < DATEADD(minute, -5, @Start)
             THROW 51303, N'Outside the check-in window (customer arrived early; confirm early service if table is ready).', 1;
 
@@ -397,8 +344,8 @@ BEGIN
 END;
 GO
 
--- Step 9. dbo.usp_OpenSession:
---   - Unlimited playtime (no Timed mode / PlannedMinutes).
+-- Step 8. dbo.usp_OpenSession:
+--   - Unlimited playtime (minute-based billing).
 --   - Staff can open a table for a CheckedIn booking (either the originally booked table or another
 --     Available table selected by staff after check-in).
 --   - Enforces the 5-minute pre-booking rule: a table cannot be opened for walk-in customers if
@@ -419,7 +366,6 @@ BEGIN
         BEGIN TRANSACTION;
         DECLARE @Now datetime2(0) = SYSUTCDATETIME();
 
-        -- Auto-expire overdue bookings (> 15m late) so tables are not blocked by no-shows
         UPDATE dbo.Bookings
            SET Status = 'NoShow'
          WHERE Status = 'Confirmed'
@@ -449,19 +395,16 @@ BEGIN
             IF EXISTS (SELECT 1 FROM dbo.PlaySessions WHERE BookingId = @BookingId)
                 THROW 51406, N'This booking already has a session.', 1;
 
-            -- Ensure target table is not reserved right now by a DIFFERENT booking (within 5-min buffer)
             IF EXISTS (SELECT 1 FROM dbo.Bookings WHERE TableId = @TableId AND Id <> @BookingId
                 AND ((Status = 'CheckedIn' AND NOT EXISTS (SELECT 1 FROM dbo.PlaySessions s WHERE s.BookingId = Bookings.Id))
                      OR (Status = 'Confirmed' AND DATEADD(minute, -5, StartAtUtc) <= @Now AND DATEADD(minute, 15, StartAtUtc) >= @Now)))
                 THROW 51407, N'Table is reserved for another current booking.', 1;
 
-            -- If staff assigned a different available table after check-in, update Booking.TableId
             IF @BookingTable <> @TableId
                 UPDATE dbo.Bookings SET TableId = @TableId WHERE Id = @BookingId;
         END
         ELSE
         BEGIN
-            -- Walk-in session: block if table has a CheckedIn booking waiting or a Confirmed booking starting within 5 minutes
             IF EXISTS (SELECT 1 FROM dbo.Bookings WHERE TableId = @TableId
                 AND ((Status = 'CheckedIn' AND NOT EXISTS (SELECT 1 FROM dbo.PlaySessions s WHERE s.BookingId = Bookings.Id))
                      OR (Status = 'Confirmed' AND DATEADD(minute, -5, StartAtUtc) <= @Now AND DATEADD(minute, 15, StartAtUtc) >= @Now)))
@@ -492,10 +435,9 @@ BEGIN
 END;
 GO
 
--- Step 10. dbo.usp_CloseSession:
+-- Step 9. dbo.usp_CloseSession:
 --   Closes the open segment, calculates playtime amount by minute via fn_CalcPlaytimeAmount,
---   updates PlaySessions (StartAtUtc and EndAtUtc only), sets table to AwaitingPayment,
---   and marks linked booking as Completed.
+--   updates PlaySessions, sets table to AwaitingPayment, and marks linked booking as Completed.
 CREATE OR ALTER PROCEDURE dbo.usp_CloseSession
     @SessionId int, @StaffId nvarchar(450)
 AS
@@ -507,11 +449,11 @@ BEGIN
         THROW 51501, N'Active Staff or Admin required.', 1;
     BEGIN TRY
         BEGIN TRANSACTION;
-        DECLARE @TableId int, @LockedId int, @Status varchar(20), @Start datetime2(0),
+        DECLARE @TableId int, @LockedId int, @Status varchar(20),
             @BookingId int, @Now datetime2(0) = SYSUTCDATETIME(),
             @Amount decimal(18,2);
 
-        SELECT @Status = Status, @TableId = TableId, @Start = StartAtUtc, @BookingId = BookingId
+        SELECT @Status = Status, @TableId = TableId, @BookingId = BookingId
           FROM dbo.PlaySessions WITH (UPDLOCK, HOLDLOCK) WHERE Id = @SessionId;
         IF @Status IS NULL OR @Status <> 'Active'
             THROW 51502, N'Only an Active session can be closed.', 1;
@@ -525,16 +467,32 @@ BEGIN
 
         SET @Amount = dbo.fn_CalcPlaytimeAmount(@SessionId, @Now);
 
-        UPDATE dbo.PlaySessions
-           SET EndAtUtc = @Now,
-               ClosedById = @StaffId,
-               Status = 'Closed',
-               PlaytimeAmount = @Amount
-         WHERE Id = @SessionId;
+        IF @Amount <= 0
+        BEGIN
+            -- Grace period (<= 2 minutes): close session with 0 VND, release booking link if any, and return table directly to Available
+            UPDATE dbo.PlaySessions
+               SET EndAtUtc = @Now,
+                   ClosedById = @StaffId,
+                   Status = 'Closed',
+                   PlaytimeAmount = 0,
+                   BookingId = NULL
+             WHERE Id = @SessionId;
 
-        UPDATE dbo.BilliardTables SET Status = 'AwaitingPayment' WHERE Id = @TableId;
-        IF @BookingId IS NOT NULL
-            UPDATE dbo.Bookings SET Status = 'Completed' WHERE Id = @BookingId;
+            UPDATE dbo.BilliardTables SET Status = 'Available' WHERE Id = @TableId;
+        END
+        ELSE
+        BEGIN
+            UPDATE dbo.PlaySessions
+               SET EndAtUtc = @Now,
+                   ClosedById = @StaffId,
+                   Status = 'Closed',
+                   PlaytimeAmount = @Amount
+             WHERE Id = @SessionId;
+
+            UPDATE dbo.BilliardTables SET Status = 'AwaitingPayment' WHERE Id = @TableId;
+            IF @BookingId IS NOT NULL
+                UPDATE dbo.Bookings SET Status = 'Completed' WHERE Id = @BookingId;
+        END
 
         COMMIT;
         SELECT Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status
@@ -547,9 +505,8 @@ BEGIN
 END;
 GO
 
--- Step 11. dbo.usp_TransferSession:
---   Moves an Active session to another Available table (e.g. when vacating a table 5 minutes before a booking).
---   Also supports sessions opened from a booking (updates Bookings.TableId to the new table).
+-- Step 10. dbo.usp_TransferSession:
+--   Moves an Active session to another Available table (e.g. vacating a table 5 minutes before a booking).
 CREATE OR ALTER PROCEDURE dbo.usp_TransferSession
     @SessionId int, @NewTableId int, @StaffId nvarchar(450)
 AS
@@ -577,11 +534,8 @@ BEGIN
         IF @NewTableId = @OldTableId
             THROW 51614, N'Target table is the current table of the session.', 1;
 
-        SET @FirstId = CASE WHEN @NewTableId IS NULL OR @OldTableId < @NewTableId
-                            THEN @OldTableId ELSE @NewTableId END;
-        SET @SecondId = CASE WHEN @NewTableId IS NULL THEN NULL
-                             WHEN @OldTableId < @NewTableId THEN @NewTableId
-                             ELSE @OldTableId END;
+        SET @FirstId = CASE WHEN @OldTableId < @NewTableId THEN @OldTableId ELSE @NewTableId END;
+        SET @SecondId = CASE WHEN @OldTableId < @NewTableId THEN @NewTableId ELSE @OldTableId END;
         SELECT @LockedId = Id FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @FirstId;
         IF @SecondId IS NOT NULL
             SELECT @LockedId = Id FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @SecondId;
@@ -590,8 +544,6 @@ BEGIN
           FROM dbo.BilliardTables t JOIN dbo.TableTypes ty ON ty.Id = t.TableTypeId
          WHERE t.Id = @NewTableId;
         IF @NewStatus IS NULL OR @NewStatus <> 'Available'
-            THROW 51613, N'Target table does not exist or is not Available.', 1;
-        IF EXISTS (SELECT 1 FROM dbo.PlaySessions WHERE TableId = @NewTableId AND Status = 'Active')
             THROW 51613, N'Target table does not exist or is not Available.', 1;
         IF EXISTS (SELECT 1 FROM dbo.Bookings WHERE TableId = @NewTableId
             AND ((Status = 'CheckedIn' AND NOT EXISTS (SELECT 1 FROM dbo.PlaySessions s WHERE s.BookingId = Bookings.Id))
@@ -623,12 +575,10 @@ BEGIN
 END;
 GO
 
--- Step 12. Read-only verification.
+-- Step 11. Read-only verification.
 SET NOEXEC OFF;
 GO
 SELECT DB_NAME() AS DatabaseName,
-    (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.PlaySessions')
-        AND name IN (N'SessionMode', N'PlannedEndAtUtc', N'BillingStartAtUtc', N'BillingEndAtUtc')) AS LegacyColumns_Expected0,
     (SELECT COUNT(*) FROM sys.objects WHERE schema_id = SCHEMA_ID(N'dbo')
         AND name = N'fn_CalcPlaytimeAmount') AS CalcFunction_Expected1,
     (SELECT COUNT(*) FROM sys.procedures WHERE schema_id = SCHEMA_ID(N'dbo')

@@ -7,6 +7,10 @@
     var maxIso = Model.MaxStartLocal.ToString("yyyy-MM-ddTHH:mm");
 }
 
+<!-- ===================================================================== -->
+<!-- PHẦN 1: CSS TÙY CHỈNH & THÔNG BÁO TEMPDATA                            -->
+<!-- ===================================================================== -->
+
 <style>
     .booking-table-grid {
         display: grid;
@@ -70,7 +74,8 @@
         <div class="fw-bold mb-1"><i class="bi bi-info-circle-fill me-1"></i> Quy định đặt bàn của quán:</div>
         <ul class="mb-0 ps-3">
             <li>Được đặt trước tối đa <strong>15 ngày</strong>. Quán giữ bàn cho bạn trong vòng <strong>15 phút</strong> kể từ giờ hẹn (quá 15 phút chưa đến hệ thống tự động hủy giữ chỗ).</li>
-            <li>Khi bắt đầu chơi sẽ <strong>không giới hạn thời gian</strong>, khách tự chủ động giờ nghỉ và <strong>tính tiền theo số phút thực tế</strong>.</li>
+            <li>Khi bắt đầu chơi sẽ <strong>không giới hạn thời gian</strong>, khách tự chủ động giờ nghỉ và <strong>tính tiền theo số phút thực tế</strong> (trừ trường hợp bàn có lịch đặt kế tiếp thì cần trống bàn hoặc chuyển bàn trước giờ hẹn tiếp theo 5 phút).</li>
+            <li>Nếu bàn bạn chọn đang có ca chơi trước đó chưa kết thúc kịp, quán cam kết <strong>ưu tiên chuyển bàn hoặc bố trí ngay bàn trống cùng hạng tương đương</strong> khi bạn đến Check-in.</li>
         </ul>
     </div>
 
@@ -78,20 +83,58 @@
         @Html.AntiForgeryToken()
         <input type="hidden" name="TableId" id="selected-table-id" value="" />
 
+        <!-- ============================================================= -->
+        <!-- PHẦN 2: CHỌN THỜI GIAN ĐẾN & GHI CHÚ YÊU CẦU                  -->
+        <!-- ============================================================= -->
         <div class="row g-3 mb-4">
-            <div class="col-md-5">
-                <label class="form-label fw-semibold" for="input-start-time">1. Chọn ngày & giờ đến (Tối đa 15 ngày tới)</label>
-                <input type="datetime-local"
-                       class="form-control"
-                       id="input-start-time"
-                       name="StartTimeLocal"
-                       value="@defaultIso"
-                       min="@minIso"
-                       max="@maxIso"
-                       required />
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">1. Chọn ngày & giờ đến (Tối đa 15 ngày tới)</label>
+                <input type="hidden" id="input-start-time" name="StartTimeLocal" value="@defaultIso" />
+                @{
+                    var startDay = Model.MinStartLocal.Date;
+                    var defaultDateStr = Model.DefaultStartLocal.ToString("yyyy-MM-dd");
+                    var defaultHour = Model.DefaultStartLocal.Hour;
+                    var defaultMinute = Model.DefaultStartLocal.Minute;
+                    string[] vnDayNames = { "Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy" };
+                }
+                <div class="row g-2">
+                    <div class="col-6">
+                        <select class="form-select" id="select-booking-date" aria-label="Ngày đến">
+                            @for (int d = 0; d <= Bms.Web.Models.BookingPolicy.MaxAdvanceDays; d++)
+                            {
+                                var curDate = startDay.AddDays(d);
+                                var valStr = curDate.ToString("yyyy-MM-dd");
+                                var dayLabel = d == 0 ? "Hôm nay" : d == 1 ? "Ngày mai" : vnDayNames[(int)curDate.DayOfWeek];
+                                <option value="@valStr" selected="@(valStr == defaultDateStr)">
+                                    @dayLabel — @curDate.ToString("dd/MM/yyyy")
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-3">
+                        <select class="form-select" id="select-booking-hour" aria-label="Giờ đến (24h)">
+                            @for (int h = 0; h < 24; h++)
+                            {
+                                <option value="@h.ToString("D2")" selected="@(h == defaultHour)">
+                                    @h.ToString("D2") giờ
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-3">
+                        <select class="form-select" id="select-booking-minute" aria-label="Phút đến">
+                            @for (int m = 0; m < 60; m += 5)
+                            {
+                                <option value="@m.ToString("D2")" selected="@(m == defaultMinute)">
+                                    @m.ToString("D2") phút
+                                </option>
+                            }
+                        </select>
+                    </div>
+                </div>
                 <div class="form-text">Hệ thống sẽ kiểm tra và hiển thị các bàn trống tương ứng với giờ bạn chọn.</div>
             </div>
-            <div class="col-md-7">
+            <div class="col-md-6">
                 <label class="form-label fw-semibold" for="input-notes">Ghi chú yêu cầu (Tùy chọn)</label>
                 <input type="text"
                        class="form-control"
@@ -102,6 +145,9 @@
             </div>
         </div>
 
+        <!-- ============================================================= -->
+        <!-- PHẦN 3: LƯỚI CHỌN BÀN TRƯỚC & NÚT XÁC NHẬN ĐẶT BÀN            -->
+        <!-- ============================================================= -->
         <div class="mb-4">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <label class="form-label fw-semibold mb-0">2. Chọn bàn trước</label>
@@ -155,6 +201,9 @@
     </form>
 </div>
 
+<!-- ===================================================================== -->
+<!-- PHẦN 4: JAVASCRIPT CHỌN BÀN & KIỂM TRA BÀN TRỐNG THEO GIỜ (AJAX)      -->
+<!-- ===================================================================== -->
 @section Scripts {
     <script>
         (() => {
@@ -164,6 +213,9 @@
             const btnSubmit = document.getElementById('btn-submit-booking');
             const btnSubmitText = document.getElementById('btn-submit-text');
             const timeInput = document.getElementById('input-start-time');
+            const selectDate = document.getElementById('select-booking-date');
+            const selectHour = document.getElementById('select-booking-hour');
+            const selectMinute = document.getElementById('select-booking-minute');
             const loadingEl = document.getElementById('tables-loading-indicator');
 
             function selectTable(card) {
@@ -198,9 +250,10 @@
                 if (firstAvailable) selectTable(firstAvailable);
             }
 
-            if (timeInput) {
-                timeInput.addEventListener('change', async () => {
-                    const val = timeInput.value;
+            if (timeInput && selectDate && selectHour && selectMinute) {
+                const syncAndRefreshTables = async () => {
+                    const val = `${selectDate.value}T${selectHour.value}:${selectMinute.value}`;
+                    timeInput.value = val;
                     if (!val) return;
 
                     if (loadingEl) loadingEl.style.display = 'inline-block';
@@ -251,7 +304,11 @@
                     } finally {
                         if (loadingEl) loadingEl.style.display = 'none';
                     }
-                });
+                };
+
+                selectDate.addEventListener('change', syncAndRefreshTables);
+                selectHour.addEventListener('change', syncAndRefreshTables);
+                selectMinute.addEventListener('change', syncAndRefreshTables);
             }
         })();
     </script>

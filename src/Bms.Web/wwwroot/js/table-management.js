@@ -5,6 +5,10 @@
 (() => {
     'use strict';
 
+    // =========================================================================
+    // PHẦN 1: BIẾN TRẠNG THÁI (STATE) & CẤU HÌNH ĐỊNH DẠNG (FORMATTERS)
+    // =========================================================================
+
     let currentSelectedTable = {
         id: null,
         code: '',
@@ -92,6 +96,10 @@
         currency: 'VND'
     });
 
+    // =========================================================================
+    // PHẦN 2: HÀM TIỆN ÍCH ĐỊNH DẠNG THỜI GIAN & TIỀN TỆ
+    // =========================================================================
+
     function formatVnDateTime(utcDateString) {
         if (!utcDateString) return '--';
         try {
@@ -167,6 +175,10 @@
         }
         return `${pad(minutes)}:${pad(seconds)}`;
     }
+
+    // =========================================================================
+    // PHẦN 3: TÍNH TOÁN HẠN BOOKING (5 PHÚT) & THÔNG BÁO (TOAST / ANTI-FORGERY)
+    // =========================================================================
 
     /**
      * Tính trạng thái thời gian của bàn đối với lịch Booking sắp tới (bắt buộc nghỉ/chuyển trước 5 phút)
@@ -270,6 +282,10 @@
         const input = holder ? holder.querySelector('input[name="__RequestVerificationToken"]') : null;
         return input ? input.value : '';
     }
+
+    // =========================================================================
+    // PHẦN 4: ĐIỀU KHIỂN NÚT BẤM & ĐỒNG HỒ ĐẾM GIÂY TRỰC TIẾP (UPDATECLOCKS)
+    // =========================================================================
 
     function updateButtons() {
         const btnOpen = document.getElementById('btn-open-table');
@@ -475,6 +491,10 @@
         clockTimerId = setInterval(updateClocks, 1000);
     }
 
+    // =========================================================================
+    // PHẦN 5: LÀM MỚI TIỀN TẠM TÍNH (15S) & HIỂN THỊ CHI TIẾT PHIÊN CHƠI
+    // =========================================================================
+
     async function refreshEstimatedAmount(tableId) {
         if (!tableId || isEstimatedAmountRefreshing) return;
         const requestId = ++estimatedAmountRequestId;
@@ -504,8 +524,9 @@
             if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
             if (elPlaytimeAmount) {
                 if (estAmount !== null && estAmount !== undefined) {
+                    const noteStr = Number(estAmount) === 0 ? ' (Miễn phí ≤ 2p đầu)' : '';
                     const timeStr = srvTime ? ` (cập nhật ${formatVnTimeWithSeconds(srvTime)})` : '';
-                    elPlaytimeAmount.textContent = `${formatVnCurrency(estAmount)}${timeStr}`;
+                    elPlaytimeAmount.textContent = `${formatVnCurrency(estAmount)}${noteStr}${timeStr}`;
                 } else {
                     elPlaytimeAmount.textContent = '--';
                 }
@@ -624,8 +645,9 @@
             if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
             if (elPlaytimeAmount) {
                 if (estimatedAmount !== null && estimatedAmount !== undefined) {
+                    const noteStr = Number(estimatedAmount) === 0 ? ' (Miễn phí ≤ 2p đầu)' : '';
                     const timeStr = serverTime ? ` (cập nhật ${formatVnTimeWithSeconds(serverTime)})` : '';
-                    elPlaytimeAmount.textContent = `${formatVnCurrency(estimatedAmount)}${timeStr}`;
+                    elPlaytimeAmount.textContent = `${formatVnCurrency(estimatedAmount)}${noteStr}${timeStr}`;
                 } else {
                     elPlaytimeAmount.textContent = '--';
                 }
@@ -714,6 +736,10 @@
         });
         renderTableSegments([]);
     }
+
+    // =========================================================================
+    // PHẦN 6: CHỌN BÀN, ĐÓNG PANEL & TỰ ĐỘNG ĐỒNG BỘ SƠ ĐỒ BÀN (POLLING 10S)
+    // =========================================================================
 
     function closeDetailPanel(returnFocus = true) {
         if (isOpenFormVisible) hideOpenForm(false);
@@ -907,6 +933,10 @@
         }
     }
 
+    // =========================================================================
+    // PHẦN 7: LUỒNG MỞ BÀN (OPEN TABLE)
+    // =========================================================================
+
     function updateOpenFormPreview() {
         if (!isOpenFormVisible) return;
         const nowServerMs = Date.now() - deltaOffset;
@@ -1021,6 +1051,10 @@
         }
     }
 
+    // =========================================================================
+    // PHẦN 8: LUỒNG ĐÓNG BÀN (CLOSE TABLE & TÓM TẮT TIỀN GIỜ)
+    // =========================================================================
+
     function showCloseForm() {
         if (currentSelectedTable.status !== 'InUse' || !currentSelectedTable.sessionId) return;
         if (isOpenFormVisible) hideOpenForm(false);
@@ -1109,14 +1143,22 @@
 
             const startAtUtc = data.startAtUtc ?? data.StartAtUtc;
             const serverNowUtc = data.serverNowUtc ?? data.ServerNowUtc;
-            const billedMinutes = data.billedMinutes ?? data.BilledMinutes ?? 1;
+            const billedMinutes = data.billedMinutes ?? data.BilledMinutes ?? 0;
             const estimatedAmount = data.estimatedAmount ?? data.EstimatedAmount ?? 0;
 
             if (elTable) elTable.textContent = data.tableCode ?? data.TableCode ?? currentSelectedTable.code;
             if (elStart) elStart.textContent = startAtUtc ? formatVnDateTime(startAtUtc) : '--';
             if (elEnd) elEnd.textContent = serverNowUtc ? formatVnDateTime(serverNowUtc) : '--';
-            if (elMinutes) elMinutes.textContent = `${billedMinutes} phút`;
-            if (elAmount) elAmount.textContent = formatVnCurrency(estimatedAmount);
+            if (elMinutes) {
+                elMinutes.textContent = Number(billedMinutes) === 0
+                    ? '0 phút (≤ 2p đầu — Trả bàn về Trống)'
+                    : `${billedMinutes} phút`;
+            }
+            if (elAmount) {
+                elAmount.textContent = Number(estimatedAmount) === 0
+                    ? '0 ₫ (Miễn phí mở nhầm / hủy sớm)'
+                    : formatVnCurrency(estimatedAmount);
+            }
             if (elTimestamp) elTimestamp.textContent = serverNowUtc ? `Tạm tính lúc ${formatVnTimeWithSeconds(serverNowUtc)}` : '';
 
             if (elLoading) elLoading.classList.add('d-none');
@@ -1161,7 +1203,11 @@
                 const data = result.data ?? result.Data;
                 const playtimeAmount = data?.playtimeAmount ?? data?.PlaytimeAmount ?? 0;
                 const billedMinutes = data?.billedMinutes ?? data?.BilledMinutes ?? 0;
-                showToast(`Đã đóng bàn ${targetTableCode} (${billedMinutes} phút). Tiền giờ: ${formatVnCurrency(playtimeAmount)}`, 'success');
+                if (Number(playtimeAmount) === 0) {
+                    showToast(`Đã hủy mở bàn ${targetTableCode} (dưới 2 phút, miễn phí 0 ₫). Bàn đã về trạng thái Trống.`, 'success');
+                } else {
+                    showToast(`Đã đóng bàn ${targetTableCode} (${billedMinutes} phút). Tiền giờ: ${formatVnCurrency(playtimeAmount)}`, 'success');
+                }
                 await reloadTableGrid();
                 await handleTableSelect(targetTableId);
             } else {
@@ -1175,6 +1221,10 @@
             updateButtons();
         }
     }
+
+    // =========================================================================
+    // PHẦN 9: LUỒNG CHUYỂN BÀN (CHUYỂN BÀN)
+    // =========================================================================
 
     function getAvailableTablesFromGrid() {
         const grid = document.getElementById('table-grid-container');
@@ -1365,6 +1415,10 @@
             updateButtons();
         }
     }
+
+    // =========================================================================
+    // PHẦN 10: GẮN SỰ KIỆN DOM (INITEVENTS) & KHỞI CHẠY KHI TẢI TRANG
+    // =========================================================================
 
     function initEvents() {
         const gridContainer = document.getElementById('table-grid-container');

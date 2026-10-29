@@ -9,6 +9,10 @@ namespace Bms.Web.Services;
 
 public class BookingService : IBookingService
 {
+    // =========================================================================
+    // PHẦN 1: KHỞI TẠO SERVICE & TỰ ĐỘNG HỦY ĐƠN QUÁ HẠN 15 PHÚT (NO-SHOW)
+    // =========================================================================
+
     private readonly ApplicationDbContext _context;
     private readonly ITableSessionService _tableSessionService;
     private readonly ILogger<BookingService> _logger;
@@ -56,12 +60,16 @@ public class BookingService : IBookingService
         }
     }
 
+    // =========================================================================
+    // PHẦN 2: NGHIỆP VỤ PHÍA KHÁCH HÀNG (XEM BÀN TRỐNG, LỊCH SỬ, ĐẶT & HỦY BÀN)
+    // =========================================================================
+
     public async Task<List<BookableTableOptionViewModel>> GetBookableTablesAsync(DateTime startAtUtc)
     {
         await AutoExpireOverdueBookingsAsync();
 
         var nowUtc = DateTime.UtcNow;
-        var endAtUtc = startAtUtc.AddHours(2);
+        var endAtUtc = startAtUtc.AddHours(BookingPolicy.DefaultSlotHours);
 
         var tables = await (from t in _context.BilliardTables.AsNoTracking()
                             join ty in _context.TableTypes.AsNoTracking() on t.TableTypeId equals ty.Id
@@ -97,10 +105,10 @@ public class BookingService : IBookingService
                 bookable = false;
                 reason = "Bàn đang bảo trì";
             }
-            else if (t.Status == "InUse" && startAtUtc < nowUtc.AddMinutes(5))
+            else if (t.Status == "InUse" && startAtUtc < nowUtc.AddMinutes(BookingPolicy.PreBookingBufferMinutes))
             {
                 bookable = false;
-                reason = "Bàn đang có khách chơi (cần đặt cách hiện tại ít nhất 5 phút)";
+                reason = $"Bàn đang có khách chơi (cần đặt cách hiện tại ít nhất {BookingPolicy.PreBookingBufferMinutes} phút)";
             }
             else if (overlappingSet.Contains(t.Id))
             {
@@ -162,7 +170,7 @@ public class BookingService : IBookingService
                 FloorNumber = x.FloorNumber,
                 HourlyRate = x.HourlyRate,
                 StartAtUtc = startUtc,
-                HoldUntilUtc = startUtc.AddMinutes(15),
+                HoldUntilUtc = startUtc.AddMinutes(BookingPolicy.HoldMinutes),
                 CreatedAtUtc = createdUtc,
                 Status = x.Status,
                 DisplayStatus = MapBookingStatus(x.Status),
@@ -202,7 +210,7 @@ public class BookingService : IBookingService
             cmd.Parameters.Add(new SqlParameter("@CustomerId", SqlDbType.NVarChar, 450) { Value = customerId });
             cmd.Parameters.Add(new SqlParameter("@TableId", SqlDbType.Int) { Value = tableId });
             cmd.Parameters.Add(new SqlParameter("@StartAtUtc", SqlDbType.DateTime2) { Value = startAtUtc });
-            cmd.Parameters.Add(new SqlParameter("@EndAtUtc", SqlDbType.DateTime2) { Value = startAtUtc.AddHours(2) });
+            cmd.Parameters.Add(new SqlParameter("@EndAtUtc", SqlDbType.DateTime2) { Value = startAtUtc.AddHours(BookingPolicy.DefaultSlotHours) });
             cmd.Parameters.Add(new SqlParameter("@Notes", SqlDbType.NVarChar, 300)
             {
                 Value = string.IsNullOrWhiteSpace(notes) ? DBNull.Value : notes.Trim()
@@ -282,6 +290,10 @@ public class BookingService : IBookingService
         }
     }
 
+    // =========================================================================
+    // PHẦN 3: NGHIỆP VỤ PHÍA NHÂN VIÊN (TRA CỨU, 8 TÌNH HUỐNG, CHECK-IN, GÁN BÀN)
+    // =========================================================================
+
     public async Task<StaffBookingManagementViewModel> SearchBookingsForStaffAsync(string? keyword, string? statusFilter, DateTime? dateLocal)
     {
         await AutoExpireOverdueBookingsAsync();
@@ -342,9 +354,8 @@ public class BookingService : IBookingService
 
         if (dateLocal.HasValue)
         {
-            // Chuyển ngày giờ Việt Nam (UTC+7) sang khoảng UTC
             var startOfDayVn = dateLocal.Value.Date;
-            var startUtc = startOfDayVn.AddHours(-7);
+            var startUtc = BookingPolicy.ToUtcFromVietnamTime(startOfDayVn);
             var endUtc = startUtc.AddDays(1);
             baseQuery = baseQuery.Where(x => x.StartAtUtc >= startUtc && x.StartAtUtc < endUtc);
         }
@@ -371,8 +382,8 @@ public class BookingService : IBookingService
         var bookings = rawList.Select(x =>
         {
             var startUtc = DateTime.SpecifyKind(x.StartAtUtc, DateTimeKind.Utc);
-            var holdUntilUtc = startUtc.AddMinutes(15);
-            var mustVacateByUtc = startUtc.AddMinutes(-5);
+            var holdUntilUtc = startUtc.AddMinutes(BookingPolicy.HoldMinutes);
+            var mustVacateByUtc = startUtc.AddMinutes(-BookingPolicy.PreBookingBufferMinutes);
             var checkedInUtc = x.CheckedInAtUtc.HasValue
                 ? DateTime.SpecifyKind(x.CheckedInAtUtc.Value, DateTimeKind.Utc)
                 : (DateTime?)null;
@@ -479,7 +490,7 @@ public class BookingService : IBookingService
 
         var minutesDiff = (nowUtc - item.StartAtUtc).TotalMinutes; // âm: đến sớm, dương: đến muộn
 
-        if (minutesDiff < -5)
+        if (minutesDiff < -BookingPolicy.PreBookingBufferMinutes)
         {
             item.ScenarioCode = "EarlyArrival";
             item.ScenarioTitle = "Khách đến sớm";
@@ -514,7 +525,7 @@ public class BookingService : IBookingService
                 item.CanCheckInNormal = true;
             }
         }
-        else if (minutesDiff <= 15)
+        else if (minutesDiff <= BookingPolicy.HoldMinutes)
         {
             item.ScenarioCode = "LateUnder15m";
             item.ScenarioTitle = $"Khách đến muộn {(int)Math.Ceiling(minutesDiff)} phút (Chưa quá 15 phút)";
@@ -589,6 +600,10 @@ public class BookingService : IBookingService
 
         return await _tableSessionService.OpenSessionAsync(selectedTableId, staffId, bookingId);
     }
+
+    // =========================================================================
+    // PHẦN 4: ÁNH XẠ TRẠNG THÁI & MÃ LỖI SQL (STATUS & ERROR MAPPING)
+    // =========================================================================
 
     public static string MapBookingStatus(string status) => status switch
     {

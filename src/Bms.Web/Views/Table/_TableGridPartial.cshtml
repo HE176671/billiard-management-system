@@ -2,6 +2,9 @@
 @using Bms.Web.Models
 @model List<TableCardViewModel>
 @{
+    // =========================================================================
+    // PHẦN 1: CHUẨN HÓA THỜI GIAN SERVER (UTC ISO)
+    // =========================================================================
     var firstTable = Model?.FirstOrDefault();
     var serverTime = firstTable != null && firstTable.ServerTimeUtc != default
         ? firstTable.ServerTimeUtc
@@ -14,6 +17,9 @@
     var serverTimeIso = serverTimeUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 }
 
+<!-- ===================================================================== -->
+<!-- PHẦN 2: VÒNG LẶP HIỂN THỊ DANH SÁCH THẺ BÀN (TABLE-CARD)              -->
+<!-- ===================================================================== -->
 <div class="table-grid" id="table-grid" data-server-time="@serverTimeIso">
     @if (Model != null && Model.Count > 0)
     {

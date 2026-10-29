@@ -9,12 +9,20 @@ namespace Bms.Web.Controllers;
 [Authorize(Roles = "Staff,Admin")]
 public class TableController : Controller
 {
+    // =========================================================================
+    // PHẦN 1: KHỞI TẠO CONTROLLER & DEPENDENCY INJECTION
+    // =========================================================================
+
     private readonly ITableSessionService _tableSessionService;
 
     public TableController(ITableSessionService tableSessionService)
     {
         _tableSessionService = tableSessionService;
     }
+
+    // =========================================================================
+    // PHẦN 2: CÁC ACTION [HttpGet] — HIỂN THỊ TRANG, LƯỚI BÀN & CHI TIẾT PHIÊN CHƠI
+    // =========================================================================
 
     // GET: /Table
     [HttpGet]
@@ -68,6 +76,10 @@ public class TableController : Controller
 
         return Json(TableOperationResult.Ok(summary));
     }
+
+    // =========================================================================
+    // PHẦN 3: CÁC ACTION [HttpPost] — MỞ BÀN, ĐÓNG BÀN & CHUYỂN BÀN
+    // =========================================================================
 
     // POST: /Table/OpenSession
     [HttpPost]

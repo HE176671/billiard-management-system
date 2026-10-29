@@ -9,12 +9,20 @@ namespace Bms.Web.Controllers;
 [Authorize(Roles = "Staff,Admin")]
 public class BookingController : Controller
 {
+    // =========================================================================
+    // PHẦN 1: KHỞI TẠO CONTROLLER & DEPENDENCY INJECTION
+    // =========================================================================
+
     private readonly IBookingService _bookingService;
 
     public BookingController(IBookingService bookingService)
     {
         _bookingService = bookingService;
     }
+
+    // =========================================================================
+    // PHẦN 2: ACTION [HttpGet] — TRA CỨU & LỌC DANH SÁCH ĐẶT BÀN CHO NHÂN VIÊN
+    // =========================================================================
 
     // GET: /Booking
     [HttpGet]
@@ -25,12 +33,21 @@ public class BookingController : Controller
         return View(model);
     }
 
+    // =========================================================================
+    // PHẦN 3: CÁC ACTION [HttpPost] — CHECK-IN, CHỌN BÀN MỞ PHIÊN & HỦY ĐẶT BÀN
+    // =========================================================================
+
     // POST: /Booking/CheckIn
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CheckIn(int bookingId, bool allowEarly = false, string? keyword = null, string? status = null, DateTime? date = null)
     {
-        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "staff";
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(staffId))
+        {
+            return Challenge();
+        }
+
         var result = await _bookingService.CheckInBookingAsync(bookingId, staffId, allowEarly);
 
         if (result.Success)
@@ -50,7 +67,12 @@ public class BookingController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AssignTable(int bookingId, int selectedTableId, string? keyword = null, string? status = null, DateTime? date = null)
     {
-        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "staff";
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(staffId))
+        {
+            return Challenge();
+        }
+
         var result = await _bookingService.AssignTableAndOpenSessionAsync(bookingId, selectedTableId, staffId);
 
         if (result.Success)
@@ -70,7 +92,12 @@ public class BookingController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Cancel(int bookingId, string? reason = null, string? keyword = null, string? status = null, DateTime? date = null)
     {
-        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "staff";
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(staffId))
+        {
+            return Challenge();
+        }
+
         var result = await _bookingService.CancelBookingAsync(bookingId, staffId, string.IsNullOrWhiteSpace(reason) ? "Nhân viên hủy tại quầy" : reason);
 
         if (result.Success)

@@ -1,5 +1,9 @@
 namespace Bms.Web.Models;
 
+// =========================================================================
+// PHẦN 1: VIEWMODELS HIỂN THỊ SƠ ĐỒ BÀN & CHI TIẾT PHIÊN CHƠI
+// =========================================================================
+
 public class TableManagementViewModel
 {
     public List<TableCardViewModel> Tables { get; set; } = new();
@@ -61,6 +65,10 @@ public class SessionSegmentViewModel
     public DateTime? EndAtUtc { get; set; }
 }
 
+// =========================================================================
+// PHẦN 2: REQUEST MODELS NHẬN DỮ LIỆU TỪ FORM POST (MỞ, ĐÓNG, CHUYỂN BÀN)
+// =========================================================================
+
 public class OpenSessionRequest
 {
     public int TableId { get; set; }
@@ -77,6 +85,10 @@ public class TransferSessionRequest
     public int SessionId { get; set; }
     public int NewTableId { get; set; }
 }
+
+// =========================================================================
+// PHẦN 3: RESULT & SUMMARY MODELS TRẢ KẾT QUẢ VỀ CLIENT
+// =========================================================================
 
 public class TableOperationResult
 {

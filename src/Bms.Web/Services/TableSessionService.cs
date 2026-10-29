@@ -9,6 +9,10 @@ namespace Bms.Web.Services;
 
 public class TableSessionService : ITableSessionService
 {
+    // =========================================================================
+    // PHẦN 1: KHỞI TẠO SERVICE & DEPENDENCY INJECTION
+    // =========================================================================
+
     private readonly ApplicationDbContext _context;
     private readonly ILogger<TableSessionService> _logger;
 
@@ -18,11 +22,15 @@ public class TableSessionService : ITableSessionService
         _logger = logger;
     }
 
+    // =========================================================================
+    // PHẦN 2: TRUY VẤN ĐỌC DỮ LIỆU (LƯỚI BÀN & CHI TIẾT PHIÊN CHƠI)
+    // =========================================================================
+
     public async Task<List<TableCardViewModel>> GetTableCardsAsync()
     {
         var serverTimeUtc = DateTime.UtcNow;
-        var holdThresholdUtc = serverTimeUtc.AddMinutes(-15);
-        var horizonUtc = serverTimeUtc.AddHours(12);
+        var holdThresholdUtc = serverTimeUtc.AddMinutes(-BookingPolicy.HoldMinutes);
+        var horizonUtc = serverTimeUtc.AddHours(BookingPolicy.TableDashboardHorizonHours);
 
         var query = from table in _context.BilliardTables.AsNoTracking()
                     join type in _context.TableTypes.AsNoTracking() on table.TableTypeId equals type.Id
@@ -69,7 +77,7 @@ public class TableSessionService : ITableSessionService
             DateTime? nextStartUtc = nextBooking != null
                 ? DateTime.SpecifyKind(nextBooking.StartAtUtc, DateTimeKind.Utc)
                 : null;
-            DateTime? mustEndBeforeUtc = nextStartUtc?.AddMinutes(-5);
+            DateTime? mustEndBeforeUtc = nextStartUtc?.AddMinutes(-BookingPolicy.PreBookingBufferMinutes);
 
             return new TableCardViewModel
             {
@@ -97,7 +105,7 @@ public class TableSessionService : ITableSessionService
     public async Task<TableDetailViewModel?> GetTableDetailAsync(int tableId)
     {
         var serverTimeUtc = DateTime.UtcNow;
-        var holdThresholdUtc = serverTimeUtc.AddMinutes(-15);
+        var holdThresholdUtc = serverTimeUtc.AddMinutes(-BookingPolicy.HoldMinutes);
 
         var query = from table in _context.BilliardTables.AsNoTracking()
                     where table.Id == tableId
@@ -214,8 +222,8 @@ public class TableSessionService : ITableSessionService
             sessionId = null;
         }
 
-        // Next upcoming booking on this table within the next 12 hours without a session yet
-        var horizonUtc = serverTimeUtc.AddHours(12);
+        // Next upcoming booking on this table within the horizon without a session yet
+        var horizonUtc = serverTimeUtc.AddHours(BookingPolicy.TableDashboardHorizonHours);
         var allTableUpcomingBookings = await (from b in _context.Bookings.AsNoTracking()
                                               join u in _context.Users.AsNoTracking() on b.CustomerId equals u.Id
                                               where b.TableId == tableId
@@ -259,7 +267,7 @@ public class TableSessionService : ITableSessionService
             IsBookingSession = (raw.Status == "InUse" && raw.BookingId.HasValue),
             NextBookingId = nextBooking?.Id,
             NextBookingStartAtUtc = nextBookingStartUtc,
-            MustEndBeforeUtc = nextBookingStartUtc?.AddMinutes(-5),
+            MustEndBeforeUtc = nextBookingStartUtc?.AddMinutes(-BookingPolicy.PreBookingBufferMinutes),
             NextBookingCustomerName = nextBooking?.CustomerFullName,
             NextBookingStatus = nextBooking?.Status,
             OtherBookingsCount = otherBookingsCount,
@@ -277,6 +285,27 @@ public class TableSessionService : ITableSessionService
         "Inactive" => "Ngừng hoạt động",
         _ => status
     };
+
+    /// <summary>
+    /// Tính số phút tính tiền theo quy tắc thực tế tại quán Bi-a:
+    /// - Dưới hoặc bằng 2 phút (120 giây): 0 phút (Miễn phí mở nhầm / khách đổi ý ngay).
+    /// - Trên 2 phút đến 15 phút: Tính mức tối thiểu 15 phút đầu.
+    /// - Trên 15 phút: Tính theo số phút thực tế (làm tròn lên từng phút).
+    /// </summary>
+    public static int CalculateBilledMinutes(double elapsedSeconds)
+    {
+        if (elapsedSeconds <= 120)
+        {
+            return 0;
+        }
+
+        int actualMinutes = (int)Math.Ceiling(elapsedSeconds / 60.0);
+        return Math.Max(15, actualMinutes);
+    }
+
+    // =========================================================================
+    // PHẦN 3: THAO TÁC GHI DỮ LIỆU QUA STORED PROCEDURES (MỞ, ĐÓNG, CHUYỂN BÀN)
+    // =========================================================================
 
     public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, int? bookingId = null)
     {
@@ -388,7 +417,7 @@ public class TableSessionService : ITableSessionService
                 DateTime endAtUtc = DateTime.SpecifyKind(reader.GetDateTime(endOrdinal), DateTimeKind.Utc);
                 decimal hourlyRateSnapshot = reader.GetDecimal(rateOrdinal);
                 decimal playtimeAmount = reader.GetDecimal(amountOrdinal);
-                int billedMinutes = Math.Max(1, (int)Math.Ceiling((endAtUtc - startAtUtc).TotalSeconds / 60.0));
+                int billedMinutes = CalculateBilledMinutes(Math.Max(0, (endAtUtc - startAtUtc).TotalSeconds));
 
                 return TableOperationResult.Ok(new
                 {
@@ -468,7 +497,7 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
                 decimal? estimatedAmount = reader.IsDBNull(estAmountOrdinal) ? null : reader.GetDecimal(estAmountOrdinal);
 
                 var elapsedSeconds = Math.Max(0, (serverNowUtc - startAtUtc).TotalSeconds);
-                int billedMinutes = Math.Max(1, (int)Math.Ceiling(elapsedSeconds / 60.0));
+                int billedMinutes = CalculateBilledMinutes(elapsedSeconds);
 
                 return new CloseSummaryViewModel
                 {
@@ -579,6 +608,10 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
             }
         }
     }
+
+    // =========================================================================
+    // PHẦN 4: XỬ LÝ & ÁNH XẠ MÃ LỖI SQL (ERROR HANDLING & MAPPING)
+    // =========================================================================
 
     private TableOperationResult HandleSqlException(SqlException ex, string operationName, int targetId)
     {

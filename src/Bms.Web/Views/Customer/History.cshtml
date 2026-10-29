@@ -4,6 +4,10 @@
     Layout = "_AdminLayout";
 }
 
+<!-- ===================================================================== -->
+<!-- PHẦN 1: THÔNG BÁO TEMPDATA (THÀNH CÔNG / LỖI)                         -->
+<!-- ===================================================================== -->
+
 @if (TempData["BookingSuccess"] != null)
 {
     <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
@@ -20,6 +24,9 @@
     </div>
 }
 
+<!-- ===================================================================== -->
+<!-- PHẦN 2: BẢNG LỊCH SỬ ĐẶT BÀN CỦA KHÁCH HÀNG & NÚT HỦY ĐẶT             -->
+<!-- ===================================================================== -->
 <div class="data-card">
     <div class="data-card-header">
         <div>
@@ -49,8 +56,8 @@
                 {
                     @foreach (var item in Model)
                     {
-                        var startVn = item.StartAtUtc.AddHours(7);
-                        var holdVn = item.HoldUntilUtc.AddHours(7);
+                        var startVn = Bms.Web.Models.BookingPolicy.ToVietnamTime(item.StartAtUtc);
+                        var holdVn = Bms.Web.Models.BookingPolicy.ToVietnamTime(item.HoldUntilUtc);
                         var badgeClass = item.Status switch
                         {
                             "Confirmed" => "bg-success",

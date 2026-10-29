@@ -5,6 +5,10 @@
     var dateValue = Model.DateFilterLocal?.ToString("yyyy-MM-dd") ?? "";
 }
 
+<!-- ===================================================================== -->
+<!-- PHẦN 1: CSS TÙY CHỈNH & THÔNG BÁO TEMPDATA                            -->
+<!-- ===================================================================== -->
+
 <style>
     .booking-toolbar {
         background: #fff;
@@ -83,6 +87,10 @@
     </a>
 </div>
 
+<!-- ===================================================================== -->
+<!-- PHẦN 2: THANH TÌM KIẾM & LỌC ĐẶT BÀN (GET /Booking)                   -->
+<!-- ===================================================================== -->
+
 <!-- Thanh tìm kiếm gọn 1 dòng -->
 <div class="booking-toolbar">
     <form asp-controller="Booking" asp-action="Index" method="get" class="row g-2 align-items-center">
@@ -118,13 +126,17 @@
     </form>
 </div>
 
+<!-- ===================================================================== -->
+<!-- PHẦN 3: BẢNG DANH SÁCH ĐẶT BÀN & CÁC NÚT THAO TÁC (CHECK-IN / HỦY)    -->
+<!-- ===================================================================== -->
+
 <!-- Bảng 5 cột tối giản -->
 <div class="booking-card">
     <div class="table-responsive">
         <table class="table table-clean table-hover mb-0">
             <thead>
                 <tr>
-                    <th style="width: 110px;">Mã đơn</th>
+                    
                     <th>Khách hàng</th>
                     <th>Bàn đặt</th>
                     <th>Giờ hẹn</th>
@@ -136,8 +148,8 @@
                 {
                     @foreach (var item in Model.Bookings)
                     {
-                        var startVn = item.StartAtUtc.AddHours(7);
-                        var holdVn = item.HoldUntilUtc.AddHours(7);
+                        var startVn = Bms.Web.Models.BookingPolicy.ToVietnamTime(item.StartAtUtc);
+                        var holdVn = Bms.Web.Models.BookingPolicy.ToVietnamTime(item.HoldUntilUtc);
                         var isTableAvailable = item.TableCurrentStatus == "Available";
 
                         var (shortTag, tagClass) = item.ScenarioCode switch
@@ -157,7 +169,7 @@
                         };
 
                         <tr>
-                            <td class="fw-bold text-secondary">#BK-@item.BookingId</td>
+                            
                             <td>
                                 <span class="fw-semibold text-dark">@item.CustomerName</span>
                                 @if (!string.IsNullOrWhiteSpace(item.CustomerPhone))
@@ -265,6 +277,10 @@
         </table>
     </div>
 </div>
+
+<!-- ===================================================================== -->
+<!-- PHẦN 4: MODAL CHỌN BÀN MỞ PHIÊN & JAVASCRIPT ĐIỀU KHIỂN MODAL         -->
+<!-- ===================================================================== -->
 
 <!-- Modal Popup: Chọn bàn & Mở phiên chơi -->
 <div class="modal fade" id="assignTableModal" tabindex="-1" aria-hidden="true">

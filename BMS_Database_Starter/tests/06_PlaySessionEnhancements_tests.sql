@@ -95,6 +95,58 @@ BEGIN CATCH
     INSERT INTO @Results VALUES ('MinuteBilling', N'17 phút giá 120k/h = 34.000đ', 'FAIL', '34000.00', 'ERROR', ERROR_MESSAGE());
 END CATCH;
 
+-- 1.3: Grace period (1 minute = 60s <= 120s) => 0 VND
+BEGIN TRY
+    BEGIN TRANSACTION;
+    INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Type_M3', 100000);
+    DECLARE @TT_3 int = SCOPE_IDENTITY();
+    INSERT INTO dbo.BilliardTables (TableCode, TableTypeId, Status) VALUES (N'ZZ-M3', @TT_3, 'InUse');
+    DECLARE @T_3 int = SCOPE_IDENTITY();
+
+    INSERT INTO dbo.PlaySessions (TableId, OpenedById, StartAtUtc, HourlyRateSnapshot)
+    VALUES (@T_3, @TestStaffId, '2026-10-08T09:00:00', 100000);
+    DECLARE @S_3 int = SCOPE_IDENTITY();
+    INSERT INTO dbo.PlaySessionTableSegments (SessionId, TableId, HourlyRateSnapshot, StartAtUtc, EndAtUtc)
+    VALUES (@S_3, @T_3, 100000, '2026-10-08T09:00:00', '2026-10-08T09:01:00');
+
+    DECLARE @Amt_3 decimal(18,2) = dbo.fn_CalcPlaytimeAmount(@S_3, '2026-10-08T09:01:00');
+    IF @Amt_3 = 0
+        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút (<= 2p ân hạn) = 0đ', 'PASS', '0.00', CAST(@Amt_3 AS varchar(30)), N'Miễn phí mở nhầm / hủy sớm dưới 2 phút');
+    ELSE
+        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút (<= 2p ân hạn) = 0đ', 'FAIL', '0.00', CAST(@Amt_3 AS varchar(30)), N'Lệch giá trị');
+    ROLLBACK TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút (<= 2p ân hạn) = 0đ', 'FAIL', '0.00', 'ERROR', ERROR_MESSAGE());
+END CATCH;
+
+-- 1.4: 4 minutes at 100.000/h (> 2m and < 15m) => minimum 15 minutes = 25.000 VND
+BEGIN TRY
+    BEGIN TRANSACTION;
+    INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Type_M4', 100000);
+    DECLARE @TT_4 int = SCOPE_IDENTITY();
+    INSERT INTO dbo.BilliardTables (TableCode, TableTypeId, Status) VALUES (N'ZZ-M4', @TT_4, 'InUse');
+    DECLARE @T_4 int = SCOPE_IDENTITY();
+
+    INSERT INTO dbo.PlaySessions (TableId, OpenedById, StartAtUtc, HourlyRateSnapshot)
+    VALUES (@T_4, @TestStaffId, '2026-10-08T09:00:00', 100000);
+    DECLARE @S_4 int = SCOPE_IDENTITY();
+    INSERT INTO dbo.PlaySessionTableSegments (SessionId, TableId, HourlyRateSnapshot, StartAtUtc, EndAtUtc)
+    VALUES (@S_4, @T_4, 100000, '2026-10-08T09:00:00', '2026-10-08T09:03:51');
+
+    DECLARE @Amt_4 decimal(18,2) = dbo.fn_CalcPlaytimeAmount(@S_4, '2026-10-08T09:03:51');
+    IF @Amt_4 = 25000
+        INSERT INTO @Results VALUES ('MinuteBilling', N'3p51s giá 100k/h => Tối thiểu 15p = 25.000đ', 'PASS', '25000.00', CAST(@Amt_4 AS varchar(30)), N'Áp dụng mức tối thiểu 15 phút đầu');
+    ELSE
+        INSERT INTO @Results VALUES ('MinuteBilling', N'3p51s giá 100k/h => Tối thiểu 15p = 25.000đ', 'FAIL', '25000.00', CAST(@Amt_4 AS varchar(30)), N'Lệch giá trị');
+    ROLLBACK TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    INSERT INTO @Results VALUES ('MinuteBilling', N'3p51s giá 100k/h => Tối thiểu 15p = 25.000đ', 'FAIL', '25000.00', 'ERROR', ERROR_MESSAGE());
+END CATCH;
+
 -------------------------------------------------------------------------------
 -- GROUP 2: Booking Rules (Max 7 days, Auto No-Show > 15m, Check-in & Table Selection)
 -------------------------------------------------------------------------------

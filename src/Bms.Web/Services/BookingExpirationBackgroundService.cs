@@ -1,3 +1,4 @@
+using Bms.Web.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -43,7 +44,7 @@ public class BookingExpirationBackgroundService : BackgroundService
                 _logger.LogError(ex, "Lỗi trong tiến trình nền BookingExpirationBackgroundService.");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(BookingPolicy.AutoExpireCheckSeconds), stoppingToken);
         }
     }
 }

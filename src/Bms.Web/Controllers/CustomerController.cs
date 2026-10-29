@@ -9,6 +9,10 @@ namespace Bms.Web.Controllers;
 [Authorize(Roles = "Customer")]
 public class CustomerController : Controller
 {
+    // =========================================================================
+    // PHẦN 1: KHỞI TẠO CONTROLLER & DEPENDENCY INJECTION
+    // =========================================================================
+
     private readonly IBookingService _bookingService;
 
     public CustomerController(IBookingService bookingService)
@@ -16,18 +20,22 @@ public class CustomerController : Controller
         _bookingService = bookingService;
     }
 
+    // =========================================================================
+    // PHẦN 2: CÁC ACTION [HttpGet] — TRANG ĐẶT BÀN, LỊCH SỬ & KIỂM TRA BÀN TRỐNG
+    // =========================================================================
+
     // GET: /Customer (Trang Đặt bàn trực tuyến riêng biệt)
     [HttpGet]
     public async Task<IActionResult> Index()
     {
         ViewData["Title"] = "Đặt bàn trực tuyến";
 
-        var nowVn = DateTime.UtcNow.AddHours(7);
+        var nowVn = BookingPolicy.NowVietnam();
         var defaultStartVn = new DateTime(nowVn.Year, nowVn.Month, nowVn.Day, nowVn.Hour, 0, 0).AddHours(1);
         var minStartVn = new DateTime(nowVn.Year, nowVn.Month, nowVn.Day, nowVn.Hour, nowVn.Minute, 0).AddMinutes(10);
-        var maxStartVn = nowVn.AddDays(15);
+        var maxStartVn = nowVn.AddDays(BookingPolicy.MaxAdvanceDays);
 
-        var defaultStartUtc = DateTime.SpecifyKind(defaultStartVn.AddHours(-7), DateTimeKind.Utc);
+        var defaultStartUtc = BookingPolicy.ToUtcFromVietnamTime(defaultStartVn);
         var availableTables = await _bookingService.GetBookableTablesAsync(defaultStartUtc);
 
         var model = new CustomerBookingDashboardViewModel
@@ -61,10 +69,14 @@ public class CustomerController : Controller
     [HttpGet]
     public async Task<IActionResult> GetBookableTables([FromQuery] DateTime startTimeLocal)
     {
-        var startUtc = DateTime.SpecifyKind(startTimeLocal.AddHours(-7), DateTimeKind.Utc);
+        var startUtc = BookingPolicy.ToUtcFromVietnamTime(startTimeLocal);
         var tables = await _bookingService.GetBookableTablesAsync(startUtc);
         return Json(new { success = true, tables });
     }
+
+    // =========================================================================
+    // PHẦN 3: CÁC ACTION [HttpPost] — TẠO ĐẶT BÀN MỚI & HỦY ĐẶT BÀN CỦA KHÁCH
+    // =========================================================================
 
     // POST: /Customer/CreateBooking
     [HttpPost]
@@ -83,7 +95,7 @@ public class CustomerController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var startUtc = DateTime.SpecifyKind(request.StartTimeLocal.AddHours(-7), DateTimeKind.Utc);
+        var startUtc = BookingPolicy.ToUtcFromVietnamTime(request.StartTimeLocal);
         var result = await _bookingService.CreateBookingAsync(customerId, request.TableId, startUtc, request.Notes);
 
         if (result.Success)

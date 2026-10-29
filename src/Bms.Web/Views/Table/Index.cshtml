@@ -4,6 +4,10 @@
     ViewData["Title"] = "Quản lý bàn";
 }
 
+<!-- ===================================================================== -->
+<!-- PHẦN 1: TOKEN BẢO MẬT (ANTI-FORGERY) & KHUNG THÔNG BÁO TOAST          -->
+<!-- ===================================================================== -->
+
 <!-- Token Anti-forgery riêng cho các thao tác AJAX của trang Quản lý bàn -->
 <div id="antiforgery-holder" style="display:none;">
     @Html.AntiForgeryToken()
@@ -14,6 +18,9 @@
 </div>
 
 <div class="table-management-wrapper">
+    <!-- ================================================================= -->
+    <!-- PHẦN 2: CỘT TRÁI — SƠ ĐỒ BÀN & CHÚ GIẢI TRẠNG THÁI                -->
+    <!-- ================================================================= -->
     <!-- Cột trái: Sơ đồ bàn -->
     <section class="table-grid-section">
         <div class="section-box-header">
@@ -36,6 +43,9 @@
         </div>
     </section>
 
+    <!-- ================================================================= -->
+    <!-- PHẦN 3: CỘT PHẢI — KHUNG CHI TIẾT PHIÊN CHƠI (5 NHÓM THÔNG TIN)   -->
+    <!-- ================================================================= -->
     <!-- Cột phải: Chi tiết phiên chơi -->
     <aside class="table-detail-aside d-none" id="table-detail-panel" aria-label="Chi tiết phiên chơi">
         <div class="detail-panel-container">
@@ -126,6 +136,9 @@
                 </div>
             </div>
 
+            <!-- ========================================================= -->
+            <!-- PHẦN 4: 3 FORM THAO TÁC NỘI TUYẾN (MỞ, ĐÓNG, CHUYỂN BÀN)  -->
+            <!-- ========================================================= -->
             <!-- Form Mở bàn -->
             <div class="panel-card-box open-session-form d-none" id="open-session-form">
                 <div class="form-section-title mb-2 fw-bold">Mở bàn mới</div>
@@ -248,6 +261,9 @@
                 </div>
             </div>
 
+            <!-- ========================================================= -->
+            <!-- PHẦN 5: KHỐI 3 NÚT LỆNH CHÍNH (OPEN / CLOSE / CHUYỂN BÀN) -->
+            <!-- ========================================================= -->
             <!-- Khối nút hành động -->
             <div class="panel-card-box action-buttons-container" id="action-buttons-box">
                 <div class="action-buttons-grid">
