@@ -6,6 +6,12 @@ http.createServer(async(req,res)=>{
  if(req.method==='GET' && (req.url==='/' || req.url==='/SDS_HUNG.html')) {
   res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync(path.join(root,'SDS_HUNG.html')));return;
  }
+ if(req.method==='GET' && req.url==='/DATABASE_DESIGN.html') {
+  res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync(path.join(root,'DATABASE_DESIGN.html')));return;
+ }
+ if(req.method==='GET' && req.url==='/sds-hung/03-database.svg') {
+  res.setHeader('Content-Type','image/svg+xml; charset=utf-8');res.end(fs.readFileSync(path.join(__dirname,'03-database.svg')));return;
+ }
  if(req.method==='POST' && req.url==='/export' && req.headers.origin==='http://127.0.0.1:8766') {
   try {
    let data='',size=0;

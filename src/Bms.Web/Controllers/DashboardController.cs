@@ -18,13 +18,44 @@ public class DashboardController : Controller
         _logger = logger;
     }
 
-    // GET /Dashboard
     public async Task<IActionResult> Index()
     {
         var vm = new DashboardViewModel();
 
         // ══════════════════════════════════════════════════════════════
-        // 1. DỮ LIỆU THẬT: Khách hàng thành viên & Phân bổ Hạng
+        // 1. Hung: Tables, Shifts & Payments
+        // ══════════════════════════════════════════════════════════════
+        var today = DateTime.UtcNow.AddHours(7).Date;
+        var start = today.AddHours(-7);
+        var end = start.AddDays(1);
+        var month = new DateTime(today.Year, today.Month, 1).AddHours(-7);
+
+        var tables = await _context.BilliardTables.AsNoTracking()
+            .GroupBy(t => t.Status).Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        vm.StaffCount = await CountRoleAsync("Staff");
+        vm.CustomerCount = await CountRoleAsync("Customer");
+        vm.TotalTables = tables.Values.Sum();
+        vm.AvailableTables = tables.GetValueOrDefault("Available");
+        vm.InUseTables = tables.GetValueOrDefault("InUse");
+        vm.AwaitingPaymentTables = tables.GetValueOrDefault("AwaitingPayment");
+        vm.UnavailableTables = tables.GetValueOrDefault("Maintenance") + tables.GetValueOrDefault("Inactive");
+
+        vm.TodayRevenue = await _context.PaymentTransactions
+            .Where(p => p.TransactionTimeUtc >= start && p.TransactionTimeUtc < end)
+            .SumAsync(p => (decimal?)p.AmountPaid) ?? 0;
+
+        vm.MonthRevenue = await _context.PaymentTransactions
+            .Where(p => p.TransactionTimeUtc >= month && p.TransactionTimeUtc < end)
+            .SumAsync(p => (decimal?)p.AmountPaid) ?? 0;
+
+        vm.ActiveShiftCount = await _context.WorkShifts.CountAsync(s => s.Status == WorkShift.StatusActive);
+        vm.TodayShiftsWithDifference = await _context.WorkShifts.CountAsync(s => s.Status == WorkShift.StatusClosed
+            && s.EndTimeUtc >= start && s.EndTimeUtc < end && s.EndingCash != s.ExpectedCash);
+
+        // ══════════════════════════════════════════════════════════════
+        // 2. TV2 (Dung): Khách hàng thành viên & Phân bổ Hạng
         // ══════════════════════════════════════════════════════════════
         var customerRoleId = await _context.Roles
             .Where(r => r.Name == "Customer")
@@ -57,124 +88,105 @@ public class DashboardController : Controller
 
         foreach (var tier in tiers)
         {
-            int count = tierCounts.GetValueOrDefault(tier.Id, 0);
+            tierCounts.TryGetValue(tier.Id, out int count);
+            string color = tierColors.TryGetValue(tier.TierName, out var c) ? c : "#6b7280";
             vm.TierDistribution.Add(new TierDistributionPoint
             {
                 TierName = tier.TierName,
                 Count = count,
-                ColorHex = tierColors.GetValueOrDefault(tier.TierName, "#64748b")
+                ColorHex = color
             });
         }
 
         // ══════════════════════════════════════════════════════════════
-        // 2. DỮ LIỆU THẬT: Đánh giá & Điểm sao trung bình
+        // 3. TV2 (Dung): Đánh giá chất lượng dịch vụ (Reviews)
         // ══════════════════════════════════════════════════════════════
-        var reviews = await _context.Reviews.AsNoTracking().ToListAsync();
-        vm.TotalReviews = reviews.Count;
-        vm.AverageRating = reviews.Count > 0
-            ? Math.Round(reviews.Average(r => (double)r.Rating), 1)
-            : 5.0;
+        var reviewStats = await _context.Reviews
+            .AsNoTracking()
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                AvgRating = g.Average(r => (double)r.Rating),
+                Total = g.Count()
+            })
+            .FirstOrDefaultAsync();
 
-        // ══════════════════════════════════════════════════════════════
-        // 3. DOANH THU THÁNG & 7 NGÀY GẦN NHẤT (Invoices)
-        // ══════════════════════════════════════════════════════════════
-        // TODO: Connect real data from Member X (Invoices)
-        bool hasRealRevenue = false;
-        try
+        if (reviewStats != null && reviewStats.Total > 0)
         {
-            var startOfMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-            var monthlySum = (await _context.Database.SqlQuery<decimal>($@"
-                SELECT ISNULL(SUM(FinalAmount), 0) AS [Value]
-                FROM dbo.Invoices
-                WHERE Status = 'Paid' AND CreatedAtUtc >= {startOfMonth}").ToListAsync()).FirstOrDefault();
-
-            if (monthlySum > 0)
-            {
-                vm.MonthlyRevenue = monthlySum;
-                hasRealRevenue = true;
-            }
-
-            // Truy vấn doanh thu 7 ngày gần nhất
-            var sevenDaysAgo = DateTime.UtcNow.Date.AddDays(-6);
-            var dailyData = await _context.Database.SqlQuery<DailyRevenueRaw>($@"
-                SELECT CAST(CreatedAtUtc AS DATE) AS [Date], ISNULL(SUM(FinalAmount), 0) AS [Total]
-                FROM dbo.Invoices
-                WHERE Status = 'Paid' AND CreatedAtUtc >= {sevenDaysAgo}
-                GROUP BY CAST(CreatedAtUtc AS DATE)
-                ORDER BY [Date]").ToListAsync();
-
-            if (dailyData.Count > 0 && dailyData.Sum(d => d.Total) > 0)
-            {
-                var dailyDict = dailyData.ToDictionary(d => d.Date.ToString("yyyy-MM-dd"), d => d.Total);
-                for (int i = 6; i >= 0; i--)
-                {
-                    var day = DateTime.UtcNow.Date.AddDays(-i);
-                    var key = day.ToString("yyyy-MM-dd");
-                    vm.Last7DaysRevenue.Add(new DailyRevenuePoint
-                    {
-                        DateLabel = $"{GetDayOfWeekVn(day.DayOfWeek)} {day:dd/MM}",
-                        Amount = dailyDict.GetValueOrDefault(key, 0)
-                    });
-                }
-            }
+            vm.AverageRating = Math.Round(reviewStats.AvgRating, 1);
+            vm.TotalReviews = reviewStats.Total;
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogWarning(ex, "Chưa thể truy vấn dữ liệu từ Invoices. Sẽ sử dụng Mock Data.");
+            vm.AverageRating = 4.8;
+            vm.TotalReviews = 0;
         }
 
-        // Áp dụng Mock Data nếu chưa có dữ liệu doanh thu thực tế từ thành viên khác
-        if (!hasRealRevenue || vm.Last7DaysRevenue.Count == 0)
+        // ══════════════════════════════════════════════════════════════
+        // 4. TV2 (Dung): Doanh thu tháng & Giờ chơi
+        // ══════════════════════════════════════════════════════════════
+        if (vm.MonthRevenue > 0)
         {
+            vm.MonthlyRevenue = vm.MonthRevenue;
+            vm.IsRevenueMocked = false;
+        }
+        else
+        {
+            vm.MonthlyRevenue = 28500000m;
             vm.IsRevenueMocked = true;
-            vm.MonthlyRevenue = 38_650_000m; // 38.65 triệu VNĐ
+        }
 
-            vm.Last7DaysRevenue.Clear();
-            var mockAmounts = new decimal[] { 4_200_000m, 5_100_000m, 3_850_000m, 6_400_000m, 7_250_000m, 8_650_000m, 5_450_000m };
-            for (int i = 6; i >= 0; i--)
+        vm.TotalPlaytimeHours = 468.5m;
+        vm.IsPlaytimeMocked = true;
+
+        // ══════════════════════════════════════════════════════════════
+        // 5. TV2 (Dung): Biểu đồ Doanh thu 7 ngày gần nhất
+        // ══════════════════════════════════════════════════════════════
+        var sevenDaysAgo = today.AddDays(-6);
+        var real7Days = await _context.PaymentTransactions
+            .AsNoTracking()
+            .Where(p => p.TransactionTimeUtc >= sevenDaysAgo.AddHours(-7))
+            .GroupBy(p => p.TransactionTimeUtc.AddHours(7).Date)
+            .Select(g => new { Date = g.Key, Total = g.Sum(p => p.AmountPaid) })
+            .ToListAsync();
+
+        if (real7Days.Any(x => x.Total > 0))
+        {
+            for (int i = -6; i <= 0; i++)
             {
-                var day = DateTime.UtcNow.Date.AddDays(-i);
+                var d = today.AddDays(i);
+                var match = real7Days.FirstOrDefault(x => x.Date == d);
                 vm.Last7DaysRevenue.Add(new DailyRevenuePoint
                 {
-                    DateLabel = $"{GetDayOfWeekVn(day.DayOfWeek)} {day:dd/MM}",
-                    Amount = mockAmounts[6 - i]
+                    DateLabel = $"{FormatDayOfWeek(d.DayOfWeek)} ({d:dd/MM})",
+                    Amount = match?.Total ?? 0
                 });
             }
         }
-
-        // ══════════════════════════════════════════════════════════════
-        // 4. TỔNG SỐ GIỜ CHƠI (PlaySessions)
-        // ══════════════════════════════════════════════════════════════
-        // TODO: Connect real data from Member X (PlaySessions)
-        bool hasRealPlaytime = false;
-        try
+        else
         {
-            var totalMinutes = (await _context.Database.SqlQuery<int>($@"
-                SELECT ISNULL(SUM(DATEDIFF(MINUTE, StartAtUtc, EndAtUtc)), 0) AS [Value]
-                FROM dbo.PlaySessions
-                WHERE Status = 'Closed' AND EndAtUtc IS NOT NULL").ToListAsync()).FirstOrDefault();
-
-            if (totalMinutes > 0)
+            var mockAmounts = new[] { 3200000m, 4100000m, 2800000m, 3900000m, 5200000m, 6800000m, 4500000m };
+            for (int i = -6; i <= 0; i++)
             {
-                vm.TotalPlaytimeHours = Math.Round(totalMinutes / 60.0m, 1);
-                hasRealPlaytime = true;
+                var d = today.AddDays(i);
+                vm.Last7DaysRevenue.Add(new DailyRevenuePoint
+                {
+                    DateLabel = $"{FormatDayOfWeek(d.DayOfWeek)} ({d:dd/MM})",
+                    Amount = mockAmounts[i + 6]
+                });
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Chưa thể truy vấn dữ liệu từ PlaySessions. Sẽ sử dụng Mock Data.");
-        }
-
-        if (!hasRealPlaytime)
-        {
-            vm.IsPlaytimeMocked = true;
-            vm.TotalPlaytimeHours = 485.5m; // Mock 485.5 giờ
         }
 
         return View(vm);
     }
 
-    private static string GetDayOfWeekVn(DayOfWeek dow) => dow switch
+    private Task<int> CountRoleAsync(string role) => (
+        from ur in _context.UserRoles
+        join r in _context.Roles on ur.RoleId equals r.Id
+        where r.Name == role
+        select ur.UserId).Distinct().CountAsync();
+
+    private static string FormatDayOfWeek(DayOfWeek dow) => dow switch
     {
         DayOfWeek.Monday => "T2",
         DayOfWeek.Tuesday => "T3",
@@ -185,10 +197,4 @@ public class DashboardController : Controller
         DayOfWeek.Sunday => "CN",
         _ => ""
     };
-
-    public class DailyRevenueRaw
-    {
-        public DateTime Date { get; set; }
-        public decimal Total { get; set; }
-    }
 }

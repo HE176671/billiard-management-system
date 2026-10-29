@@ -1,27 +1,139 @@
 erDiagram
-    MembershipTiers o|--o{ AspNetUsers : "TierId optional"
-    AspNetUsers ||--o{ AspNetUserRoles : "UserId"
-    AspNetRoles ||--o{ AspNetUserRoles : "RoleId"
-    MembershipTiers {
-        int Id PK
-        nvarchar TierName UK
-        decimal DiscountPercent
-    }
+    direction LR
     AspNetUsers {
         nvarchar Id PK
-        nvarchar NormalizedUserName UK
-        nvarchar NormalizedEmail UK
-        nvarchar EmployeeCode UK
-        int RewardPoints
         int TierId FK
-        bit IsActive
     }
     AspNetRoles {
         nvarchar Id PK
-        nvarchar Name
-        nvarchar NormalizedName UK
     }
     AspNetUserRoles {
         nvarchar UserId PK,FK
         nvarchar RoleId PK,FK
     }
+    AspNetUserClaims {
+        int Id PK
+        nvarchar UserId FK
+    }
+    AspNetRoleClaims {
+        int Id PK
+        nvarchar RoleId FK
+    }
+    AspNetUserLogins {
+        nvarchar LoginProvider PK
+        nvarchar ProviderKey PK
+        nvarchar UserId FK
+    }
+    AspNetUserTokens {
+        nvarchar UserId PK,FK
+        nvarchar LoginProvider PK
+        nvarchar Name PK
+    }
+    MembershipTiers {
+        int Id PK
+    }
+    TableTypes {
+        int Id PK
+    }
+    BilliardTables {
+        int Id PK
+        int TableTypeId FK
+    }
+    PricingConfigs {
+        int Id PK
+        int TableTypeId FK
+    }
+    Bookings {
+        int Id PK
+        nvarchar CustomerId FK
+        int TableId FK
+        nvarchar CheckedInById FK
+        nvarchar CancelledById FK
+    }
+    PlaySessions {
+        int Id PK
+        int TableId FK
+        int BookingId FK,UK
+        nvarchar CustomerId FK
+        nvarchar OpenedById FK
+        nvarchar ClosedById FK
+    }
+    ProductCategories {
+        int Id PK
+    }
+    Products {
+        int Id PK
+        int CategoryId FK
+    }
+    Orders {
+        int Id PK
+        int SessionId FK
+    }
+    OrderDetails {
+        int Id PK
+        int OrderId FK
+        int ProductId FK
+    }
+    Combos {
+        int Id PK
+    }
+    ComboItems {
+        int ComboId PK,FK
+        int ProductId PK,FK
+    }
+    SessionCombos {
+        int Id PK
+        int SessionId FK
+        int ComboId FK
+        nvarchar CreatedById FK
+    }
+    SessionComboItems {
+        int SessionComboId PK,FK
+        int ProductId PK,FK
+    }
+    Invoices {
+        int Id PK
+        int SessionId FK,UK
+        nvarchar CustomerId FK
+    }
+    PaymentTransactions {
+        int Id PK
+        int InvoiceId FK
+    }
+    WorkShifts {
+        int Id PK
+        nvarchar StaffId FK
+    }
+    MembershipTiers o|..o{ AspNetUsers : "TierId"
+    AspNetUsers ||--o{ AspNetUserRoles : "UserId"
+    AspNetRoles ||--o{ AspNetUserRoles : "RoleId"
+    AspNetUsers ||..o{ AspNetUserClaims : "UserId"
+    AspNetRoles ||..o{ AspNetRoleClaims : "RoleId"
+    AspNetUsers ||..o{ AspNetUserLogins : "UserId"
+    AspNetUsers ||--o{ AspNetUserTokens : "UserId"
+    TableTypes ||..o{ BilliardTables : "TableTypeId"
+    TableTypes ||..o{ PricingConfigs : "TableTypeId"
+    AspNetUsers ||..o{ Bookings : "CustomerId"
+    BilliardTables ||..o{ Bookings : "TableId"
+    AspNetUsers o|..o{ Bookings : "CheckedInById"
+    AspNetUsers o|..o{ Bookings : "CancelledById"
+    BilliardTables ||..o{ PlaySessions : "TableId"
+    Bookings o|..o| PlaySessions : "BookingId"
+    AspNetUsers o|..o{ PlaySessions : "CustomerId"
+    AspNetUsers ||..o{ PlaySessions : "OpenedById"
+    AspNetUsers o|..o{ PlaySessions : "ClosedById"
+    ProductCategories ||..o{ Products : "CategoryId"
+    PlaySessions ||..o{ Orders : "SessionId"
+    Orders ||..o{ OrderDetails : "OrderId"
+    Products ||..o{ OrderDetails : "ProductId"
+    Combos ||--o{ ComboItems : "ComboId"
+    Products ||--o{ ComboItems : "ProductId"
+    PlaySessions ||..o{ SessionCombos : "SessionId"
+    Combos ||..o{ SessionCombos : "ComboId"
+    AspNetUsers ||..o{ SessionCombos : "CreatedById"
+    SessionCombos ||--o{ SessionComboItems : "SessionComboId"
+    Products ||--o{ SessionComboItems : "ProductId"
+    PlaySessions ||..o| Invoices : "SessionId"
+    AspNetUsers o|..o{ Invoices : "CustomerId"
+    Invoices ||..o{ PaymentTransactions : "InvoiceId"
+    AspNetUsers ||..o{ WorkShifts : "StaffId"

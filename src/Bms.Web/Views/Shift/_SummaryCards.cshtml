@@ -1,0 +1,30 @@
+@model Bms.Web.Services.ShiftSummary
+@using Bms.Web.Services
+<div class="row g-3 mb-3">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card"><div class="stat-icon blue"><i class="bi bi-wallet2"></i></div>
+            <div><div class="stat-value">@Model.Shift.StartingCash.ToString("N0") ₫</div><div class="stat-label">Tiền đầu ca</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card"><div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
+            <div><div class="stat-value">@Model.CashCollected.ToString("N0") ₫</div><div class="stat-label">Tiền mặt thu trong ca · @Model.CashCount giao dịch</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card"><div class="stat-icon amber"><i class="bi bi-calculator"></i></div>
+            <div><div class="stat-value">@Model.ExpectedCash.ToString("N0") ₫</div><div class="stat-label">Tiền mặt kỳ vọng trong két</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card"><div class="stat-icon red"><i class="bi bi-credit-card"></i></div>
+            <div><div class="stat-value">@Model.NonCashCollected.ToString("N0") ₫</div><div class="stat-label">Không tiền mặt (không tính vào két) · @Model.NonCashCount</div></div></div>
+    </div>
+</div>
+@if (!Model.IsActive)
+{
+    var d = Model.Difference ?? 0;
+    <div class="alert @(d == 0 ? "alert-success" : "alert-warning") rounded-3" style="font-size:0.875rem">
+        Đếm thực tế <strong>@Model.Shift.EndingCash?.ToString("N0") ₫</strong> —
+        @if (d == 0) { <span>khớp với kỳ vọng.</span> }
+        else { <span>@(d > 0 ? "thừa" : "thiếu") <strong>@Math.Abs(d).ToString("N0") ₫</strong>.</span> }
+        Đóng lúc @Model.Shift.EndTimeUtc.ToVn()?.ToString("HH:mm dd/MM/yyyy") bởi @(Model.ClosedByName ?? "—").
+    </div>
+}

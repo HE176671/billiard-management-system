@@ -18,12 +18,23 @@
     </div>
 }
 
-<!-- 4 Stat Cards Tổng quan -->
+<!-- Hàng 1: Thống kê Vận hành (Bàn, Ca làm việc, Doanh thu ngày/tháng) -->
 <div class="row g-3 mb-4">
+    <!-- Doanh thu hôm nay -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
+            <div>
+                <div class="stat-value text-truncate">@Model.TodayRevenue.ToString("N0") ₫</div>
+                <div class="stat-label">Doanh thu hôm nay</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Doanh thu tháng -->
     <div class="col-sm-6 col-xl-3">
         <div class="stat-card">
-            <div class="stat-icon red"><i class="bi bi-cash-stack"></i></div>
+            <div class="stat-icon red"><i class="bi bi-calendar-month"></i></div>
             <div class="overflow-hidden">
                 <div class="stat-value text-truncate">@VnFormat.Money(Model.MonthlyRevenue)</div>
                 <div class="stat-label">
@@ -37,32 +48,17 @@
         </div>
     </div>
 
-    <!-- Tổng giờ chơi -->
+    <!-- Ca làm việc -->
     <div class="col-sm-6 col-xl-3">
-        <div class="stat-card">
-            <div class="stat-icon blue"><i class="bi bi-clock-history"></i></div>
-            <div>
-                <div class="stat-value">@Model.TotalPlaytimeHours.ToString("N1") <span style="font-size:0.9rem;font-weight:normal">giờ</span></div>
-                <div class="stat-label">
-                    Tổng thời gian chơi
-                    @if (Model.IsPlaytimeMocked)
-                    {
-                        <span class="badge bg-light text-muted ms-1" style="font-size:0.65rem">Mô phỏng</span>
-                    }
+        <a asp-controller="Shift" asp-action="Manage" class="text-decoration-none text-reset">
+            <div class="stat-card">
+                <div class="stat-icon amber"><i class="bi bi-clipboard-check"></i></div>
+                <div>
+                    <div class="stat-value">@Model.ActiveShiftCount <span style="font-size:0.9rem;font-weight:normal">ca</span></div>
+                    <div class="stat-label">Ca đang mở@(Model.TodayShiftsWithDifference > 0 ? $" · {Model.TodayShiftsWithDifference} ca lệch tiền" : "")</div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <!-- Khách hàng thành viên -->
-    <div class="col-sm-6 col-xl-3">
-        <div class="stat-card">
-            <div class="stat-icon green"><i class="bi bi-people-fill"></i></div>
-            <div>
-                <div class="stat-value">@Model.TotalCustomerMembers</div>
-                <div class="stat-label">Khách hàng thành viên</div>
-            </div>
-        </div>
+        </a>
     </div>
 
     <!-- Đánh giá trung bình -->
@@ -72,6 +68,39 @@
             <div>
                 <div class="stat-value">@Model.AverageRating.ToString("0.0") <span style="font-size:1rem;color:#f59e0b">★</span></div>
                 <div class="stat-label">Đánh giá trung bình (@Model.TotalReviews lượt)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trạng thái bàn bida -->
+    <div class="col-md-6 col-xl-6">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-grid-3x3"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalTables bàn</div>
+                <div class="stat-label">@Model.AvailableTables trống · @Model.InUseTables đang chơi · @Model.AwaitingPaymentTables chờ thanh toán · @Model.UnavailableTables bảo trì</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Khách hàng thành viên -->
+    <div class="col-md-3 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-person-vcard"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalCustomerMembers</div>
+                <div class="stat-label">Khách hàng thành viên</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nhân viên -->
+    <div class="col-md-3 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-people"></i></div>
+            <div>
+                <div class="stat-value">@Model.StaffCount</div>
+                <div class="stat-label">Nhân viên hệ thống</div>
             </div>
         </div>
     </div>
@@ -139,11 +168,17 @@
         <div class="d-flex align-items-center gap-2">
             <i class="bi bi-lightning-charge-fill text-warning fs-5"></i>
             <div>
-                <strong>Lối tắt tác vụ TV2:</strong>
-                <span class="text-muted" style="font-size:0.85rem">Truy cập nhanh các màn hình quản trị nghiệp vụ</span>
+                <strong>Lối tắt tác vụ nhanh:</strong>
+                <span class="text-muted" style="font-size:0.85rem">Truy cập nhanh các phân hệ nghiệp vụ</span>
             </div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
+            <a asp-controller="Revenue" asp-action="Index" class="btn-primary-bms" style="font-size:0.8rem">
+                <i class="bi bi-graph-up"></i> Báo cáo doanh thu
+            </a>
+            <a asp-controller="Shift" asp-action="Manage" class="btn-outline-bms" style="font-size:0.8rem">
+                <i class="bi bi-clipboard-check"></i> Quản lý ca
+            </a>
             <a asp-controller="CustomerManagement" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
                 <i class="bi bi-person-vcard"></i> Quản lý khách hàng
             </a>
@@ -153,8 +188,8 @@
             <a asp-controller="Review" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
                 <i class="bi bi-star-half"></i> Đánh giá khách hàng
             </a>
-            <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-primary-bms" style="font-size:0.8rem">
-                <i class="bi bi-cpu"></i> Công cụ Giả lập Loyalty
+            <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
+                <i class="bi bi-cpu"></i> Giả lập Loyalty
             </a>
         </div>
     </div>

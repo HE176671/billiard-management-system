@@ -203,6 +203,14 @@
         }
         .form-text { font-size: 0.75rem; color: #94a3b8; }
         .field-error { font-size: 0.78rem; color: #dc2626; margin-top: 3px; }
+        @@media (max-width: 767px) {
+            .sidebar { position: static; width: 100%; height: auto; }
+            .sidebar-nav { display: flex; flex-wrap: wrap; padding: 0.5rem; }
+            .sidebar-footer, .nav-section-label { display: none; }
+            .main-wrapper { margin-left: 0; }
+            .topbar { height: auto; min-height: 56px; gap: 0.5rem; flex-wrap: wrap; padding: 0.5rem 1rem; }
+            .page-content { padding: 1rem; overflow-x: auto; }
+        }
     </style>
 </head>
 <body>
@@ -213,6 +221,13 @@
         <div class="logo">🎱 BMS</div>
         <span class="logo-sub">Billiard Management System</span>
     </div>
+    @{
+        var curController = ViewContext.RouteData.Values["controller"]?.ToString();
+        var curAction = ViewContext.RouteData.Values["action"]?.ToString();
+        var isAdmin = User.IsInRole("Admin");
+        string Active(string c, string? a = null) =>
+            curController == c && (a == null || curAction == a) ? "active" : "";
+    }
     <div class="sidebar-nav">
         @if (User.IsInRole("Customer"))
         {
@@ -243,53 +258,44 @@
         }
         else
         {
-        <div class="nav-section-label">Admin</div>
-        @if (User.IsInRole("Admin"))
-        {
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Dashboard" ? "active" : "")"
-               asp-controller="Dashboard" asp-action="Index">
-                <i class="bi bi-speedometer2"></i> Tổng quan (Dashboard)
-            </a>
-        }
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
-           asp-controller="Employee" asp-action="Index">
-            <i class="bi bi-people"></i> Nhân viên
-        </a>
+            @if (isAdmin)
+            {
+                <div class="nav-section-label">Admin</div>
+                <a class="sidebar-link @Active("Dashboard")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2"></i> Tổng quan</a>
+                <a class="sidebar-link @Active("Revenue")" asp-controller="Revenue" asp-action="Index"><i class="bi bi-graph-up"></i> Báo cáo doanh thu</a>
+                <a class="sidebar-link @Active("Shift", "Manage")" asp-controller="Shift" asp-action="Manage"><i class="bi bi-clipboard-check"></i> Quản lý ca</a>
+                <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index"><i class="bi bi-people"></i> Nhân viên</a>
+                <a class="sidebar-link @Active("Pricing")" asp-controller="Pricing" asp-action="Index"><i class="bi bi-tags"></i> Bảng giá</a>
+            }
 
-        <div class="nav-section-label">Khách hàng thân thiết</div>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "CustomerManagement" ? "active" : "")"
-           asp-controller="CustomerManagement" asp-action="Index">
-            <i class="bi bi-person-vcard"></i> Quản lý khách hàng
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Review" ? "active" : "")"
-           asp-controller="Review" asp-action="Index">
-            <i class="bi bi-star-half"></i> Đánh giá của khách
-        </a>
-        @if (User.IsInRole("Admin"))
-        {
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "TierConfig" ? "active" : "")"
-               asp-controller="TierConfig" asp-action="Index">
-                <i class="bi bi-award"></i> Cấu hình hạng
+            <div class="nav-section-label">Khách hàng thân thiết</div>
+            <a class="sidebar-link @Active("CustomerManagement")"
+               asp-controller="CustomerManagement" asp-action="Index">
+                <i class="bi bi-person-vcard"></i> Quản lý khách hàng
             </a>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "LoyaltyTest" ? "active" : "")"
-               asp-controller="LoyaltyTest" asp-action="Index">
-                <i class="bi bi-cpu"></i> Giả lập Loyalty
+            <a class="sidebar-link @Active("Review")"
+               asp-controller="Review" asp-action="Index">
+                <i class="bi bi-star-half"></i> Đánh giá của khách
             </a>
-        }
+            @if (isAdmin)
+            {
+                <a class="sidebar-link @Active("TierConfig")"
+                   asp-controller="TierConfig" asp-action="Index">
+                    <i class="bi bi-award"></i> Cấu hình hạng
+                </a>
+                <a class="sidebar-link @Active("LoyaltyTest")"
+                   asp-controller="LoyaltyTest" asp-action="Index">
+                    <i class="bi bi-cpu"></i> Giả lập Loyalty
+                </a>
+            }
 
-        <div class="nav-section-label">Nghiệp vụ</div>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
-           href="#">
-            <i class="bi bi-grid-3x3"></i> Quản lý bàn
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
-           href="#">
-            <i class="bi bi-calendar-check"></i> Đặt bàn
-        </a>
-        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Menu" ? "active" : "")"
-           href="#">
-            <i class="bi bi-cup-straw"></i> Thực đơn
-        </a>
+            <div class="nav-section-label">Nghiệp vụ</div>
+            <a class="sidebar-link @Active("Staff")" asp-controller="Staff" asp-action="Index"><i class="bi bi-house"></i> Trang nhân viên</a>
+            <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
+            @* TV1/TV4 thay href="#" bằng asp-controller khi có màn hình *@
+            <a class="sidebar-link @Active("Table")" href="#"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
+            <a class="sidebar-link @Active("Booking")" href="#"><i class="bi bi-calendar-check"></i> Đặt bàn</a>
+            <a class="sidebar-link @Active("Menu")" href="#"><i class="bi bi-cup-straw"></i> Thực đơn</a>
         }
     </div>
     <div class="sidebar-footer">
@@ -297,7 +303,7 @@
             <div class="user-avatar">@(User.Identity?.Name?.FirstOrDefault().ToString().ToUpper() ?? "?")</div>
             <div>
                 <div class="user-name">@User.Identity?.Name</div>
-                <div class="user-role">@(User.IsInRole("Admin") ? "Administrator" : User.IsInRole("Staff") ? "Staff" : User.IsInRole("Customer") ? "Customer" : "User")</div>
+                <div class="user-role">@(isAdmin ? "Quản trị viên" : User.IsInRole("Staff") ? "Nhân viên" : "Khách hàng")</div>
             </div>
         </div>
     </div>
@@ -308,6 +314,9 @@
     <div class="topbar">
         <span class="topbar-title">@ViewData["Title"]</span>
         <div class="topbar-actions">
+            <a asp-controller="Profile" asp-action="Index" class="btn-logout" title="Hồ sơ cá nhân">
+                <i class="bi bi-person-circle"></i> Hồ sơ
+            </a>
             <a asp-controller="Notification" asp-action="Index" class="btn-logout" title="Thông báo">
                 <i class="bi bi-bell"></i> Thông báo
             </a>

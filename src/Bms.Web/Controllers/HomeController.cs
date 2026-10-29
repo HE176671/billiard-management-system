@@ -17,9 +17,9 @@ public class HomeController : Controller
     {
         if (User.Identity != null && User.Identity.IsAuthenticated)
         {
-            if (User.IsInRole("Admin")) return RedirectToAction("Index", "Employee");
+            if (User.IsInRole("Admin")) return RedirectToAction("Index", "Dashboard");
             if (User.IsInRole("Staff")) return RedirectToAction("Index", "Staff");
-            if (User.IsInRole("Customer")) return RedirectToAction("Index", "Customer");
+            if (User.IsInRole("Customer")) return RedirectToAction("Portal", "Customer");
         }
         
         // Nếu chưa đăng nhập, tự động chuyển ra màn Login

@@ -9,7 +9,6 @@ public class ApplicationUser : IdentityUser
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public string? EmployeeCode { get; set; }
     public DateOnly? HireDate { get; set; }
-
     // ---- Loyalty (TV2) ----
     public int? TierId { get; set; }
     public MembershipTier? Tier { get; set; }

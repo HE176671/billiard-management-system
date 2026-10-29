@@ -12,6 +12,9 @@ public class MembershipTier
     /// <summary>% giảm tiền giờ chơi (decimal(5,2)).</summary>
     public decimal DiscountPercent { get; set; }
 
+    /// <summary>Số điểm tối thiểu (dùng cho MemberTierController của Hung).</summary>
+    public int MinPoints { get; set; }
+
     /// <summary>Ngưỡng TotalSpend tối thiểu để đạt hạng này (decimal(18,2)).</summary>
     public decimal SpendThreshold { get; set; }
 

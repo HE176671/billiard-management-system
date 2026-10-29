@@ -11,6 +11,7 @@ public class ResetStaffPasswordViewModel
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu mới.")]
     [StringLength(100, MinimumLength = 8, ErrorMessage = "Tối thiểu 8 ký tự.")]
+    [RegularExpression(ValidationRules.Password, ErrorMessage = ValidationRules.PasswordMessage)]
     [DataType(DataType.Password)]
     [Display(Name = "Mật khẩu mới")]
     public string NewPassword { get; set; } = string.Empty;
@@ -32,6 +33,7 @@ public class ChangePasswordViewModel
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu mới.")]
     [StringLength(100, MinimumLength = 8, ErrorMessage = "Tối thiểu 8 ký tự.")]
+    [RegularExpression(ValidationRules.Password, ErrorMessage = ValidationRules.PasswordMessage)]
     [DataType(DataType.Password)]
     [Display(Name = "Mật khẩu mới")]
     public string NewPassword { get; set; } = string.Empty;

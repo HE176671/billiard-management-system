@@ -1,0 +1,65 @@
+@model Bms.Web.Models.CreateEditPricingViewModel
+@{
+    bool isEdit = Model.Id != 0;
+    ViewData["Title"] = isEdit ? "Sửa mức giá" : "Thêm mức giá";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="mb-3">
+    <a asp-action="Index" class="btn-outline-bms">
+        <i class="bi bi-arrow-left"></i> Quay lại
+    </a>
+</div>
+
+<div class="form-card">
+    <h6 class="fw-bold mb-4">@ViewData["Title"]</h6>
+
+    <form asp-action="@(isEdit ? "Edit" : "Create")" method="post">
+        @Html.AntiForgeryToken()
+        @if (isEdit) { <input type="hidden" asp-for="Id" /> }
+
+        <div asp-validation-summary="All" class="alert alert-danger py-2 mb-3" style="font-size:0.85rem"></div>
+
+        <div class="mb-3">
+            <label asp-for="TableTypeId" class="form-label">Loại bàn <span class="text-danger">*</span></label>
+            <select asp-for="TableTypeId" class="form-select">
+                <option value="">— Chọn loại bàn —</option>
+                @foreach (var t in Model.TableTypes)
+                {
+                    <option value="@t.Id">@t.Name</option>
+                }
+            </select>
+            <span asp-validation-for="TableTypeId" class="field-error"></span>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-6">
+                <label asp-for="StartHour" class="form-label">Giờ bắt đầu <span class="text-danger">*</span></label>
+                <input asp-for="StartHour" type="time" class="form-control" />
+                <span asp-validation-for="StartHour" class="field-error"></span>
+            </div>
+            <div class="col-6">
+                <label asp-for="EndHour" class="form-label">Giờ kết thúc <span class="text-danger">*</span></label>
+                <input asp-for="EndHour" type="time" class="form-control" />
+                <span asp-validation-for="EndHour" class="field-error"></span>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label asp-for="HourlyRate" class="form-label">Giá mỗi giờ (VNĐ) <span class="text-danger">*</span></label>
+            <input asp-for="HourlyRate" type="number" class="form-control" min="1000" step="1000" />
+            <span asp-validation-for="HourlyRate" class="field-error"></span>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn-primary-bms">
+                <i class="bi bi-check-lg"></i> @(isEdit ? "Lưu thay đổi" : "Thêm mức giá")
+            </button>
+            <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
