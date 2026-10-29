@@ -1,0 +1,54 @@
+@model Bms.Web.Models.ShiftHomeViewModel
+@{
+    ViewData["Title"] = "Ca làm của tôi";
+    Layout = "_AdminLayout";
+}
+<partial name="_Alerts" />
+
+@if (Model.Active == null)
+{
+    <div class="form-card mb-4">
+        <h6 class="mb-1" style="font-weight:600"><i class="bi bi-play-circle me-2"></i>Mở ca mới</h6>
+        <p class="text-muted" style="font-size:0.85rem">Đếm tiền mặt đang có trong két trước khi bắt đầu. Chưa mở ca thì không thu được tiền mặt.</p>
+        <form asp-action="Open" method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label asp-for="Open.StartingCash" class="form-label"></label>
+                    <input asp-for="Open.StartingCash" type="number" min="0" max="1000000000" step="1000" class="form-control" placeholder="500000" />
+                    <span asp-validation-for="Open.StartingCash" class="field-error"></span>
+                </div>
+                <div class="col-md-8">
+                    <label asp-for="Open.Notes" class="form-label"></label>
+                    <input asp-for="Open.Notes" class="form-control" maxlength="500" placeholder="Ví dụ: nhận két từ ca sáng" />
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn-primary-bms"><i class="bi bi-play-fill"></i> Mở ca</button>
+                </div>
+            </div>
+        </form>
+    </div>
+}
+else
+{
+    var s = Model.Active;
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <span class="badge-active">Đang mở</span>
+        <strong>Ca #@s.Shift.Id</strong>
+        <span class="text-muted" style="font-size:0.85rem">bắt đầu @s.Shift.StartTimeUtc.ToVn().ToString("HH:mm dd/MM/yyyy")</span>
+        <a asp-action="Details" asp-route-id="@s.Shift.Id" class="btn-outline-bms ms-auto"><i class="bi bi-list-ul"></i> Giao dịch trong ca</a>
+    </div>
+    <partial name="_SummaryCards" model="s" />
+    <div class="form-card mb-4">
+        <h6 class="mb-3" style="font-weight:600"><i class="bi bi-stop-circle me-2"></i>Đóng ca</h6>
+        <partial name="_CloseForm" model="Model.Close" view-data='new ViewDataDictionary(ViewData) { ["ExpectedCash"] = s.ExpectedCash }' />
+    </div>
+}
+
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>Ca gần đây</span>
+        <a asp-action="History" class="btn-outline-bms">Xem tất cả</a>
+    </div>
+    <partial name="_ShiftTable" model="Model.Recent" />
+</div>

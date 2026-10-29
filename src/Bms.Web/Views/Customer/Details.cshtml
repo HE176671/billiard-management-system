@@ -1,0 +1,35 @@
+@model Bms.Web.Models.EditCustomerViewModel
+@{
+    ViewData["Title"] = "Chi tiết khách hàng";
+    Layout = "_AdminLayout";
+}
+<partial name="_Alerts" />
+<div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
+    <a asp-action="Index" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <h5 class="mb-0">@Model.FullName</h5>
+    @if (Model.IsActive) { <span class="badge-active">Hoạt động</span> } else { <span class="badge-inactive">Bị khóa</span> }
+    <div class="ms-auto d-flex gap-2">
+        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn-primary-bms"><i class="bi bi-pencil"></i> Sửa thông tin</a>
+        <form asp-action="ToggleLock" asp-route-id="@Model.Id" asp-route-returnTo="details" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn-outline-bms" onclick="return confirm('@(Model.IsActive ? "Khóa" : "Mở khóa") tài khoản khách hàng này?')">
+                <i class="bi bi-@(Model.IsActive ? "lock" : "unlock")"></i> @(Model.IsActive ? "Khóa" : "Mở khóa")
+            </button>
+        </form>
+    </div>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div class="stat-icon amber"><i class="bi bi-award"></i></div>
+        <div><div class="stat-value">@(Model.TierName ?? "—")</div><div class="stat-label">Hạng thành viên</div></div></div></div>
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div class="stat-icon green"><i class="bi bi-star"></i></div>
+        <div><div class="stat-value">@Model.RewardPoints.ToString("N0")</div><div class="stat-label">Điểm tích lũy</div></div></div></div>
+</div>
+<div class="form-card">
+    <dl class="row mb-0" style="font-size:0.9rem">
+        <dt class="col-sm-3">Tên đăng nhập</dt><dd class="col-sm-9">@Model.UserName</dd>
+        <dt class="col-sm-3">Email</dt><dd class="col-sm-9">@Model.Email</dd>
+        <dt class="col-sm-3">Số điện thoại</dt><dd class="col-sm-9">@(Model.PhoneNumber ?? "—")</dd>
+        <dt class="col-sm-3">Ngày đăng ký</dt><dd class="col-sm-9">@Model.CreatedAtUtc.ToVn().ToString("HH:mm dd/MM/yyyy")</dd>
+    </dl>
+    <div class="form-text mt-3">Lịch sử chơi, hóa đơn và đánh giá của khách do TV2 bổ sung tại đây.</div>
+</div>

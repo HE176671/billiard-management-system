@@ -1,0 +1,106 @@
+@model Bms.Web.Models.TierConfigViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Cấu hình hạng & ưu đãi";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Không thể lưu cấu hình:</strong>
+        <ul class="mb-0 mt-1">
+            @foreach (var err in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+            {
+                <li>@err.ErrorMessage</li>
+            }
+        </ul>
+    </div>
+}
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+    @foreach (var t in Model.Tiers)
+    {
+        <div class="col-sm-6 col-xl-4">
+            <div class="stat-card">
+                <div class="stat-icon @(t.TierName == "Gold" ? "amber" : t.TierName == "Silver" ? "blue" : "green")">
+                    <i class="bi bi-award-fill"></i>
+                </div>
+                <div>
+                    <div class="stat-value">@t.CustomerCount</div>
+                    <div class="stat-label">Khách hạng @t.TierName</div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-sliders me-2"></i>Hạng thành viên & ưu đãi</span>
+        <span class="text-muted" style="font-size:0.8rem">Hạng xét theo <strong>Tổng chi tiêu lũy kế</strong> (không giảm khi đổi điểm)</span>
+    </div>
+
+    <form asp-action="Save" method="post" id="tierForm"
+          onsubmit="return confirm('Lưu cấu hình và xếp lại hạng cho toàn bộ khách hàng theo tổng chi tiêu hiện có?')">
+        @Html.AntiForgeryToken()
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Hạng</th>
+                        <th style="width:230px">Ngưỡng chi tiêu (VNĐ)</th>
+                        <th style="width:170px">Giảm tiền giờ (%)</th>
+                        <th style="width:170px">Hệ số nhân điểm</th>
+                        <th style="width:110px">Số khách</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (int i = 0; i < Model.Tiers.Count; i++)
+                    {
+                        var t = Model.Tiers[i];
+                        <tr>
+                            <td>
+                                <input type="hidden" name="Tiers[@i].Id" value="@t.Id" />
+                                <input type="hidden" name="Tiers[@i].TierName" value="@t.TierName" />
+                                <strong>@t.TierName</strong>
+                            </td>
+                            <td>
+                                <input type="number" min="0" step="1000" class="form-control"
+                                       name="Tiers[@i].SpendThreshold" value="@t.SpendThreshold" required />
+                                <div class="form-text">≈ @(decimal.TryParse(t.SpendThreshold, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var th) ? VnFormat.Money(th) : "—")</div>
+                            </td>
+                            <td>
+                                <input type="number" min="0" max="100" step="0.01" class="form-control"
+                                       name="Tiers[@i].DiscountPercent" value="@t.DiscountPercent" required />
+                            </td>
+                            <td>
+                                <input type="number" min="1" max="100" step="1" class="form-control"
+                                       name="Tiers[@i].PointMultiplier" value="@t.PointMultiplier" required />
+                            </td>
+                            <td><span class="badge-active">@t.CustomerCount</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 border-top">
+            <span class="form-text mb-0">
+                <i class="bi bi-info-circle me-1"></i>Hạng thấp nhất phải có ngưỡng = 0 và ngưỡng các hạng phải tăng dần.
+                Khi lưu, hệ thống tự xếp lại hạng cho khách hàng.
+            </span>
+            <div class="d-flex gap-2">
+                <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-arrow-counterclockwise"></i> Hoàn tác</a>
+                <button type="submit" class="btn-primary-bms"><i class="bi bi-save"></i> Lưu cấu hình</button>
+            </div>
+        </div>
+    </form>
+</div>

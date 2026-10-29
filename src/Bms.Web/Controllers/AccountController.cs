@@ -1,8 +1,10 @@
-﻿using Bms.Web.Data;
+using Bms.Web.Data;
 using Bms.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Bms.Web.Services;
 
 namespace Bms.Web.Controllers;
 
@@ -10,16 +12,20 @@ public class AccountController : Controller
 {
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _context;
 
     public AccountController(
         SignInManager<ApplicationUser> signInManager,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        ApplicationDbContext context)
     {
         _signInManager = signInManager;
         _userManager = userManager;
+        _context = context;
     }
 
-    // GET /Account/Login
+    #region UC01 - Dang nhap
+
     [HttpGet]
     [AllowAnonymous]
     public IActionResult Login(string? returnUrl = null)
@@ -30,7 +36,6 @@ public class AccountController : Controller
         return View(new LoginViewModel());
     }
 
-    // POST /Account/Login
     [HttpPost]
     [AllowAnonymous]
     [ValidateAntiForgeryToken]
@@ -66,7 +71,10 @@ public class AccountController : Controller
         return View(model);
     }
 
-    // GET /Account/Register
+    #endregion
+
+    #region UC19 - Dang ky khach hang
+
     [HttpGet]
     [AllowAnonymous]
     public IActionResult Register()
@@ -76,7 +84,6 @@ public class AccountController : Controller
         return View(new RegisterViewModel());
     }
 
-    // POST /Account/Register
     [HttpPost]
     [AllowAnonymous]
     [ValidateAntiForgeryToken]
@@ -84,19 +91,44 @@ public class AccountController : Controller
     {
         if (!ModelState.IsValid) return View(model);
 
+        var phone = model.PhoneNumber?.Trim();
+        var email = model.Email.Trim();
+
+        // Validate trùng SĐT / Email
+        if (!string.IsNullOrWhiteSpace(phone) && await _context.Users.AnyAsync(u => u.PhoneNumber == phone))
+        {
+            ModelState.AddModelError(nameof(model.PhoneNumber), "Số điện thoại đã được đăng ký.");
+            return View(model);
+        }
+        if (await _userManager.FindByEmailAsync(email) != null)
+        {
+            ModelState.AddModelError(nameof(model.Email), "Email đã được dùng bởi tài khoản khác.");
+            return View(model);
+        }
+
+        // Hạng mặc định: hạng thấp nhất (Member)
+        var tiers = await _context.MembershipTiers.AsNoTracking().ToListAsync();
+        var defaultTier = TierHelper.Resolve(tiers, 0)
+            ?? await _context.MembershipTiers.Where(t => t.MinPoints == 0).OrderBy(t => t.Id).FirstOrDefaultAsync();
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
         var user = new ApplicationUser
         {
             UserName     = model.UserName.Trim(),
-            Email        = model.Email.Trim(),
+            Email        = email,
             FullName     = model.FullName.Trim(),
-            PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim(),
+            PhoneNumber  = phone,
             IsActive     = true,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            TierId       = defaultTier?.Id,
+            RewardPoints = 0,
+            TotalSpend   = 0
         };
 
         var createResult = await _userManager.CreateAsync(user, model.Password);
         if (!createResult.Succeeded)
         {
+            await transaction.RollbackAsync();
             foreach (var err in createResult.Errors)
                 ModelState.AddModelError(string.Empty, TranslateIdentityError(err));
             return View(model);
@@ -105,16 +137,20 @@ public class AccountController : Controller
         var roleResult = await _userManager.AddToRoleAsync(user, "Customer");
         if (!roleResult.Succeeded)
         {
-            await _userManager.DeleteAsync(user);
-            ModelState.AddModelError(string.Empty, "Dang ky that bai. Vui long thu lai.");
+            await transaction.RollbackAsync();
+            ModelState.AddModelError(string.Empty, "Đăng ký thất bại. Vui lòng thử lại.");
             return View(model);
         }
 
+        await transaction.CommitAsync();
         await _signInManager.SignInAsync(user, isPersistent: false);
-        return RedirectToAction("Index", "Customer");
+        return RedirectToAction("Profile", "CustomerPortal");
     }
 
-    // POST /Account/Logout
+    #endregion
+
+    #region UC02 - Dang xuat
+
     [HttpPost]
     [Authorize]
     [ValidateAntiForgeryToken]
@@ -124,20 +160,26 @@ public class AccountController : Controller
         return RedirectToAction("Login", "Account");
     }
 
-    // GET /Account/AccessDenied
+    #endregion
+
+    #region Thong bao tu choi truy cap
+
     [HttpGet]
     [AllowAnonymous]
     public IActionResult AccessDenied() => View();
 
-    // Redirect theo role
+    #endregion
+
+    #region Dieu huong theo role va dich loi Identity
+
     private async Task<IActionResult> RedirectByRoleAsync(ApplicationUser user)
     {
         if (await _userManager.IsInRoleAsync(user, "Admin"))
-            return RedirectToAction("Index", "Employee");
+            return RedirectToAction("Index", "Dashboard");
         if (await _userManager.IsInRoleAsync(user, "Staff"))
             return RedirectToAction("Index", "Staff");
         if (await _userManager.IsInRoleAsync(user, "Customer"))
-            return RedirectToAction("Index", "Customer");
+            return RedirectToAction("Profile", "CustomerPortal");
         return RedirectToAction("Index", "Home");
     }
 
@@ -151,4 +193,5 @@ public class AccountController : Controller
         "PasswordRequiresUpper"           => "Mat khau phai co it nhat 1 chu hoa.",
         _ => err.Description
     };
+    #endregion
 }
