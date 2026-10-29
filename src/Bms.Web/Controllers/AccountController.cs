@@ -1,8 +1,10 @@
-﻿using Bms.Web.Data;
+using Bms.Web.Data;
 using Bms.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Bms.Web.Services;
 
 namespace Bms.Web.Controllers;
 
@@ -10,13 +12,16 @@ public class AccountController : Controller
 {
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _context;
 
     public AccountController(
         SignInManager<ApplicationUser> signInManager,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        ApplicationDbContext context)
     {
         _signInManager = signInManager;
         _userManager = userManager;
+        _context = context;
     }
 
     // GET /Account/Login
@@ -84,14 +89,31 @@ public class AccountController : Controller
     {
         if (!ModelState.IsValid) return View(model);
 
+        var phone = model.PhoneNumber.Trim();
+        var email = model.Email.Trim();
+
+        // Validate trùng SĐT / Email
+        if (await _context.Users.AnyAsync(u => u.PhoneNumber == phone))
+            ModelState.AddModelError(nameof(model.PhoneNumber), "So dien thoai da duoc dang ky.");
+        if (await _userManager.FindByEmailAsync(email) != null)
+            ModelState.AddModelError(nameof(model.Email), "Email da duoc dung boi tai khoan khac.");
+        if (!ModelState.IsValid) return View(model);
+
+        // Hạng mặc định: hạng thấp nhất (Member)
+        var tiers = await _context.MembershipTiers.AsNoTracking().ToListAsync();
+        var defaultTier = TierHelper.Resolve(tiers, 0);
+
         var user = new ApplicationUser
         {
             UserName     = model.UserName.Trim(),
-            Email        = model.Email.Trim(),
+            Email        = email,
             FullName     = model.FullName.Trim(),
-            PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim(),
+            PhoneNumber  = phone,
             IsActive     = true,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            TierId       = defaultTier?.Id,
+            RewardPoints = 0,
+            TotalSpend   = 0
         };
 
         var createResult = await _userManager.CreateAsync(user, model.Password);
@@ -101,6 +123,7 @@ public class AccountController : Controller
                 ModelState.AddModelError(string.Empty, TranslateIdentityError(err));
             return View(model);
         }
+
 
         var roleResult = await _userManager.AddToRoleAsync(user, "Customer");
         if (!roleResult.Succeeded)
@@ -133,11 +156,11 @@ public class AccountController : Controller
     private async Task<IActionResult> RedirectByRoleAsync(ApplicationUser user)
     {
         if (await _userManager.IsInRoleAsync(user, "Admin"))
-            return RedirectToAction("Index", "Employee");
+            return RedirectToAction("Index", "Dashboard");
         if (await _userManager.IsInRoleAsync(user, "Staff"))
             return RedirectToAction("Index", "Staff");
         if (await _userManager.IsInRoleAsync(user, "Customer"))
-            return RedirectToAction("Index", "Customer");
+            return RedirectToAction("Profile", "CustomerPortal");
         return RedirectToAction("Index", "Home");
     }
 

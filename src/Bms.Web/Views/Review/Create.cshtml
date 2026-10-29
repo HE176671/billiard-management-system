@@ -1,0 +1,111 @@
+@model Bms.Web.Models.CreateReviewViewModel
+@{
+    ViewData["Title"] = "Đánh giá dịch vụ";
+    Layout = "_AdminLayout";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="form-card w-100">
+            <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                <i class="bi bi-star-half text-warning fs-4"></i>
+                <div>
+                    <h5 class="mb-0 fw-bold">Đánh giá phiên chơi</h5>
+                    <div class="text-muted" style="font-size:0.8rem">
+                        @if (!string.IsNullOrEmpty(Model.TableCode))
+                        {
+                            <span>Bàn <strong>@Model.TableCode</strong> • </span>
+                        }
+                        Phiên #@Model.SessionId
+                    </div>
+                </div>
+            </div>
+
+            <form asp-action="Create" method="post" id="reviewForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="SessionId" />
+                <input type="hidden" asp-for="TableCode" />
+
+                <!-- Star Rating Picker -->
+                <div class="mb-4 text-center py-3 rounded-3" style="background:#f8fafc;border:1px dashed #cbd5e1">
+                    <label class="form-label d-block mb-2 fw-semibold">Bạn thấy trải nghiệm hôm nay như thế nào?</label>
+                    <div class="d-flex justify-content-center gap-2" id="starPicker">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            <div class="form-check form-check-inline m-0">
+                                <input class="btn-check" type="radio" name="Rating" id="star-@i" value="@i" @(Model.Rating == i ? "checked" : "") />
+                                <label class="btn btn-outline-warning border-0 px-2 py-1" for="star-@i" style="font-size:1.6rem;cursor:pointer" title="@i sao">
+                                    <i class="bi @(Model.Rating >= i ? "bi-star-fill text-warning" : "bi-star text-muted")"></i>
+                                </label>
+                            </div>
+                        }
+                    </div>
+                    <div class="mt-2 text-warning fw-bold" id="ratingText">Tuyệt vời (5 sao)</div>
+                </div>
+
+                <!-- Comment -->
+                <div class="mb-3">
+                    <label asp-for="Comment" class="form-label fw-semibold">Ý kiến đóng góp (tùy chọn)</label>
+                    <textarea asp-for="Comment" class="form-control" rows="4" maxlength="500" placeholder="Chất lượng bàn, gậy, thái độ nhân viên, đồ uống..."></textarea>
+                    <span asp-validation-for="Comment" class="field-error"></span>
+                    <div class="d-flex justify-content-between form-text mt-1">
+                        <span>Chia sẻ của bạn giúp quán cải thiện tốt hơn.</span>
+                        <span id="charCount">0/500</span>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 justify-content-end pt-3 border-top">
+                    <a asp-controller="CustomerPortal" asp-action="History" class="btn-outline-bms">Quay lại</a>
+                    <button type="submit" class="btn-primary-bms">
+                        <i class="bi bi-send me-1"></i> Gửi đánh giá
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const ratingLabels = {
+            1: "Rất không hài lòng (1 sao)",
+            2: "Chưa hài lòng (2 sao)",
+            3: "Bình thường (3 sao)",
+            4: "Hài lòng (4 sao)",
+            5: "Tuyệt vời (5 sao)"
+        };
+
+        const stars = document.querySelectorAll('input[name="Rating"]');
+        const textLabel = document.getElementById('ratingText');
+
+        function updateStars(val) {
+            stars.forEach(s => {
+                const icon = document.querySelector(`label[for="${s.id}"] i`);
+                if (parseInt(s.value) <= parseInt(val)) {
+                    icon.className = 'bi bi-star-fill text-warning';
+                } else {
+                    icon.className = 'bi bi-star text-muted';
+                }
+            });
+            textLabel.innerText = ratingLabels[val] || '';
+        }
+
+        stars.forEach(s => {
+            s.addEventListener('change', () => updateStars(s.value));
+        });
+
+        // Khởi tạo trạng thái ban đầu
+        const checked = document.querySelector('input[name="Rating"]:checked');
+        if (checked) updateStars(checked.value);
+
+        // Đếm ký tự comment
+        const commentArea = document.getElementById('Comment');
+        const charCount = document.getElementById('charCount');
+        if (commentArea && charCount) {
+            commentArea.addEventListener('input', () => {
+                charCount.innerText = `${commentArea.value.length}/500`;
+            });
+            charCount.innerText = `${commentArea.value.length}/500`;
+        }
+    </script>
+}

@@ -11,6 +11,10 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Loyalty: tích điểm / đổi điểm
+builder.Services.AddScoped<Bms.Web.Services.ILoyaltyService, Bms.Web.Services.LoyaltyService>();
+builder.Services.AddHostedService<Bms.Web.Services.PointExpirationBackgroundService>();
+
 // Identity — khớp schema SQL V1, khóa login/token dài 128
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {

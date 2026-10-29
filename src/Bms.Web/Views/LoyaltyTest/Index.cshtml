@@ -1,0 +1,510 @@
+@model Bms.Web.Models.LoyaltyTestViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Trang để Test";
+    Layout = "_AdminLayout";
+    var c = Model.CustomerDetail;
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Banner hướng dẫn -->
+<div class="alert alert-info rounded-3 mb-4" style="font-size:0.85rem">
+    <i class="bi bi-tools me-2"></i><strong></strong>
+    Trang này để test chức năng <strong>Tích điểm, nâng hạng, đổi điểm, và hết hạn điểm</strong>
+</div>
+
+<!-- Chọn khách hàng -->
+<div class="data-card mb-4 p-3">
+    <form method="get" class="d-flex align-items-center gap-3 flex-wrap" id="selectCustomerForm">
+        <label class="fw-bold mb-0 text-nowrap" for="customerIdSelect">
+            <i class="bi bi-person-check me-1"></i>Chọn Khách hàng để test:
+        </label>
+        <select name="customerId" id="customerIdSelect" class="form-select" style="max-width:380px" onchange="document.getElementById('selectCustomerForm').submit()">
+            @foreach (var cust in Model.Customers)
+            {
+                <option value="@cust.Id" selected="@(cust.Id == Model.SelectedCustomerId)">
+                    @cust.FullName (@(cust.PhoneNumber ?? "Không có SĐT")) - Hạng: @(cust.TierName ?? "Member") | Điểm: @cust.RewardPoints
+                </option>
+            }
+        </select>
+        <span class="text-muted" style="font-size:0.8rem">Dữ liệu tài khoản sẽ tự động nạp bên dưới.</span>
+    </form>
+</div>
+
+@if (c != null)
+{
+    <!-- Thông tin khách hàng hiện tại -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon amber"><i class="bi bi-award-fill"></i></div>
+                <div>
+                    <div class="stat-value" style="font-size:1.25rem">
+                        <span style="@VnFormat.TierBadgeStyle(c.TierName);padding:2px 12px;border-radius:20px">@c.TierName</span>
+                    </div>
+                    <div class="stat-label mt-1">Giảm @c.DiscountPercent% tiền giờ • Nhân điểm ×@c.PointMultiplier</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon red"><i class="bi bi-stars"></i></div>
+                <div>
+                    <div class="stat-value">@VnFormat.Number(c.RewardPoints)</div>
+                    <div class="stat-label">Điểm thưởng khả dụng</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon green"><i class="bi bi-wallet2"></i></div>
+                <div>
+                    <div class="stat-value">@VnFormat.Money(c.TotalSpend)</div>
+                    <div class="stat-label">Tổng chi tiêu lũy kế</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon blue"><i class="bi bi-calendar2-check"></i></div>
+                <div>
+                    <div class="stat-value" style="font-size:1.1rem">
+                        @(c.LastPaidDate.HasValue ? c.LastPaidDate.Value.ToLocalTime().ToString("dd/MM/yyyy") : "Chưa có")
+                    </div>
+                    <div class="stat-label">Thanh toán lần cuối</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2 Card mô phỏng chức năng -->
+    <div class="row g-4 mb-4">
+        <!-- Form 1: Giả lập Thanh toán (Tích điểm & Nâng hạng) -->
+        <div class="col-lg-6">
+            <div class="data-card h-100">
+                <div class="data-card-header bg-white">
+                    <span class="data-card-title text-success">
+                        <i class="bi bi-cash-coin me-2"></i>1. Giả lập Thanh toán & Tích điểm
+                    </span>
+                </div>
+                <div class="p-3">
+                    <form asp-action="SimulatePayment" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="customerId" value="@c.Id" />
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Số tiền thực trả (FinalAmount - VNĐ):</label>
+                            <input type="number" step="1000" min="0" name="finalAmount" id="finalAmountInput"
+                                   class="form-control mb-2" value="@Model.PaymentFinalAmount" required />
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('finalAmountInput').value=100000">100.000 ₫</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('finalAmountInput').value=500000">500.000 ₫</button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="document.getElementById('finalAmountInput').value=2000000">2.000.000 ₫ (Lên Silver)</button>
+                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="document.getElementById('finalAmountInput').value=5000000">5.000.000 ₫ (Lên Gold)</button>
+                            </div>
+                            <div class="form-text" style="font-size:0.75rem">
+                                Quy tắc: <code>Math.Floor(FinalAmount / 20.000) * Multiplier (×@c.PointMultiplier)</code>.
+                                Cộng dồn TotalSpend và tự động xét thăng hạng.
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary-bms w-100 justify-content-center">
+                            <i class="bi bi-check2-circle"></i> Thanh toán & Tích điểm
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form 2: Giả lập Đổi điểm trừ hóa đơn -->
+        <div class="col-lg-6">
+            <div class="data-card h-100">
+                <div class="data-card-header bg-white">
+                    <span class="data-card-title text-primary">
+                        <i class="bi bi-tag me-2"></i>2. Giả lập Đổi điểm trừ Hóa đơn
+                    </span>
+                </div>
+                <div class="p-3">
+                    <form asp-action="SimulateRedeem" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="customerId" value="@c.Id" />
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Tổng tiền hóa đơn:</label>
+                                <input type="number" step="1000" min="1000" name="billAmount" id="billAmountInput"
+                                       class="form-control" value="@Model.BillAmount" required />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Số điểm muốn đổi:</label>
+                                <input type="number" min="1" max="@c.RewardPoints" name="pointsToRedeem"
+                                       class="form-control" value="@Math.Min(c.RewardPoints > 0 ? c.RewardPoints : 10, 50)" required />
+                            </div>
+                        </div>
+                        <div class="form-text mb-3" style="font-size:0.75rem">
+                            Quy tắc: 1 Điểm = 1.000 ₫. Số tiền giảm <strong>không được vượt quá 50%</strong> giá trị hóa đơn.
+                        </div>
+
+                        <button type="submit" class="btn-outline-bms w-100 justify-content-center" @(c.RewardPoints <= 0 ? "disabled" : "")>
+                            <i class="bi bi-arrow-repeat"></i> Đổi điểm trừ hóa đơn
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hết hạn điểm (>180 ngày) & Lịch sử biến động điểm -->
+    <div class="row g-4">
+        <!-- Công cụ kiểm tra Hết hạn điểm -->
+        <div class="col-lg-5">
+            <div class="data-card h-100">
+                <div class="data-card-header bg-white">
+                    <span class="data-card-title text-danger">
+                        <i class="bi bi-hourglass-bottom me-2"></i>3. Kiểm tra Hết hạn Điểm (>180 ngày)
+                    </span>
+                </div>
+                <div class="p-3">
+                    <p class="text-muted" style="font-size:0.85rem">
+                        Hệ thống có <code>PointExpirationBackgroundService</code> tự động chạy ngầm mỗi ngày 1 lần.
+                        Để test ngay tức thì:
+                    </p>
+
+                    <!-- Nút 1: Giả lập ngày thanh toán cũ -->
+                    <form asp-action="SimulateAging" method="post" class="mb-3">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="customerId" value="@c.Id" />
+                        <button type="submit" class="btn btn-sm btn-outline-secondary w-100 text-start py-2">
+                            <i class="bi bi-clock-history text-warning me-1"></i>
+                            <strong>Bước 1:</strong> Đặt ngày thanh toán cuối của khách này thành <strong>185 ngày trước</strong>
+                        </button>
+                    </form>
+
+                    <!-- Nút 2: Kích hoạt quét ngay -->
+                    <form asp-action="TriggerExpirationScan" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="customerId" value="@c.Id" />
+                        <button type="submit" class="btn btn-sm btn-danger w-100 py-2">
+                            <i class="bi bi-play-circle me-1"></i>
+                            <strong>Bước 2:</strong> Chạy Quét Hết Hạn Điểm ngay bây giờ
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bảng lịch sử điểm gần nhất -->
+        <div class="col-lg-7">
+            <div class="data-card h-100">
+                <div class="data-card-header bg-white">
+                    <span class="data-card-title">
+                        <i class="bi bi-list-check me-2"></i>Lịch sử 10 giao dịch điểm gần nhất của @c.FullName
+                    </span>
+                </div>
+                @if (!c.RecentTransactions.Any())
+                {
+                    <div class="text-center py-4 text-muted">Chưa có giao dịch tích/đổi điểm nào.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Loại giao dịch</th>
+                                    <th class="text-end">Biến động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var t in c.RecentTransactions)
+                                {
+                                    <tr>
+                                        <td style="font-size:0.8rem">@VnFormat.LocalDateTime(t.CreatedAt)</td>
+                                        <td>
+                                            @if (t.TransactionType == "Earn")
+                                            {
+                                                <span class="badge-active">Tích điểm (Earn)</span>
+                                            }
+                                            else if (t.TransactionType == "Redeem")
+                                            {
+                                                <span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:600">Đổi điểm (Redeem)</span>
+                                            }
+                                            else if (t.TransactionType == "Expire")
+                                            {
+                                                <span class="badge-inactive">Hết hạn (Expire)</span>
+                                            }
+                                            else
+                                            {
+                                                <span>@t.TransactionType</span>
+                                            }
+                                        </td>
+                                        <td class="text-end fw-bold @(t.Amount >= 0 ? "text-success" : "text-danger")">
+                                            @(t.Amount >= 0 ? "+" : "")@VnFormat.Number(t.Amount)
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Giả lập Khách hàng gửi Đánh giá (Reviews) -->
+    <div class="row g-4 mt-1 mb-4">
+        <div class="col-12">
+            <div class="data-card">
+                <div class="data-card-header bg-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <span class="data-card-title text-warning">
+                        <i class="bi bi-star-fill text-warning me-2"></i>4. Giả lập Khách hàng gửi Đánh giá (Reviews)
+                    </span>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <a asp-controller="Review" asp-action="Index" class="btn btn-sm btn-outline-primary" target="_blank">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Mở Quản lý Đánh giá (Admin)
+                        </a>
+                        <form asp-action="SeedSampleReviews" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="customerId" value="@c.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-magic me-1"></i>Tạo nhanh 5 đánh giá mẫu (1★ - 5★)
+                            </button>
+                        </form>
+                        <form asp-action="ClearReviews" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc muốn xóa tất cả đánh giá để làm sạch môi trường test?')">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="customerId" value="@c.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash3 me-1"></i>Xóa sạch reviews
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="p-3">
+                    <form asp-action="SimulateReview" method="post" id="simulateReviewForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="customerId" value="@c.Id" />
+
+                        <div class="row g-3">
+                            <!-- Khách hàng gửi -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Khách hàng gửi đánh giá:</label>
+                                <div class="form-control bg-light d-flex align-items-center justify-content-between">
+                                    <span><strong>@c.FullName</strong> (@(c.PhoneNumber ?? "Không có SĐT"))</span>
+                                    <span style="@VnFormat.TierBadgeStyle(c.TierName);padding:1px 8px;border-radius:12px;font-size:0.75rem">@c.TierName</span>
+                                </div>
+                                <div class="form-text" style="font-size:0.75rem">
+                                    Đổi khách hàng ở dropdown trên đầu trang nếu muốn người khác gửi.
+                                </div>
+                            </div>
+
+                            <!-- Mã phiên chơi (SessionId) -->
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Mã phiên chơi (SessionId giả):</label>
+                                <input type="number" min="1" name="sessionId" id="reviewSessionIdInput"
+                                       class="form-control mb-1" value="@Model.ReviewSessionId" required />
+                                <div class="d-flex gap-1 flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem" onclick="document.getElementById('reviewSessionIdInput').value=999">999</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem" onclick="document.getElementById('reviewSessionIdInput').value=1001">1001</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem" onclick="document.getElementById('reviewSessionIdInput').value=1002">1002</button>
+                                </div>
+                            </div>
+
+                            <!-- Số sao đánh giá (Rating) -->
+                            <div class="col-md-5">
+                                <label class="form-label fw-semibold">Số sao đánh giá (1 - 5 sao):</label>
+                                <select name="rating" id="reviewRatingSelect" class="form-select mb-1" required>
+                                    <option value="5" selected="@(Model.ReviewRating == 5)">★★★★★ (5 sao - Xuất sắc, hài lòng)</option>
+                                    <option value="4" selected="@(Model.ReviewRating == 4)">★★★★☆ (4 sao - Tốt, đáng trải nghiệm)</option>
+                                    <option value="3" selected="@(Model.ReviewRating == 3)">★★★☆☆ (3 sao - Tạm ổn, bình thường)</option>
+                                    <option value="2" selected="@(Model.ReviewRating == 2)">★★☆☆☆ (2 sao - Chưa hài lòng)</option>
+                                    <option value="1" selected="@(Model.ReviewRating == 1)">★☆☆☆☆ (1 sao - Rất thất vọng)</option>
+                                </select>
+                                <div class="d-flex gap-1 flex-wrap">
+                                    <span class="badge bg-warning text-dark" style="cursor:pointer" onclick="setRating(5, 'Bàn xịn, bi chạy cực chuẩn, cơ mới cứng. Phục vụ nước nhanh, 10/10!')">5★ mẫu</span>
+                                    <span class="badge bg-warning text-dark" style="cursor:pointer" onclick="setRating(4, 'Quán rộng rãi, nhạc vừa phải. Bàn êm nhưng điều hòa hơi mát quá.')">4★ mẫu</span>
+                                    <span class="badge bg-warning text-dark" style="cursor:pointer" onclick="setRating(3, 'Dịch vụ tạm ổn, giờ cao điểm gọi đồ ăn hơi lâu.')">3★ mẫu</span>
+                                    <span class="badge bg-warning text-dark" style="cursor:pointer" onclick="setRating(2, 'Đầu lơ cơ hơi mòn, nhân viên phục vụ chưa niềm nở.')">2★ mẫu</span>
+                                    <span class="badge bg-warning text-dark" style="cursor:pointer" onclick="setRating(1, 'Bàn bên cạnh làm ồn quá, khách phàn nàn nhưng nhân viên chưa hỗ trợ kịp.')">1★ mẫu</span>
+                                </div>
+                            </div>
+
+                            <!-- Nhận xét (Comment) -->
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Nội dung nhận xét / phản ánh:</label>
+                                <textarea name="comment" id="reviewCommentInput" rows="2" class="form-control" placeholder="Nhập cảm nhận của khách hàng về bàn chơi, dịch vụ, nhân viên...">@Model.ReviewComment</textarea>
+                                <div class="form-text mt-1" style="font-size:0.75rem">
+                                    <i class="bi bi-info-circle me-1"></i>Hệ thống tự động liên kết hoặc tạo bản ghi phiên chơi tương ứng để thỏa mãn ràng buộc dữ liệu toàn vẹn (FK_Review_Session).
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 text-end">
+                            <button type="submit" class="btn-primary-bms px-4">
+                                <i class="bi bi-send-fill me-1"></i>Gửi Đánh giá Giả lập
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Bảng kiểm tra Đánh giá & Hộp thư Thông báo -->
+    <div class="row g-4 mb-4">
+        <!-- Cột 1: Danh sách Đánh giá gần nhất trong hệ thống -->
+        <div class="col-lg-6">
+            <div class="data-card h-100">
+                <div class="data-card-header bg-white d-flex align-items-center justify-content-between">
+                    <span class="data-card-title">
+                        <i class="bi bi-chat-square-quote me-2"></i>Đánh giá gần đây trong hệ thống
+                    </span>
+                    <a asp-controller="Review" asp-action="Index" class="text-decoration-none small fw-semibold">
+                        Xem trang Quản lý <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+                @if (!Model.RecentReviews.Any())
+                {
+                    <div class="text-center py-4 text-muted">
+                        Chưa có đánh giá nào. Hãy điền form phía trên hoặc bấm "Tạo nhanh 5 đánh giá mẫu" để tạo dữ liệu test!
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Phiên</th>
+                                    <th>Khách hàng</th>
+                                    <th>Sao</th>
+                                    <th>Bình luận & Phản hồi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in Model.RecentReviews)
+                                {
+                                    <tr>
+                                        <td><strong>#@r.SessionId</strong></td>
+                                        <td style="font-size:0.85rem">@r.CustomerName</td>
+                                        <td>
+                                            <span class="text-warning fw-bold text-nowrap">
+                                                @for (int s = 1; s <= 5; s++)
+                                                {
+                                                    if (s <= r.Rating)
+                                                    {
+                                                        <i class="bi bi-star-fill"></i>
+                                                    }
+                                                    else
+                                                    {
+                                                        <i class="bi bi-star text-muted"></i>
+                                                    }
+                                                }
+                                            </span>
+                                        </td>
+                                        <td style="font-size:0.8rem">
+                                            <div class="text-dark">@(r.Comment ?? "Không có bình luận")</div>
+                                            @if (!string.IsNullOrEmpty(r.AdminReply))
+                                            {
+                                                <div class="mt-1 p-1 px-2 rounded-2" style="background:#f0fdf4;border-left:3px solid #22c55e;font-size:0.75rem">
+                                                    <strong class="text-success"><i class="bi bi-reply-fill"></i> Admin phản hồi:</strong>
+                                                    <span>@r.AdminReply</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark mt-1" style="font-size:0.65rem">
+                                                    <i class="bi bi-hourglass-split"></i> Chưa phản hồi
+                                                </span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Cột 2: Hộp thư Thông báo của khách hàng đang chọn -->
+        <div class="col-lg-6">
+            <div class="data-card h-100">
+                <div class="data-card-header bg-white d-flex align-items-center justify-content-between">
+                    <span class="data-card-title text-primary">
+                        <i class="bi bi-bell me-2"></i>Thông báo của khách: @c.FullName
+                    </span>
+                    <a asp-controller="Notification" asp-action="Index" class="text-decoration-none small fw-semibold">
+                        Xem trang Thông báo <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+                <div class="p-2">
+                    <div class="text-muted px-2 py-1 mb-2" style="font-size:0.75rem;background:#f8fafc;border-radius:6px">
+                        <i class="bi bi-info-circle me-1"></i>Khi bạn vào <strong>Quản lý Đánh giá</strong> và ấn nút <strong>Phản hồi</strong>, hệ thống sẽ tự động phát sinh thông báo (Type = <code>ReviewReply</code>) tại đây!
+                    </div>
+
+                    @if (!Model.CustomerNotifications.Any())
+                    {
+                        <div class="text-center py-4 text-muted">
+                            Khách hàng @c.FullName chưa có thông báo nào.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var n in Model.CustomerNotifications)
+                            {
+                                <div class="list-group-item px-2 py-2 border-bottom">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <div class="d-flex align-items-center gap-1">
+                                            @if (n.Type == "ReviewReply")
+                                            {
+                                                <span class="badge bg-primary" style="font-size:0.7rem"><i class="bi bi-chat-dots-fill me-1"></i>Phản hồi đánh giá</span>
+                                            }
+                                            else if (n.Type == "TierUpgrade")
+                                            {
+                                                <span class="badge bg-warning text-dark" style="font-size:0.7rem"><i class="bi bi-award-fill me-1"></i>Nâng hạng</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary" style="font-size:0.7rem">@n.Type</span>
+                                            }
+                                            <strong style="font-size:0.85rem">@n.Title</strong>
+                                        </div>
+                                        <span class="text-muted" style="font-size:0.75rem">@VnFormat.LocalDateTime(n.CreatedAt)</span>
+                                    </div>
+                                    <div class="text-dark ps-1" style="font-size:0.8rem">
+                                        @n.Content
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @section Scripts {
+        <script>
+            function setRating(stars, comment) {
+                document.getElementById('reviewRatingSelect').value = stars;
+                document.getElementById('reviewCommentInput').value = comment;
+            }
+        </script>
+    }
+}

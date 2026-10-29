@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace Bms.Web.Models;
 
@@ -19,10 +19,10 @@ public class RegisterViewModel
     [Display(Name = "Email")]
     public string Email { get; set; } = string.Empty;
 
-    [Phone(ErrorMessage = "So dien thoai khong hop le.")]
-    [StringLength(20)]
+    [Required(ErrorMessage = "Vui long nhap so dien thoai.")]
+    [RegularExpression(@"^\d{10}$", ErrorMessage = "So dien thoai phai gom dung 10 chu so.")]
     [Display(Name = "So dien thoai")]
-    public string? PhoneNumber { get; set; }
+    public string PhoneNumber { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Vui long nhap mat khau.")]
     [StringLength(100, MinimumLength = 8)]

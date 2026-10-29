@@ -1,4 +1,4 @@
-﻿@model Bms.Web.Models.RegisterViewModel
+@model Bms.Web.Models.RegisterViewModel
 @{
     ViewData["Title"] = "Dang ky";
     Layout = null;
@@ -55,7 +55,7 @@
                 </div>
                 <div class="col-md-6">
                     <label asp-for="PhoneNumber" class="form-label">So dien thoai</label>
-                    <input asp-for="PhoneNumber" class="form-control" placeholder="0901234567" />
+                    <input asp-for="PhoneNumber" class="form-control" placeholder="0901234567" maxlength="10" inputmode="numeric" />
                     <span asp-validation-for="PhoneNumber" class="text-danger"></span>
                 </div>
                 <div class="col-12">

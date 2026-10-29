@@ -1,0 +1,102 @@
+@model Bms.Web.Models.PromotionsViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Khuyến mãi & đổi điểm";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Điểm hiện có -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-stars"></i></div>
+            <div>
+                <div class="stat-value" id="currentPoints">@VnFormat.Number(Model.RewardPoints)</div>
+                <div class="stat-label">Điểm khả dụng (1 điểm = 1.000 ₫)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Danh mục đổi điểm -->
+<div class="data-card mb-4">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-gift me-2"></i>Đổi điểm lấy quà</span>
+    </div>
+    <div class="row g-3 p-3">
+        @foreach (var r in RewardCatalog.Items)
+        {
+            var enough = Model.RewardPoints >= r.Points;
+            <div class="col-md-4">
+                <div class="h-100 p-3 border rounded-3 d-flex flex-column" style="border-color:#e2e8f0 !important">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="stat-icon @(enough ? "red" : "blue")"><i class="bi @r.Icon"></i></div>
+                        <div>
+                            <div class="fw-bold">@r.Name</div>
+                            <div class="text-muted" style="font-size:0.75rem">@r.Description</div>
+                        </div>
+                    </div>
+                    <div class="mt-auto d-flex justify-content-between align-items-center pt-2">
+                        <span class="fw-bold" style="color:#e94560">@r.Points điểm</span>
+                        <form asp-action="Redeem" method="post"
+                              onsubmit="return confirm('Đổi @r.Points điểm lấy &quot;@r.Name&quot;?')">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="rewardCode" value="@r.Code" />
+                            <button type="submit" class="btn-primary-bms" id="redeem-@r.Code.ToLower()"
+                                    disabled="@(!enough)" style="@(enough ? "" : "opacity:.5;cursor:not-allowed")">
+                                <i class="bi bi-arrow-repeat"></i> Đổi điểm
+                            </button>
+                        </form>
+                    </div>
+                    @if (!enough)
+                    {
+                        <div class="form-text mt-1">Còn thiếu @(r.Points - Model.RewardPoints) điểm.</div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+    <div class="form-text px-3 pb-3">Sau khi đổi, một thông báo xác nhận được gửi cho bạn — đưa cho nhân viên để nhận quà.</div>
+</div>
+
+<!-- Combo ưu đãi -->
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-tags me-2"></i>Gói combo ưu đãi</span>
+        @if (Model.IsMockCombos)
+        {
+            <span class="text-muted" style="font-size:0.75rem"><i class="bi bi-info-circle me-1"></i>Dữ liệu mẫu</span>
+        }
+    </div>
+    <div class="row g-3 p-3">
+        @foreach (var c in Model.Combos)
+        {
+            <div class="col-md-4">
+                <div class="h-100 p-3 border rounded-3" style="border-color:#e2e8f0 !important;background:linear-gradient(135deg,#fff 0%,#fff5f6 100%)">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-stopwatch" style="color:#e94560"></i>
+                        <span class="fw-bold">@c.Name</span>
+                    </div>
+                    <div class="stat-value" style="color:#e94560">@VnFormat.Money(c.Price)</div>
+                    <div class="text-muted mt-1" style="font-size:0.8rem">Gồm @c.PlaytimeHours.ToString("0.##") giờ chơi + đồ ăn/nước uống kèm theo</div>
+                </div>
+            </div>
+        }
+    </div>
+    <div class="form-text px-3 pb-3">Liên hệ nhân viên tại quầy để đăng ký gói combo khi mở bàn.</div>
+</div>

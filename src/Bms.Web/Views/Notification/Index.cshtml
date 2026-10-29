@@ -1,0 +1,92 @@
+@model Bms.Web.Models.NotificationListViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Thông báo hệ thống";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="data-card">
+    <div class="data-card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <span class="data-card-title"><i class="bi bi-bell me-2"></i>Hộp thư thông báo</span>
+            @if (Model.UnreadCount > 0)
+            {
+                <span class="badge rounded-pill bg-danger ms-2" style="font-size:0.75rem">@Model.UnreadCount chưa đọc</span>
+            }
+        </div>
+        @if (Model.UnreadCount > 0)
+        {
+            <form asp-action="MarkAllAsRead" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn-outline-bms" style="font-size:0.8rem">
+                    <i class="bi bi-check2-all me-1"></i> Đánh dấu đã đọc tất cả
+                </button>
+            </form>
+        }
+    </div>
+
+    @if (!Model.Notifications.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-bell-slash fs-1 d-block mb-2 text-secondary"></i>
+            Bạn chưa có thông báo nào.
+        </div>
+    }
+    else
+    {
+        <div class="list-group list-group-flush">
+            @foreach (var n in Model.Notifications)
+            {
+                var iconClass = n.Type switch
+                {
+                    "ReviewReply" => "bi-chat-left-quote-fill text-primary",
+                    "Redeem" => "bi-gift-fill text-danger",
+                    "TierUpgrade" => "bi-award-fill text-warning",
+                    _ => "bi-bell-fill text-info"
+                };
+
+                <div class="list-group-item p-3 @(!n.IsRead ? "bg-light border-start border-3 border-danger" : "")">
+                    <div class="d-flex align-items-start gap-3">
+                        <div style="font-size:1.3rem;line-height:1">
+                            <i class="bi @iconClass"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-1">
+                                <h6 class="mb-0 @(!n.IsRead ? "fw-bold text-dark" : "text-secondary")" style="font-size:0.95rem">
+                                    @n.Title
+                                    @if (!n.IsRead)
+                                    {
+                                        <span class="badge bg-danger ms-1" style="font-size:0.65rem">Mới</span>
+                                    }
+                                </h6>
+                                <span class="text-muted" style="font-size:0.75rem">
+                                    <i class="bi bi-clock me-1"></i>@VnFormat.LocalDateTime(n.CreatedAt)
+                                </span>
+                            </div>
+                            <div class="@(!n.IsRead ? "fw-semibold text-dark" : "text-muted")" style="font-size:0.875rem">
+                                @n.Content
+                            </div>
+                        </div>
+                        @if (!n.IsRead)
+                        {
+                            <form asp-action="MarkAsRead" asp-route-id="@n.Id" method="post" class="ms-2 align-self-center">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn-sm-icon" title="Đánh dấu đã đọc">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

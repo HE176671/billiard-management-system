@@ -1,4 +1,4 @@
-﻿## Build outputs
+## Build outputs
 bin/
 obj/
 
@@ -21,3 +21,6 @@ logs/
 ## OS
 .DS_Store
 Thumbs.db
+
+## Temp credentials
+customer*.txt

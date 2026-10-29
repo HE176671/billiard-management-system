@@ -1,4 +1,4 @@
-﻿using Bms.Web.Data;
+using Bms.Web.Data;
 using Microsoft.AspNetCore.Identity;
 
 namespace Bms.Web.Data;
@@ -43,6 +43,30 @@ public static class DbInitializer
         else
         {
             logger.LogInformation("admin.demo đã có mật khẩu, bỏ qua.");
+        }
+
+        // Đặt mật khẩu demo cho tài khoản Khách hàng (Customer)
+        var customerPassword = config["DevSeed:CustomerPassword"] ?? "Customer@123";
+        var demoCustomers = new[] { "customer.demo01", "customer.demo02" };
+        foreach (var customerUsername in demoCustomers)
+        {
+            var customer = await userManager.FindByNameAsync(customerUsername);
+            if (customer != null)
+            {
+                if (!await userManager.HasPasswordAsync(customer))
+                {
+                    var result = await userManager.AddPasswordAsync(customer, customerPassword);
+                    if (result.Succeeded)
+                        logger.LogInformation("Đã đặt mật khẩu cho {CustomerUsername}.", customerUsername);
+                    else
+                        logger.LogError("Đặt mật khẩu {CustomerUsername} thất bại: {Errors}", customerUsername,
+                            string.Join("; ", result.Errors.Select(e => e.Description)));
+                }
+                else
+                {
+                    logger.LogInformation("{CustomerUsername} đã có mật khẩu, bỏ qua.", customerUsername);
+                }
+            }
         }
     }
 }

@@ -1,0 +1,103 @@
+@model Bms.Web.Models.HistoryViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Lịch sử chơi & hóa đơn";
+    Layout = "_AdminLayout";
+}
+
+@if (Model.IsMock)
+{
+    <div class="alert alert-warning rounded-3 mb-3" style="font-size:0.85rem">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        Bạn chưa có phiên chơi nào được ghi nhận — đang hiển thị <strong>dữ liệu mẫu</strong> để minh họa giao diện.
+    </div>
+}
+
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-receipt me-2"></i>Phiên chơi & hóa đơn (@Model.TotalCount)</span>
+    </div>
+
+    @if (!Model.Items.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            Chưa có phiên chơi nào.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Bàn</th>
+                        <th>Bắt đầu</th>
+                        <th>Kết thúc</th>
+                        <th class="text-end">Tiền giờ</th>
+                        <th class="text-end">F&B</th>
+                        <th class="text-end">Giảm giá</th>
+                        <th class="text-end">Thanh toán</th>
+                        <th>Trạng thái</th>
+                        <th style="width:100px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var h in Model.Items)
+                    {
+                        <tr>
+                            <td><strong>@h.TableCode</strong><div class="text-muted" style="font-size:0.7rem">Phiên #@h.SessionId</div></td>
+                            <td>@VnFormat.LocalDateTime(h.StartAtUtc)</td>
+                            <td>@(h.EndAtUtc.HasValue ? VnFormat.LocalDateTime(h.EndAtUtc.Value) : "—")</td>
+                            <td class="text-end">@(h.TotalPlaytime.HasValue ? VnFormat.Money(h.TotalPlaytime.Value) : "—")</td>
+                            <td class="text-end">@(h.TotalFandB.HasValue ? VnFormat.Money(h.TotalFandB.Value) : "—")</td>
+                            <td class="text-end">@(h.DiscountAmount.GetValueOrDefault() > 0 ? "-" + VnFormat.Money(h.DiscountAmount!.Value) : "—")</td>
+                            <td class="text-end fw-bold">@(h.FinalAmount.HasValue ? VnFormat.Money(h.FinalAmount.Value) : "—")</td>
+                            <td>
+                                @if (h.InvoiceStatus == "Paid")
+                                { <span class="badge-active">Đã thanh toán</span> }
+                                else if (h.InvoiceStatus == "Unpaid")
+                                { <span class="badge-inactive">Chưa thanh toán</span> }
+                                else if (h.SessionStatus == "Active")
+                                { <span style="background:#dbeafe;color:#1d4ed8;padding:2px 10px;border-radius:20px;font-size:0.75rem;font-weight:600">Đang chơi</span> }
+                                else
+                                { <span class="text-muted">Chưa có hóa đơn</span> }
+                            </td>
+                            <td>
+                                @if (h.InvoiceStatus == "Paid" || h.SessionStatus == "Closed")
+                                {
+                                    <a asp-controller="Review" asp-action="Create" asp-route-sessionId="@h.SessionId"
+                                       class="btn btn-sm btn-outline-warning text-dark px-2 py-1 d-inline-flex align-items-center gap-1"
+                                       style="font-size:0.75rem;border-radius:6px" title="Gửi đánh giá phiên chơi">
+                                        <i class="bi bi-star-fill text-warning"></i> Đánh giá
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted" style="font-size:0.75rem">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (Model.TotalPages > 1)
+        {
+            <div class="d-flex justify-content-center align-items-center gap-2 py-3 flex-wrap" id="historyPager">
+                <a asp-action="History" asp-route-page="@(Model.Page - 1)"
+                   class="btn-sm-icon @(Model.Page <= 1 ? "disabled" : "")"
+                   style="@(Model.Page <= 1 ? "pointer-events:none;opacity:.4" : "")"><i class="bi bi-chevron-left"></i></a>
+                @for (int i = 1; i <= Model.TotalPages; i++)
+                {
+                    <a asp-action="History" asp-route-page="@i" class="btn-sm-icon"
+                       style="@(i == Model.Page ? "background:#e94560;color:#fff;border-color:#e94560" : "")">@i</a>
+                }
+                <a asp-action="History" asp-route-page="@(Model.Page + 1)"
+                   class="btn-sm-icon @(Model.Page >= Model.TotalPages ? "disabled" : "")"
+                   style="@(Model.Page >= Model.TotalPages ? "pointer-events:none;opacity:.4" : "")"><i class="bi bi-chevron-right"></i></a>
+            </div>
+        }
+    }
+</div>

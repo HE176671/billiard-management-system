@@ -1,0 +1,141 @@
+@model Bms.Web.Models.CustomerProfileViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Hồ sơ & điểm thưởng";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Lời chào -->
+<div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+    <div class="user-avatar" style="width:52px;height:52px;font-size:1.2rem">@(Model.FullName.FirstOrDefault().ToString().ToUpper())</div>
+    <div>
+        <h1 class="h5 fw-bold mb-0">Xin chào, @Model.FullName</h1>
+        <div class="text-muted" style="font-size:0.8rem">
+            @(Model.PhoneNumber ?? "—")
+            @if (!string.IsNullOrEmpty(Model.CardCode))
+            {
+                <span class="ms-2"><i class="bi bi-credit-card-2-front me-1"></i><span>Thẻ</span> <code>@Model.CardCode</code></span>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card" id="statTier">
+            <div class="stat-icon amber"><i class="bi bi-award-fill"></i></div>
+            <div>
+                <div class="stat-value" style="font-size:1.25rem">
+                    <span style="@(VnFormat.TierBadgeStyle(Model.TierName));padding:3px 14px;border-radius:20px">@(Model.TierName ?? "—")</span>
+                </div>
+                <div class="stat-label mt-2">Hạng hiện tại • giảm @Model.DiscountPercent.ToString("0.##")% tiền giờ • điểm ×@Model.PointMultiplier</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="stat-card" id="statPoints">
+            <div class="stat-icon red"><i class="bi bi-stars"></i></div>
+            <div>
+                <div class="stat-value">@VnFormat.Number(Model.RewardPoints)</div>
+                <div class="stat-label">
+                    Điểm khả dụng
+                    @if (Model.PointsExpireAtUtc.HasValue)
+                    {
+                        <span class="text-danger">• hết hạn @Model.PointsExpireAtUtc.Value.ToLocalTime().ToString("dd/MM/yyyy")</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-12 col-xl-4">
+        <div class="stat-card" id="statSpend">
+            <div class="stat-icon green"><i class="bi bi-wallet2"></i></div>
+            <div>
+                <div class="stat-value">@VnFormat.Money(Model.TotalSpend)</div>
+                <div class="stat-label">Tổng chi tiêu lũy kế</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tiến trình lên hạng -->
+<div class="data-card mb-4">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-graph-up-arrow me-2"></i>Tiến trình lên hạng</span>
+        <span class="text-muted" style="font-size:0.8rem">@Model.ProgressPercent%</span>
+    </div>
+    <div class="p-3">
+        <div class="progress" style="height:14px;border-radius:10px;background:#f1f5f9">
+            <div class="progress-bar" role="progressbar" id="tierProgress"
+                 style="width:@(Model.ProgressPercent)%;background:linear-gradient(90deg,#e94560,#f59e0b);border-radius:10px"
+                 aria-valuenow="@Model.ProgressPercent" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div class="mt-2" style="font-size:0.85rem;color:#475569">
+            @if (Model.NextTierName != null)
+            {
+                <span>Chi tiêu thêm <strong>@VnFormat.Money(Model.AmountToNextTier)</strong> để lên hạng <strong>@Model.NextTierName</strong>.</span>
+            }
+            else
+            {
+                <span><i class="bi bi-trophy-fill text-warning me-1"></i>Chúc mừng! Bạn đang ở hạng cao nhất.</span>
+            }
+        </div>
+        <div class="form-text mt-1">Hạng được xét theo tổng chi tiêu và được giữ vĩnh viễn. Điểm thưởng reset về 0 nếu 180 ngày không phát sinh hóa đơn.</div>
+    </div>
+</div>
+
+<!-- Lịch sử điểm -->
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>Lịch sử biến động điểm</span>
+        <a asp-action="Promotions" class="btn-outline-bms"><i class="bi bi-gift"></i> Đổi điểm</a>
+    </div>
+    @if (!Model.Transactions.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            Chưa có biến động điểm nào. Điểm sẽ được cộng khi bạn thanh toán hóa đơn.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr><th>Thời gian</th><th>Loại</th><th class="text-end">Điểm</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in Model.Transactions)
+                    {
+                        <tr>
+                            <td>@VnFormat.LocalDateTime(t.CreatedAt)</td>
+                            <td>
+                                @if (t.TransactionType == "Earn")
+                                { <span class="badge-active">Tích điểm</span> }
+                                else if (t.TransactionType == "Redeem")
+                                { <span style="background:#dbeafe;color:#1d4ed8;padding:2px 10px;border-radius:20px;font-size:0.75rem;font-weight:600">Đổi điểm</span> }
+                                else if (t.TransactionType == "Expire")
+                                { <span class="badge-inactive">Hết hạn</span> }
+                                else
+                                { <span>@t.TransactionType</span> }
+                            </td>
+                            <td class="text-end fw-bold @(t.Amount >= 0 ? "text-success" : "text-danger")">
+                                @(t.Amount >= 0 ? "+" : "")@VnFormat.Number(t.Amount)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="form-text p-3 pt-0">Hiển thị tối đa 20 giao dịch gần nhất.</div>
+    }
+</div>

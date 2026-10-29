@@ -1,0 +1,178 @@
+@model Bms.Web.Models.ReviewListAdminViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Đánh giá của khách hàng";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Stat Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="bi bi-star-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.AverageRating.ToString("0.0") <span style="font-size:1rem;color:#f59e0b">★</span></div>
+                <div class="stat-label">Điểm đánh giá trung bình</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-chat-heart-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalCount</div>
+                <div class="stat-label">Tổng số lượt đánh giá</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-emoji-smile-fill"></i></div>
+            <div>
+                <div class="stat-value">@(Model.StarCounts.GetValueOrDefault(5) + Model.StarCounts.GetValueOrDefault(4))</div>
+                <div class="stat-label">Hài lòng (4-5 sao)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-reply-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.Reviews.Count(r => !string.IsNullOrEmpty(r.AdminReply))</div>
+                <div class="stat-label">Đã gửi phản hồi</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bộ lọc số sao -->
+<div class="data-card mb-4">
+    <div class="p-3 d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <span class="text-muted" style="font-size:0.85rem;font-weight:600">Lọc theo số sao:</span>
+            <a asp-action="Index" class="btn-sm-icon @(Model.RatingFilter == null ? "active" : "")"
+               style="width:auto;padding:0 12px;@(Model.RatingFilter == null ? "background:#e94560;color:#fff;border-color:#e94560" : "")">
+                Tất cả (@Model.TotalCount)
+            </a>
+            @for (int s = 5; s >= 1; s--)
+            {
+                var isSelected = Model.RatingFilter == s;
+                <a asp-action="Index" asp-route-rating="@s" class="btn-sm-icon @(isSelected ? "active" : "")"
+                   style="width:auto;padding:0 12px;@(isSelected ? "background:#e94560;color:#fff;border-color:#e94560" : "")">
+                    @s ★ (@Model.StarCounts.GetValueOrDefault(s))
+                </a>
+            }
+        </div>
+        @if (Model.RatingFilter != null)
+        {
+            <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x"></i> Xóa lọc</a>
+        }
+    </div>
+</div>
+
+<!-- Danh sách đánh giá -->
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-chat-square-quote me-2"></i>Danh sách nhận xét & phản hồi (@Model.Reviews.Count)</span>
+    </div>
+
+    @if (!Model.Reviews.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-chat-left-dots fs-1 d-block mb-2"></i>
+            Chưa có đánh giá nào phù hợp với bộ lọc hiện tại.
+        </div>
+    }
+    else
+    {
+        <div class="p-3 d-flex flex-column gap-3">
+            @foreach (var item in Model.Reviews)
+            {
+                <div class="p-3 border rounded-3 bg-white" style="border-color:#e2e8f0 !important">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                        <div>
+                            <strong>@item.CustomerName</strong>
+                            @if (!string.IsNullOrEmpty(item.CustomerPhone))
+                            {
+                                <span class="text-muted" style="font-size:0.8rem">(@item.CustomerPhone)</span>
+                            }
+                            <span class="badge" style="background:#f1f5f9;color:#64748b;font-weight:normal;margin-left:6px">Phiên #@item.SessionId</span>
+                        </div>
+                        <div class="text-muted" style="font-size:0.8rem">
+                            <i class="bi bi-clock me-1"></i>@VnFormat.LocalDateTime(item.CreatedAtUtc)
+                        </div>
+                    </div>
+
+                    <!-- Stars -->
+                    <div class="mb-2">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            if (i <= item.Rating)
+                            {
+                                <i class="bi bi-star-fill text-warning" style="font-size:1.1rem"></i>
+                            }
+                            else
+                            {
+                                <i class="bi bi-star text-muted" style="font-size:1.1rem;opacity:0.4"></i>
+                            }
+                        }
+                        <span class="ms-1 fw-bold text-warning" style="font-size:0.9rem">@item.Rating/5</span>
+                    </div>
+
+                    <!-- Comment -->
+                    <div class="p-2 mb-3 rounded" style="background:#f8fafc;font-size:0.9rem;border-left:3px solid #e94560">
+                        @(string.IsNullOrWhiteSpace(item.Comment) ? "Khách hàng không để lại bình luận chi tiết." : item.Comment)
+                    </div>
+
+                    <!-- Admin Reply Box -->
+                    @if (!string.IsNullOrEmpty(item.AdminReply))
+                    {
+                        <div class="p-3 rounded-3" style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2)">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="fw-bold" style="font-size:0.85rem;color:#2563eb">
+                                    <i class="bi bi-arrow-return-right me-1"></i>Phản hồi của Ban Quản trị:
+                                </span>
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size:0.75rem"
+                                        onclick="document.getElementById('replyForm-@item.Id').classList.toggle('d-none')">
+                                    <i class="bi bi-pencil-square"></i> Chỉnh sửa
+                                </button>
+                            </div>
+                            <div style="font-size:0.875rem;color:#1e293b">@item.AdminReply</div>
+                        </div>
+                    }
+
+                    <!-- Reply Form -->
+                    <div id="replyForm-@item.Id" class="@(!string.IsNullOrEmpty(item.AdminReply) ? "d-none" : "") mt-2">
+                        <form asp-action="Reply" method="post" class="d-flex flex-column gap-2">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="ReviewId" value="@item.Id" />
+                            <input type="hidden" name="RatingFilter" value="@Model.RatingFilter" />
+                            <div class="d-flex gap-2">
+                                <textarea name="Reply" class="form-control" rows="2" placeholder="Nhập câu trả lời gửi đến khách hàng..." required maxlength="1000" style="font-size:0.85rem">@item.AdminReply</textarea>
+                                <button type="submit" class="btn-primary-bms align-self-start text-nowrap" style="padding:0.5rem 1rem">
+                                    <i class="bi bi-send"></i> Lưu & gửi thông báo
+                                </button>
+                            </div>
+                            <div class="form-text" style="font-size:0.75rem">Khi bấm lưu, khách hàng sẽ nhận được 1 thông báo trong hòm thư của họ.</div>
+                        </form>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

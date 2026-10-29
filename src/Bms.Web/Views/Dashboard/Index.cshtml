@@ -1,0 +1,266 @@
+@model Bms.Web.Models.DashboardViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Tổng quan hoạt động";
+    Layout = "_AdminLayout";
+}
+
+@if (Model.IsRevenueMocked || Model.IsPlaytimeMocked)
+{
+    <div class="alert alert-warning alert-dismissible fade show mb-4 rounded-3 d-flex align-items-center justify-content-between flex-wrap gap-2" role="alert" style="font-size:0.85rem">
+        <div>
+            <i class="bi bi-info-circle-fill me-2"></i>
+            <strong>Chế độ Demo (Mock Data):</strong>
+            Chỉ số Doanh thu và Giờ chơi đang sử dụng dữ liệu mô phỏng do cơ sở dữ liệu chưa có hóa đơn thanh toán thực tế từ thành viên phụ trách.
+            Chỉ số Khách hàng, Hạng thành viên và Đánh giá được đọc từ dữ liệu thật.
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- 4 Stat Cards Tổng quan -->
+<div class="row g-3 mb-4">
+    <!-- Doanh thu tháng -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-cash-stack"></i></div>
+            <div class="overflow-hidden">
+                <div class="stat-value text-truncate">@VnFormat.Money(Model.MonthlyRevenue)</div>
+                <div class="stat-label">
+                    Doanh thu tháng này
+                    @if (Model.IsRevenueMocked)
+                    {
+                        <span class="badge bg-light text-muted ms-1" style="font-size:0.65rem">Mô phỏng</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tổng giờ chơi -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalPlaytimeHours.ToString("N1") <span style="font-size:0.9rem;font-weight:normal">giờ</span></div>
+                <div class="stat-label">
+                    Tổng thời gian chơi
+                    @if (Model.IsPlaytimeMocked)
+                    {
+                        <span class="badge bg-light text-muted ms-1" style="font-size:0.65rem">Mô phỏng</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Khách hàng thành viên -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-people-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalCustomerMembers</div>
+                <div class="stat-label">Khách hàng thành viên</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Đánh giá trung bình -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="bi bi-star-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.AverageRating.ToString("0.0") <span style="font-size:1rem;color:#f59e0b">★</span></div>
+                <div class="stat-label">Đánh giá trung bình (@Model.TotalReviews lượt)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Biểu đồ phân tích (Chart.js) -->
+<div class="row g-4 mb-4">
+    <!-- Biểu đồ 1: Doanh thu 7 ngày gần nhất -->
+    <div class="col-lg-8">
+        <div class="data-card h-100">
+            <div class="data-card-header d-flex justify-content-between align-items-center">
+                <span class="data-card-title">
+                    <i class="bi bi-bar-chart-line-fill me-2 text-danger"></i>Doanh thu 7 ngày gần nhất
+                </span>
+                <span class="text-muted" style="font-size:0.75rem">Đơn vị: VNĐ</span>
+            </div>
+            <div class="p-3">
+                <div style="position:relative;height:320px;width:100%">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Biểu đồ 2: Tỷ lệ phân bổ hạng thành viên -->
+    <div class="col-lg-4">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="data-card-title">
+                    <i class="bi bi-pie-chart-fill me-2 text-warning"></i>Phân bổ Hạng thành viên
+                </span>
+            </div>
+            <div class="p-3">
+                <div style="position:relative;height:240px;width:100%">
+                    <canvas id="tierChart"></canvas>
+                </div>
+
+                <!-- Chú thích chi tiết -->
+                <div class="mt-3 pt-2 border-top d-flex flex-column gap-2">
+                    @foreach (var t in Model.TierDistribution)
+                    {
+                        var pct = Model.TotalCustomerMembers > 0
+                            ? Math.Round((double)t.Count / Model.TotalCustomerMembers * 100, 1)
+                            : 0;
+                        <div class="d-flex justify-content-between align-items-center" style="font-size:0.85rem">
+                            <div class="d-flex align-items-center gap-2">
+                                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:@t.ColorHex"></span>
+                                <strong>@t.TierName</strong>
+                            </div>
+                            <div>
+                                <span class="fw-semibold">@t.Count</span> khách
+                                <span class="text-muted" style="font-size:0.75rem">(@pct%)</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lối tắt quản trị nhanh -->
+<div class="data-card p-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-lightning-charge-fill text-warning fs-5"></i>
+            <div>
+                <strong>Lối tắt tác vụ TV2:</strong>
+                <span class="text-muted" style="font-size:0.85rem">Truy cập nhanh các màn hình quản trị nghiệp vụ</span>
+            </div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a asp-controller="CustomerManagement" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
+                <i class="bi bi-person-vcard"></i> Quản lý khách hàng
+            </a>
+            <a asp-controller="TierConfig" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
+                <i class="bi bi-award"></i> Cấu hình hạng
+            </a>
+            <a asp-controller="Review" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
+                <i class="bi bi-star-half"></i> Đánh giá khách hàng
+            </a>
+            <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-primary-bms" style="font-size:0.8rem">
+                <i class="bi bi-cpu"></i> Công cụ Giả lập Loyalty
+            </a>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script>
+        // ── 1. Biểu đồ Doanh thu 7 ngày (Line / Bar) ──
+        const revenueLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Last7DaysRevenue.Select(x => x.DateLabel)));
+        const revenueValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Last7DaysRevenue.Select(x => x.Amount)));
+
+        const ctxRev = document.getElementById('revenueChart').getContext('2d');
+        const gradient = ctxRev.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, 'rgba(233, 69, 96, 0.35)');
+        gradient.addColorStop(1, 'rgba(233, 69, 96, 0.02)');
+
+        new Chart(ctxRev, {
+            type: 'line',
+            data: {
+                labels: revenueLabels,
+                datasets: [{
+                    label: 'Doanh thu (VNĐ)',
+                    data: revenueValues,
+                    borderColor: '#e94560',
+                    borderWidth: 3,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.35,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#e94560',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(context.raw);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 12 } }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.05)' },
+                        ticks: {
+                            callback: function(value) {
+                                if (value >= 1000000) return (value / 1000000) + ' tr';
+                                if (value >= 1000) return (value / 1000) + ' k';
+                                return value;
+                            },
+                            font: { size: 11 }
+                        }
+                    }
+                }
+            }
+        });
+
+        // ── 2. Biểu đồ Phân bổ Hạng (Doughnut) ──
+        const tierLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TierDistribution.Select(x => x.TierName)));
+        const tierData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TierDistribution.Select(x => x.Count)));
+        const tierColors = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TierDistribution.Select(x => x.ColorHex)));
+
+        const ctxTier = document.getElementById('tierChart').getContext('2d');
+        new Chart(ctxTier, {
+            type: 'doughnut',
+            data: {
+                labels: tierLabels,
+                datasets: [{
+                    data: tierData,
+                    backgroundColor: tierColors,
+                    borderWidth: 2,
+                    borderColor: '#fff',
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 12, font: { size: 12 } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return ` ${context.label}: ${context.raw} khách`;
+                            }
+                        }
+                    }
+                },
+                cutout: '65%'
+            }
+        });
+    </script>
+}
