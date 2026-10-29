@@ -81,6 +81,24 @@ app.MapControllerRoute(
 
 #endregion
 
+#region Tu nang cap schema con thieu (script 08)
+using (var upgradeScope = app.Services.CreateScope())
+{
+    var upgradeLogger = upgradeScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        await SchemaUpgrader.ApplyAsync(
+            upgradeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), upgradeLogger);
+    }
+    catch (Exception ex)
+    {
+        upgradeLogger.LogError(ex,
+            "Không tự nâng cấp được schema. Hãy chạy tay BMS_Database_Starter/08_AddWorkShiftReconciliation.sql.");
+    }
+}
+
+#endregion
+
 #region Mat khau admin demo chi trong Development
 // Đặt mật khẩu admin.demo chỉ trong môi trường Development
 if (app.Environment.IsDevelopment())
