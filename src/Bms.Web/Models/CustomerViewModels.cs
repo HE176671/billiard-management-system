@@ -31,6 +31,7 @@ public class TierOptionViewModel
 {
     public int    Id       { get; set; }
     public string TierName { get; set; } = "";
+    public string Name     { get => TierName; set => TierName = value; }
 }
 
 /// <summary>Admin sửa thông tin liên hệ của khách. Điểm/hạng do TV2 quản lý nên chỉ hiển thị.</summary>

@@ -4,10 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-<<<<<<< HEAD
 using Bms.Web.Services;
-=======
->>>>>>> origin/Hung
 
 namespace Bms.Web.Controllers;
 
@@ -19,12 +16,8 @@ public class AccountController : Controller
 
     public AccountController(
         SignInManager<ApplicationUser> signInManager,
-<<<<<<< HEAD
         UserManager<ApplicationUser> userManager,
         ApplicationDbContext context)
-=======
-        UserManager<ApplicationUser> userManager, ApplicationDbContext context)
->>>>>>> origin/Hung
     {
         _signInManager = signInManager;
         _userManager = userManager;

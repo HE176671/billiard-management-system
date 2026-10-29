@@ -38,21 +38,7 @@ public class CustomerManagementViewModel
     public CustomerFormViewModel? Form { get; set; }
 }
 
-public class TierOptionViewModel
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-}
 
-public class CustomerRowViewModel
-{
-    public string Id { get; set; } = string.Empty;
-    public string FullName { get; set; } = string.Empty;
-    public string? PhoneNumber { get; set; }
-    public string? TierName { get; set; }
-    public int RewardPoints { get; set; }
-    public bool IsActive { get; set; }
-}
 
 public class CustomerFormViewModel
 {
