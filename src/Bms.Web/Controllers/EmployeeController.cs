@@ -98,9 +98,8 @@ public class EmployeeController : Controller
     {
         if (!ModelState.IsValid) return View(model);
 
-        string empCode = string.IsNullOrWhiteSpace(model.EmployeeCode)
-            ? await GenerateNextEmployeeCodeAsync()
-            : model.EmployeeCode.Trim().ToUpper();
+        // Mã do hệ thống cấp (ô nhập là readonly), không tin giá trị gửi lên từ form.
+        string empCode = await GenerateNextEmployeeCodeAsync();
 
         await ValidateUniqueAsync(model.PhoneNumber, empCode, excludeUserId: null,
             nameof(model.PhoneNumber), nameof(model.EmployeeCode));
@@ -110,7 +109,7 @@ public class EmployeeController : Controller
         {
             UserName     = model.UserName.Trim(),
             Email        = model.Email.Trim(),
-            FullName     = model.FullName.Trim(),
+            FullName     = ValidationRules.CollapseSpaces(model.FullName),
             PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim(),
             EmployeeCode = empCode,
             HireDate     = model.HireDate,
@@ -182,9 +181,10 @@ public class EmployeeController : Controller
         var user = await GetStaffOrNull(model.Id);
         if (user == null) return NotFound();
 
-        var newCode = string.IsNullOrWhiteSpace(model.EmployeeCode)
+        // Mã nhân viên không sửa được trên form; chỉ cấp mới nếu tài khoản cũ còn thiếu.
+        var newCode = string.IsNullOrWhiteSpace(user.EmployeeCode)
             ? await GenerateNextEmployeeCodeAsync()
-            : model.EmployeeCode.Trim().ToUpper();
+            : user.EmployeeCode;
         await ValidateUniqueAsync(model.PhoneNumber, newCode, user.Id,
             nameof(model.PhoneNumber), nameof(model.EmployeeCode));
         if (!ModelState.IsValid)
@@ -194,7 +194,7 @@ public class EmployeeController : Controller
             return View(model);
         }
 
-        user.FullName     = model.FullName.Trim();
+        user.FullName     = ValidationRules.CollapseSpaces(model.FullName);
         user.PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
         user.EmployeeCode = newCode;
         user.HireDate     = model.HireDate;
@@ -341,6 +341,9 @@ public class EmployeeController : Controller
         "PasswordRequiresNonAlphanumeric" => "Mật khẩu phải có ít nhất 1 ký tự đặc biệt (vd: @, #, !).",
         "PasswordRequiresDigit"           => "Mật khẩu phải có ít nhất 1 chữ số.",
         "PasswordRequiresUpper"           => "Mật khẩu phải có ít nhất 1 chữ hoa.",
+        "PasswordRequiresLower"           => "Mật khẩu phải có ít nhất 1 chữ thường.",
+        "InvalidUserName"    => "Tên đăng nhập chứa ký tự không hợp lệ.",
+        "InvalidEmail"       => "Email không hợp lệ.",
         _ => err.Description
     };
 
