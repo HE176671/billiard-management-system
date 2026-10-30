@@ -100,7 +100,7 @@ using (var upgradeScope = app.Services.CreateScope())
 #endregion
 
 #region Mat khau admin demo chi trong Development
-// Đặt mật khẩu admin.demo chỉ trong môi trường Development
+// Development: đặt mật khẩu tài khoản mẫu và nạp dữ liệu ca mẫu
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
@@ -108,6 +108,15 @@ if (app.Environment.IsDevelopment())
     var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DbInitializer.SeedDevelopmentPasswordsAsync(userManager, config, logger);
+    try
+    {
+        await DbInitializer.SeedShiftDemoDataAsync(
+            scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), app.Environment.ContentRootPath, logger);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Không nạp được dữ liệu ca mẫu. Có thể chạy tay BMS_Database_Starter/09_AddShiftDemoData.sql.");
+    }
 }
 
 #endregion
