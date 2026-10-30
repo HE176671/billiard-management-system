@@ -21,9 +21,9 @@ public static class ValidationRules
     public const string VnPhone = @"^(0|\+84)(3|5|7|8|9)[0-9]{8}$";
     public const string VnPhoneMessage = "Số điện thoại không hợp lệ (vd: 0901234567).";
 
-    /// <summary>Khớp cấu hình Identity: ≥ 8 ký tự, có chữ thường, chữ hoa, số và ký tự đặc biệt.</summary>
-    public const string Password = @"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,100}$";
-    public const string PasswordMessage = "Mật khẩu ≥ 8 ký tự, có chữ thường, chữ hoa, số và ký tự đặc biệt.";
+    /// <summary>Khớp cấu hình Identity (Program.cs): tối thiểu 6 ký tự, không bắt buộc loại ký tự.</summary>
+    public const string Password = @"^.{6,100}$";
+    public const string PasswordMessage = "Mật khẩu tối thiểu 6 ký tự.";
 
     /// <summary>Email phải có tên miền dạng abc.xyz.</summary>
     public const string Email = @"^[^@\s]+@[^@\s]+\.[^@\s]+$";

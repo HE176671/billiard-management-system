@@ -7,8 +7,7 @@ namespace Bms.Web.Data;
 
 /// <summary>
 /// Chỉ chạy trong môi trường Development.
-/// - Đặt mật khẩu cho tài khoản mẫu (admin.demo, staff.demo01) nếu PasswordHash còn NULL.
-///   Mật khẩu lấy từ cấu hình DevSeed:AdminPassword — không viết cứng trong source code.
+/// - Mở khóa và đặt mật khẩu demo (mặc định 123456) cho admin.demo, staff.demo01 mỗi lần chạy.
 /// - Nạp dữ liệu ca làm mẫu (09_AddShiftDemoData.sql) nếu database chưa có.
 /// </summary>
 public static class DbInitializer
@@ -20,14 +19,9 @@ public static class DbInitializer
         IConfiguration config,
         ILogger logger)
     {
-        var password = config["DevSeed:AdminPassword"];
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            logger.LogWarning(
-                "DevSeed:AdminPassword chưa được cấu hình. " +
-                "Chạy: dotnet user-secrets set \"DevSeed:AdminPassword\" \"<mật_khẩu>\"");
-            return;
-        }
+        // Mật khẩu demo dùng chung; đổi bằng user-secrets "DevSeed:DemoPassword" nếu muốn.
+        var password = config["DevSeed:DemoPassword"];
+        if (string.IsNullOrWhiteSpace(password)) password = "123456";
 
         foreach (var userName in DemoAccounts)
         {
@@ -37,15 +31,18 @@ public static class DbInitializer
                 logger.LogWarning("Không tìm thấy {UserName} — bỏ qua.", userName);
                 continue;
             }
-            if (await userManager.HasPasswordAsync(user))
-            {
-                logger.LogInformation("{UserName} đã có mật khẩu, bỏ qua.", userName);
-                continue;
-            }
 
+            // Mở khóa: tài khoản bị khóa tay (IsActive) hoặc bị khóa do nhập sai mật khẩu nhiều lần.
+            user.IsActive = true;
+            await userManager.SetLockoutEndDateAsync(user, null);
+            await userManager.ResetAccessFailedCountAsync(user);
+
+            // Đặt lại mật khẩu demo để buổi báo cáo luôn đăng nhập được.
+            if (await userManager.HasPasswordAsync(user))
+                await userManager.RemovePasswordAsync(user);
             var result = await userManager.AddPasswordAsync(user, password);
             if (result.Succeeded)
-                logger.LogInformation("Đã đặt mật khẩu cho {UserName} (giống DevSeed:AdminPassword).", userName);
+                logger.LogInformation("Đã mở khóa {UserName} và đặt mật khẩu demo.", userName);
             else
                 logger.LogError("Đặt mật khẩu {UserName} thất bại: {Errors}", userName,
                     string.Join("; ", result.Errors.Select(e => e.Description)));

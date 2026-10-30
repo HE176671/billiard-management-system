@@ -61,7 +61,7 @@ public class CreateEmployeeViewModel
     public DateOnly? HireDate { get; set; }
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu.")]
-    [StringLength(100, MinimumLength = 8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự.")]
+    [StringLength(100, MinimumLength = 6, ErrorMessage = "Mật khẩu tối thiểu 6 ký tự.")]
     [RegularExpression(ValidationRules.Password, ErrorMessage = ValidationRules.PasswordMessage)]
     [DataType(DataType.Password)]
     [Display(Name = "Mật khẩu")]

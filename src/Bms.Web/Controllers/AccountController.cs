@@ -170,7 +170,7 @@ public class AccountController : Controller
     {
         "DuplicateUserName"  => "Ten dang nhap da ton tai.",
         "DuplicateEmail"     => "Email da duoc dung boi tai khoan khac.",
-        "PasswordTooShort"   => "Mat khau toi thieu 8 ky tu.",
+        "PasswordTooShort"   => "Mat khau toi thieu 6 ky tu.",
         "PasswordRequiresNonAlphanumeric" => "Mat khau phai co it nhat 1 ky tu dac biet (vd: @, #, !).",
         "PasswordRequiresDigit"           => "Mat khau phai co it nhat 1 chu so.",
         "PasswordRequiresUpper"           => "Mat khau phai co it nhat 1 chu hoa.",

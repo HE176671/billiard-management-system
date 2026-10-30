@@ -332,12 +332,12 @@ public class EmployeeController : Controller
         return await _userManager.IsInRoleAsync(user, "Staff") ? user : null;
     }
 
-    /// <summary>Dịch lỗi Identity sang tiếng Việt dễ hiểu.</summary>
+
     private static string TranslateIdentityError(IdentityError err) => err.Code switch
     {
         "DuplicateUserName"  => "Tên đăng nhập đã tồn tại.",
         "DuplicateEmail"     => "Email đã được dùng bởi tài khoản khác.",
-        "PasswordTooShort"   => "Mật khẩu tối thiểu 8 ký tự.",
+        "PasswordTooShort"   => "Mật khẩu tối thiểu 6 ký tự.",
         "PasswordRequiresNonAlphanumeric" => "Mật khẩu phải có ít nhất 1 ký tự đặc biệt (vd: @, #, !).",
         "PasswordRequiresDigit"           => "Mật khẩu phải có ít nhất 1 chữ số.",
         "PasswordRequiresUpper"           => "Mật khẩu phải có ít nhất 1 chữ hoa.",

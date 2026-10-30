@@ -19,7 +19,12 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     options.Stores.SchemaVersion = IdentitySchemaVersions.Version1;
     options.Stores.MaxLengthForKeys = 128;
     options.User.RequireUniqueEmail = true;
-    options.Password.RequiredLength = 8;
+    // Yêu cầu của nhóm: mật khẩu chỉ cần tối thiểu 6 ký tự (vd: 123456).
+    options.Password.RequiredLength = 6;
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
     // Demo local chưa có email sender

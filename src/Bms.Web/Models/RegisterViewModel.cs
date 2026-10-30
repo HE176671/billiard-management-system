@@ -25,7 +25,7 @@ public class RegisterViewModel
     public string? PhoneNumber { get; set; }
 
     [Required(ErrorMessage = "Vui long nhap mat khau.")]
-    [StringLength(100, MinimumLength = 8)]
+    [StringLength(100, MinimumLength = 6, ErrorMessage = "Mat khau toi thieu 6 ky tu.")]
     [DataType(DataType.Password)]
     [Display(Name = "Mat khau")]
     public string Password { get; set; } = string.Empty;
