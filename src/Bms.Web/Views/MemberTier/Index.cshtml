@@ -1,0 +1,74 @@
+@model Bms.Web.Models.MemberTierListViewModel
+@{
+    ViewData["Title"] = "Hạng thành viên";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3">
+        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3">
+        <i class="bi bi-exclamation-circle me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-award me-1"></i> Hạng thành viên</span>
+        <a asp-action="Create" class="btn-primary-bms">
+            <i class="bi bi-plus-lg"></i> Thêm hạng
+        </a>
+    </div>
+    <table class="table table-hover mb-0">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Tên hạng</th>
+                <th>Điểm tối thiểu</th>
+                <th>Giảm giá</th>
+                <th>Số khách</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var t in Model.Tiers)
+            {
+                <tr>
+                    <td>@t.Id</td>
+                    <td><strong>@t.TierName</strong></td>
+                    <td>@t.MinPoints.ToString("N0") điểm</td>
+                    <td>@t.DiscountPercent%</td>
+                    <td>@t.UserCount khách</td>
+                    <td class="text-end">
+                        <a asp-action="Edit" asp-route-id="@t.Id" class="btn-sm-icon" title="Sửa">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <form asp-action="Delete" asp-route-id="@t.Id" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn-sm-icon danger" title="Xóa"
+                                    onclick="return confirm('Xóa hạng thành viên này?')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            @if (!Model.Tiers.Any())
+            {
+                <tr><td colspan="6" class="text-center py-4 text-muted">Chưa có hạng nào.</td></tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-3" style="font-size:0.82rem;color:#64748b">
+    <i class="bi bi-info-circle me-1"></i>
+    Ngưỡng điểm dùng để cấu hình điều kiện đạt hạng. Quy trình cộng điểm và nâng hạng sau thanh toán thuộc module thanh toán.
+</div>

@@ -1,5 +1,7 @@
 # Bàn giao cho AI tiếp theo — dự án Billiard Management System
 
+> Phân công hiện hành cập nhật 20/10/2026 nằm tại [Phân công workflow cho 5 thành viên](PHAN_CONG_WORKFLOW_5_THANH_VIEN.md). Đặt bàn, check-in và mở bàn cùng workflow TV1; TV2 nhận thành viên/chăm sóc khách/báo cáo. Các phân công và trạng thái bên dưới là lịch sử ngày 28/09/2026, không dùng làm phân công mới.
+
 Ngày bàn giao: 28/09/2026. File này đủ để hiểu cuộc trao đổi trước, nhưng khi viết code phải đọc các file thật trong repo. Không suy đoán nội dung file chưa được cung cấp.
 
 ## Lời nhắn của người dùng

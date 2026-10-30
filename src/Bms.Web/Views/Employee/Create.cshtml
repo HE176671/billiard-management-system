@@ -51,13 +51,13 @@
             </div>
             <div class="col-md-6">
                 <label asp-for="HireDate" class="form-label"></label>
-                <input asp-for="HireDate" type="date" class="form-control" />
+                <input asp-for="HireDate" type="date" class="form-control" min="2000-01-01" max="@VnTime.Today.ToString("yyyy-MM-dd")" />
                 <span asp-validation-for="HireDate" class="field-error"></span>
             </div>
             <div class="col-md-6">
                 <label asp-for="Password" class="form-label"></label>
                 <input asp-for="Password" class="form-control" placeholder="••••••••" />
-                <div class="form-text">Tối thiểu 8 ký tự, gồm chữ hoa, số và ký tự đặc biệt.</div>
+                <div class="form-text">Tối thiểu 6 ký tự.</div>
                 <span asp-validation-for="Password" class="field-error"></span>
             </div>
             <div class="col-md-6">

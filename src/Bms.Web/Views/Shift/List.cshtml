@@ -1,0 +1,64 @@
+@model Bms.Web.Models.ShiftListViewModel
+@{
+    ViewData["Title"] = Model.IsManage ? "Quản lý ca làm" : "Lịch sử ca của tôi";
+    Layout = "_AdminLayout";
+    var action = Model.IsManage ? "Manage" : "History";
+}
+<partial name="_Alerts" />
+<div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div class="stat-icon blue"><i class="bi bi-calendar-week"></i></div>
+        <div><div class="stat-value">@Model.TotalCount</div><div class="stat-label">Số ca · @Model.ActiveCount đang mở</div></div></div></div>
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
+        <div><div class="stat-value">@Model.TotalCashCollected.ToString("N0") ₫</div><div class="stat-label">Tiền mặt thu trong các ca</div></div></div></div>
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div class="stat-icon red"><i class="bi bi-exclamation-diamond"></i></div>
+        <div><div class="stat-value">@Model.TotalDifference.ToString("N0") ₫</div><div class="stat-label">Tổng chênh lệch (ca đã đóng)</div></div></div></div>
+</div>
+
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>@ViewData["Title"]</span>
+        <form method="get" asp-action="@action" class="d-flex gap-2 flex-wrap align-items-center">
+            <input type="date" name="from" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" style="width:150px;font-size:0.8rem" />
+            <input type="date" name="to" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" style="width:150px;font-size:0.8rem" />
+            @if (Model.IsManage)
+            {
+                <select name="staffId" class="form-select" style="width:190px;font-size:0.8rem">
+                    <option value="">Tất cả nhân viên</option>
+                    @foreach (var o in Model.StaffOptions)
+                    {
+                        <option value="@o.Id" selected="@(o.Id == Model.StaffId)">@o.Name</option>
+                    }
+                </select>
+                <select name="status" class="form-select" style="width:130px;font-size:0.8rem">
+                    <option value="" selected="@(Model.Status == null)">Mọi trạng thái</option>
+                    <option value="Active" selected="@(Model.Status == "Active")">Đang mở</option>
+                    <option value="Closed" selected="@(Model.Status == "Closed")">Đã đóng</option>
+                </select>
+                <label class="d-flex align-items-center gap-1" style="font-size:0.8rem">
+                    <input type="checkbox" name="onlyDifference" value="true" checked="@Model.OnlyDifference" /> Chỉ ca lệch tiền
+                </label>
+            }
+            <button type="submit" class="btn-primary-bms"><i class="bi bi-search"></i></button>
+        </form>
+    </div>
+    <partial name="_ShiftTable" model="Model.Shifts" view-data='new ViewDataDictionary(ViewData) { ["ShowStaff"] = Model.IsManage }' />
+    @if (Model.TotalPages > 1)
+    {
+        <nav class="p-3"><ul class="pagination pagination-sm mb-0">
+            @for (var p = 1; p <= Model.TotalPages; p++)
+            {
+                <li class="page-item @(p == Model.Page ? "active" : "")">
+                    <a class="page-link" asp-action="@action" asp-route-page="@p" asp-route-from="@Model.From.ToString("yyyy-MM-dd")"
+                       asp-route-to="@Model.To.ToString("yyyy-MM-dd")" asp-route-staffId="@Model.StaffId"
+                       asp-route-status="@Model.Status" asp-route-onlyDifference="@Model.OnlyDifference">@p</a>
+                </li>
+            }
+        </ul></nav>
+    }
+</div>
+@if (!Model.IsManage)
+{
+    <p class="mt-3" style="font-size:0.8rem;color:#64748b">Ca đang mở luôn được hiển thị dù bắt đầu trước khoảng ngày đã chọn.</p>
+}

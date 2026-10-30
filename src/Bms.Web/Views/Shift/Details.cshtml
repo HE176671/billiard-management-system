@@ -1,0 +1,58 @@
+@model Bms.Web.Models.ShiftDetailsViewModel
+@{
+    var s = Model.Summary;
+    ViewData["Title"] = $"Chi tiết ca #{s.Shift.Id}";
+    Layout = "_AdminLayout";
+    var isAdmin = User.IsInRole("Admin");
+}
+<partial name="_Alerts" />
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <a asp-action="@(isAdmin ? "Manage" : "History")" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <h5 class="mb-0">Ca #@s.Shift.Id — @s.StaffName</h5>
+    @if (s.IsActive) { <span class="badge-active">Đang mở</span> } else { <span class="badge bg-secondary">Đã đóng</span> }
+    <span class="text-muted ms-2" style="font-size:0.85rem">
+        @s.Shift.StartTimeUtc.ToVn().ToString("HH:mm dd/MM/yyyy") → @(s.Shift.EndTimeUtc.ToVn()?.ToString("HH:mm dd/MM/yyyy") ?? "đang mở")
+    </span>
+</div>
+
+<partial name="_SummaryCards" model="s" />
+
+@if (!string.IsNullOrEmpty(s.Shift.Notes))
+{
+    <div class="mb-3 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.85rem">
+        <strong>Ghi chú:</strong> @s.Shift.Notes
+    </div>
+}
+
+@if (Model.CanClose)
+{
+    <div class="form-card mb-4">
+        <h6 class="mb-3" style="font-weight:600"><i class="bi bi-stop-circle me-2"></i>Đóng ca@(s.Shift.StaffId != User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ? " hộ nhân viên" : "")</h6>
+        <partial name="_CloseForm" model="Model.Close" view-data='new ViewDataDictionary(ViewData) { ["ExpectedCash"] = s.ExpectedCash }' />
+    </div>
+}
+
+<div class="data-card">
+    <div class="data-card-header"><span class="data-card-title"><i class="bi bi-receipt me-2"></i>Giao dịch gắn với ca (@Model.Payments.Count)</span></div>
+    @if (!Model.Payments.Any())
+    {
+        <div class="text-center py-4 text-muted">Chưa có giao dịch nào gắn với ca này.</div>
+    }
+    else
+    {
+        <div class="table-responsive"><table class="table">
+            <thead><tr><th>Mã GD</th><th>Hóa đơn</th><th>Phương thức</th><th class="text-end">Số tiền</th><th>Thời điểm</th><th>Tính vào két</th></tr></thead>
+            <tbody>
+            @foreach (var p in Model.Payments)
+            {
+                <tr>
+                    <td>#@p.Id</td><td>#@p.InvoiceId</td><td>@p.PaymentMethod</td>
+                    <td class="text-end">@p.AmountPaid.ToString("N0") ₫</td>
+                    <td style="font-size:0.82rem">@p.TimeUtc.ToVn().ToString("HH:mm:ss dd/MM/yyyy")</td>
+                    <td>@(p.PaymentMethod == "Cash" ? "Có" : "Không")</td>
+                </tr>
+            }
+            </tbody>
+        </table></div>
+    }
+</div>
