@@ -524,9 +524,8 @@
             if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
             if (elPlaytimeAmount) {
                 if (estAmount !== null && estAmount !== undefined) {
-                    const noteStr = Number(estAmount) === 0 ? ' (Miễn phí ≤ 2p đầu)' : '';
                     const timeStr = srvTime ? ` (cập nhật ${formatVnTimeWithSeconds(srvTime)})` : '';
-                    elPlaytimeAmount.textContent = `${formatVnCurrency(estAmount)}${noteStr}${timeStr}`;
+                    elPlaytimeAmount.textContent = `${formatVnCurrency(estAmount)}${timeStr}`;
                 } else {
                     elPlaytimeAmount.textContent = '--';
                 }
@@ -645,9 +644,8 @@
             if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tạm tính:';
             if (elPlaytimeAmount) {
                 if (estimatedAmount !== null && estimatedAmount !== undefined) {
-                    const noteStr = Number(estimatedAmount) === 0 ? ' (Miễn phí ≤ 2p đầu)' : '';
                     const timeStr = serverTime ? ` (cập nhật ${formatVnTimeWithSeconds(serverTime)})` : '';
-                    elPlaytimeAmount.textContent = `${formatVnCurrency(estimatedAmount)}${noteStr}${timeStr}`;
+                    elPlaytimeAmount.textContent = `${formatVnCurrency(estimatedAmount)}${timeStr}`;
                 } else {
                     elPlaytimeAmount.textContent = '--';
                 }
@@ -1143,22 +1141,14 @@
 
             const startAtUtc = data.startAtUtc ?? data.StartAtUtc;
             const serverNowUtc = data.serverNowUtc ?? data.ServerNowUtc;
-            const billedMinutes = data.billedMinutes ?? data.BilledMinutes ?? 0;
+            const billedMinutes = data.billedMinutes ?? data.BilledMinutes ?? 15;
             const estimatedAmount = data.estimatedAmount ?? data.EstimatedAmount ?? 0;
 
             if (elTable) elTable.textContent = data.tableCode ?? data.TableCode ?? currentSelectedTable.code;
             if (elStart) elStart.textContent = startAtUtc ? formatVnDateTime(startAtUtc) : '--';
             if (elEnd) elEnd.textContent = serverNowUtc ? formatVnDateTime(serverNowUtc) : '--';
-            if (elMinutes) {
-                elMinutes.textContent = Number(billedMinutes) === 0
-                    ? '0 phút (≤ 2p đầu — Trả bàn về Trống)'
-                    : `${billedMinutes} phút`;
-            }
-            if (elAmount) {
-                elAmount.textContent = Number(estimatedAmount) === 0
-                    ? '0 ₫ (Miễn phí mở nhầm / hủy sớm)'
-                    : formatVnCurrency(estimatedAmount);
-            }
+            if (elMinutes) elMinutes.textContent = `${billedMinutes} phút`;
+            if (elAmount) elAmount.textContent = formatVnCurrency(estimatedAmount);
             if (elTimestamp) elTimestamp.textContent = serverNowUtc ? `Tạm tính lúc ${formatVnTimeWithSeconds(serverNowUtc)}` : '';
 
             if (elLoading) elLoading.classList.add('d-none');
@@ -1202,12 +1192,8 @@
                 hideCloseForm(false);
                 const data = result.data ?? result.Data;
                 const playtimeAmount = data?.playtimeAmount ?? data?.PlaytimeAmount ?? 0;
-                const billedMinutes = data?.billedMinutes ?? data?.BilledMinutes ?? 0;
-                if (Number(playtimeAmount) === 0) {
-                    showToast(`Đã hủy mở bàn ${targetTableCode} (dưới 2 phút, miễn phí 0 ₫). Bàn đã về trạng thái Trống.`, 'success');
-                } else {
-                    showToast(`Đã đóng bàn ${targetTableCode} (${billedMinutes} phút). Tiền giờ: ${formatVnCurrency(playtimeAmount)}`, 'success');
-                }
+                const billedMinutes = data?.billedMinutes ?? data?.BilledMinutes ?? 15;
+                showToast(`Đã đóng bàn ${targetTableCode} (${billedMinutes} phút). Tiền giờ: ${formatVnCurrency(playtimeAmount)}`, 'success');
                 await reloadTableGrid();
                 await handleTableSelect(targetTableId);
             } else {

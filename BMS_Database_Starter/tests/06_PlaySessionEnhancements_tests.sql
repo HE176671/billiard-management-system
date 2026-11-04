@@ -95,7 +95,7 @@ BEGIN CATCH
     INSERT INTO @Results VALUES ('MinuteBilling', N'17 phút giá 120k/h = 34.000đ', 'FAIL', '34000.00', 'ERROR', ERROR_MESSAGE());
 END CATCH;
 
--- 1.3: Grace period (1 minute = 60s <= 120s) => 0 VND
+-- 1.3: 1 minute at 100.000/h => minimum 15 minutes = 25.000 VND right from the start
 BEGIN TRY
     BEGIN TRANSACTION;
     INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Type_M3', 100000);
@@ -110,15 +110,15 @@ BEGIN TRY
     VALUES (@S_3, @T_3, 100000, '2026-10-08T09:00:00', '2026-10-08T09:01:00');
 
     DECLARE @Amt_3 decimal(18,2) = dbo.fn_CalcPlaytimeAmount(@S_3, '2026-10-08T09:01:00');
-    IF @Amt_3 = 0
-        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút (<= 2p ân hạn) = 0đ', 'PASS', '0.00', CAST(@Amt_3 AS varchar(30)), N'Miễn phí mở nhầm / hủy sớm dưới 2 phút');
+    IF @Amt_3 = 25000
+        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tối thiểu 15p = 25.000đ', 'PASS', '25000.00', CAST(@Amt_3 AS varchar(30)), N'Tính tiền ngay từ phút đầu theo mức tối thiểu 15p');
     ELSE
-        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút (<= 2p ân hạn) = 0đ', 'FAIL', '0.00', CAST(@Amt_3 AS varchar(30)), N'Lệch giá trị');
+        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tối thiểu 15p = 25.000đ', 'FAIL', '25000.00', CAST(@Amt_3 AS varchar(30)), N'Lệch giá trị');
     ROLLBACK TRANSACTION;
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-    INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút (<= 2p ân hạn) = 0đ', 'FAIL', '0.00', 'ERROR', ERROR_MESSAGE());
+    INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tối thiểu 15p = 25.000đ', 'FAIL', '25000.00', 'ERROR', ERROR_MESSAGE());
 END CATCH;
 
 -- 1.4: 4 minutes at 100.000/h (> 2m and < 15m) => minimum 15 minutes = 25.000 VND

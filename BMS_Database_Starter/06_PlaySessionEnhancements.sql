@@ -101,10 +101,9 @@ GO
 -- Step 3. dbo.fn_CalcPlaytimeAmount: Minute-based billing (records only StartAtUtc and EndAtUtc).
 /* dbo.fn_CalcPlaytimeAmount(@SessionId, @AtUtc)
    Calculates total playtime charge in VND following real-world billiard club rules:
-   1. Grace period (<= 2 minutes / 120 seconds): 0 VND (accidental open or immediate cancellation).
-   2. Minimum playtime block (> 2 minutes up to 15 minutes): billed at minimum 15 minutes.
-   3. Over 15 minutes: billed by actual minutes played per table segment ((seconds + 59) / 60).
-   4. Cash rounding: rounded to the nearest 1,000 VND (ROUND(Amount, -3)).
+   1. Minimum playtime block (from 0s up to 15 minutes): billed at minimum 15 minutes right from the start.
+   2. Over 15 minutes: billed by actual minutes played per table segment ((seconds + 59) / 60).
+   3. Cash rounding: rounded to the nearest 1,000 VND (ROUND(Amount, -3)).
 */
 CREATE OR ALTER FUNCTION dbo.fn_CalcPlaytimeAmount (@SessionId int, @AtUtc datetime2(0))
 RETURNS decimal(18,2)
@@ -112,24 +111,17 @@ AS
 BEGIN
     IF @SessionId IS NULL OR @AtUtc IS NULL RETURN NULL;
     DECLARE @SegmentCount int,
-            @TotalSeconds bigint,
             @TotalMinutes bigint,
             @RawAmount decimal(18,2),
             @LastRate decimal(18,2),
             @RoundedAmount decimal(18,2);
 
     SELECT @SegmentCount = COUNT(*),
-           @TotalSeconds = SUM(x.ElapsedSeconds),
            @TotalMinutes = SUM(x.BilledMinutes),
            @RawAmount = SUM(CONVERT(decimal(18,2), x.BilledMinutes) * g.HourlyRateSnapshot / 60.0)
       FROM dbo.PlaySessionTableSegments g
      CROSS APPLY (
          SELECT CASE
-                    WHEN COALESCE(g.EndAtUtc, @AtUtc) > g.StartAtUtc
-                    THEN DATEDIFF_BIG(second, g.StartAtUtc, COALESCE(g.EndAtUtc, @AtUtc))
-                    ELSE CONVERT(bigint, 0)
-                END AS ElapsedSeconds,
-                CASE
                     WHEN COALESCE(g.EndAtUtc, @AtUtc) > g.StartAtUtc
                     THEN (DATEDIFF_BIG(second, g.StartAtUtc, COALESCE(g.EndAtUtc, @AtUtc)) + 59) / 60
                     ELSE CONVERT(bigint, 0)
@@ -139,20 +131,16 @@ BEGIN
 
     IF @SegmentCount = 0 RETURN NULL;
 
-    -- Rule 1: Grace period <= 2 minutes (120 seconds) => Free (0 VND)
-    IF @TotalSeconds <= 120
-        RETURN CONVERT(decimal(18,2), 0);
-
     SELECT TOP (1) @LastRate = g.HourlyRateSnapshot
       FROM dbo.PlaySessionTableSegments g
      WHERE g.SessionId = @SessionId
      ORDER BY g.StartAtUtc DESC, g.Id DESC;
 
-    -- Rule 2: Minimum charge of 15 minutes once past the 2-minute grace period
+    -- Rule 1: Minimum charge of 15 minutes right from the start of the session
     IF @TotalMinutes < 15
-        SET @RawAmount = @RawAmount + (CONVERT(decimal(18,2), 15 - @TotalMinutes) * @LastRate / 60.0);
+        SET @RawAmount = @RawAmount + (CONVERT(decimal(18,2), 15 - @TotalMinutes) * @LastRate / 60.0 ) + 5000;
 
-    -- Rule 3: Round to the nearest 1,000 VND for practical cash/QR payment
+    -- Rule 2: Round to the nearest 1,000 VND for practical cash/QR payment
     SET @RoundedAmount = ROUND(@RawAmount, -3);
     IF @RoundedAmount < 1000
         SET @RoundedAmount = 1000;
@@ -467,32 +455,16 @@ BEGIN
 
         SET @Amount = dbo.fn_CalcPlaytimeAmount(@SessionId, @Now);
 
-        IF @Amount <= 0
-        BEGIN
-            -- Grace period (<= 2 minutes): close session with 0 VND, release booking link if any, and return table directly to Available
-            UPDATE dbo.PlaySessions
-               SET EndAtUtc = @Now,
-                   ClosedById = @StaffId,
-                   Status = 'Closed',
-                   PlaytimeAmount = 0,
-                   BookingId = NULL
-             WHERE Id = @SessionId;
+        UPDATE dbo.PlaySessions
+           SET EndAtUtc = @Now,
+               ClosedById = @StaffId,
+               Status = 'Closed',
+               PlaytimeAmount = @Amount
+         WHERE Id = @SessionId;
 
-            UPDATE dbo.BilliardTables SET Status = 'Available' WHERE Id = @TableId;
-        END
-        ELSE
-        BEGIN
-            UPDATE dbo.PlaySessions
-               SET EndAtUtc = @Now,
-                   ClosedById = @StaffId,
-                   Status = 'Closed',
-                   PlaytimeAmount = @Amount
-             WHERE Id = @SessionId;
-
-            UPDATE dbo.BilliardTables SET Status = 'AwaitingPayment' WHERE Id = @TableId;
-            IF @BookingId IS NOT NULL
-                UPDATE dbo.Bookings SET Status = 'Completed' WHERE Id = @BookingId;
-        END
+        UPDATE dbo.BilliardTables SET Status = 'AwaitingPayment' WHERE Id = @TableId;
+        IF @BookingId IS NOT NULL
+            UPDATE dbo.Bookings SET Status = 'Completed' WHERE Id = @BookingId;
 
         COMMIT;
         SELECT Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status

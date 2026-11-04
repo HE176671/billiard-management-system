@@ -288,18 +288,12 @@ public class TableSessionService : ITableSessionService
 
     /// <summary>
     /// Tính số phút tính tiền theo quy tắc thực tế tại quán Bi-a:
-    /// - Dưới hoặc bằng 2 phút (120 giây): 0 phút (Miễn phí mở nhầm / khách đổi ý ngay).
-    /// - Trên 2 phút đến 15 phút: Tính mức tối thiểu 15 phút đầu.
+    /// - Từ giây đầu tiên đến 15 phút: Tính mức tối thiểu 15 phút đầu.
     /// - Trên 15 phút: Tính theo số phút thực tế (làm tròn lên từng phút).
     /// </summary>
     public static int CalculateBilledMinutes(double elapsedSeconds)
     {
-        if (elapsedSeconds <= 120)
-        {
-            return 0;
-        }
-
-        int actualMinutes = (int)Math.Ceiling(elapsedSeconds / 60.0);
+        int actualMinutes = Math.Max(1, (int)Math.Ceiling(elapsedSeconds / 60.0));
         return Math.Max(15, actualMinutes);
     }
 
