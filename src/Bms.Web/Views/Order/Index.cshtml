@@ -291,8 +291,8 @@ else
                                         <div class="d-flex align-items-center justify-content-between gap-2">
                                             <div class="qty-controls">
                                                 <button type="button" class="qty-btn btn-item-minus" data-id="@p.Id">−</button>
-                                                <input type="text" readonly class="qty-input item-qty-val" id="qty-input-@p.Id" value="1" />
-                                                <button type="button" class="qty-btn btn-item-plus" data-id="@p.Id" data-max="@Math.Min(20, p.StockQuantity)">+</button>
+                                                <input type="number" class="qty-input item-qty-val" id="qty-input-@p.Id" value="1" min="1" max="@Math.Min(20, p.StockQuantity)" data-id="@p.Id" data-stock="@p.StockQuantity" data-name="@p.Name" style="width:44px;text-align:center;" />
+                                                <button type="button" class="qty-btn btn-item-plus" data-id="@p.Id" data-max="@Math.Min(20, p.StockQuantity)" data-name="@p.Name">+</button>
                                             </div>
                                             <button type="button" class="btn-primary-bms btn-add-cart w-100 justify-content-center"
                                                     data-id="@p.Id"
@@ -552,15 +552,58 @@ else
         });
     });
 
+    // Toast alert helper
+    function showOrderToast(msg) {
+        let toast = document.getElementById('orderToastNotification');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'orderToastNotification';
+            toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#1e293b;color:#fff;padding:0.75rem 1.25rem;border-radius:10px;font-size:0.875rem;z-index:9999;box-shadow:0 8px 20px rgba(0,0,0,0.2);border-left:4px solid #e94560;transition:opacity 0.3s ease;';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = msg;
+        toast.style.display = 'block';
+        toast.style.opacity = '1';
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => { toast.style.display = 'none'; }, 300);
+        }, 3000);
+    }
+
+    // Manual input typing on quantity input
+    document.querySelectorAll('.item-qty-val').forEach(input => {
+        input.addEventListener('input', function () {
+            const stock = parseInt(this.getAttribute('data-stock')) || 20;
+            const name = this.getAttribute('data-name') || 'Món này';
+            let val = parseInt(this.value);
+
+            if (isNaN(val) || val < 1) {
+                val = 1;
+                this.value = 1;
+            }
+
+            if (val > stock) {
+                this.value = stock;
+                showOrderToast(`Món "${name}" trong kho chỉ còn tối đa ${stock} sản phẩm. Đã tự động điều chỉnh về ${stock}.`);
+            } else if (val > 20) {
+                this.value = 20;
+                showOrderToast(`Mỗi lần chỉ được đặt tối đa 20 sản phẩm. Đã điều chỉnh về 20.`);
+            }
+        });
+    });
+
     // Product card quantity buttons
     document.querySelectorAll('.btn-item-plus').forEach(btn => {
         btn.addEventListener('click', function () {
             const id = this.getAttribute('data-id');
             const max = parseInt(this.getAttribute('data-max')) || 20;
+            const name = this.getAttribute('data-name') || 'Món này';
             const input = document.getElementById('qty-input-' + id);
             let val = parseInt(input.value) || 1;
             if (val < Math.min(20, max)) {
                 input.value = val + 1;
+            } else {
+                showOrderToast(`Món "${name}" trong kho chỉ còn tối đa ${max} sản phẩm!`);
             }
         });
     });

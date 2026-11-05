@@ -226,17 +226,17 @@
         @if (User.IsInRole("Admin") || User.IsInRole("Staff"))
         {
             <div class="nav-section-label">Nghiệp vụ</div>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
-               href="#">
-                <i class="bi bi-grid-3x3"></i> Quản lý bàn
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Order" && ViewContext.RouteData.Values["action"]?.ToString() == "Counter" ? "active" : "")"
+               asp-controller="Order" asp-action="Counter">
+                <i class="bi bi-cart3"></i> Gọi đồ tại quầy
             </a>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
-               href="#">
-                <i class="bi bi-calendar-check"></i> Đặt bàn
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Order" && ViewContext.RouteData.Values["action"]?.ToString() == "Manage" ? "active" : "")"
+               asp-controller="Order" asp-action="Manage">
+                <i class="bi bi-bell"></i> Duyệt đơn bàn
             </a>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Menu" ? "active" : "")"
-               href="#">
-                <i class="bi bi-cup-straw"></i> Thực đơn
+            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Checkout" && ViewContext.RouteData.Values["action"]?.ToString() == "Invoices" ? "active" : "")"
+               asp-controller="Checkout" asp-action="Invoices">
+                <i class="bi bi-receipt"></i> Hóa đơn & Đối soát
             </a>
         }
 
@@ -250,14 +250,6 @@
             <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Order" ? "active" : "")"
                asp-controller="Order" asp-action="Index">
                 <i class="bi bi-cup-straw"></i> Gọi đồ ăn / uống
-            </a>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "PlayHistory" ? "active" : "")"
-               asp-controller="PlayHistory" asp-action="Index">
-                <i class="bi bi-clock-history"></i> Lịch sử chơi
-            </a>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Loyalty" ? "active" : "")"
-               asp-controller="Loyalty" asp-action="Index">
-                <i class="bi bi-trophy"></i> Điểm thưởng
             </a>
         }
     </div>

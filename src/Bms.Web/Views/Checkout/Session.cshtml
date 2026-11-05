@@ -1,0 +1,209 @@
+@model Bms.Web.Models.CheckoutSessionViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"Thanh toán - Bàn {Model.TableCode}";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-credit-card text-danger me-2"></i>Thanh toán bàn @Model.TableCode</h4>
+        <span class="text-muted small">Phiên chơi #@Model.SessionId | @Model.TableTypeName (Tầng @Model.FloorNumber)</span>
+    </div>
+    <div>
+        <a asp-controller="Order" asp-action="Counter" asp-route-sessionId="@Model.SessionId" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-cart3 me-1"></i> Thêm món F&B
+        </a>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show rounded-3" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <!-- Cột trái: Chi tiết chi phí -->
+    <div class="col-lg-8">
+        <!-- Card 1: Tiền giờ chơi -->
+        <div class="data-card p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0"><i class="bi bi-clock me-2 text-danger"></i>Tiền giờ chơi</h5>
+                <span class="badge @(Model.Status == "Active" ? "bg-warning text-dark" : "bg-success")">
+                    @(Model.Status == "Active" ? "Đang chơi (Tạm tính)" : "Đã chốt giờ")
+                </span>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-sm-4">
+                    <div class="p-3 bg-light rounded-3">
+                        <div class="text-muted small">Bắt đầu</div>
+                        <div class="fw-bold">@Model.StartAtUtc.AddHours(7).ToString("HH:mm dd/MM/yyyy")</div>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="p-3 bg-light rounded-3">
+                        <div class="text-muted small">Kết thúc @(Model.Status == "Active" ? "(Hiện tại)" : "")</div>
+                        <div class="fw-bold">@(Model.EndAtUtc?.AddHours(7).ToString("HH:mm dd/MM/yyyy") ?? DateTime.UtcNow.AddHours(7).ToString("HH:mm dd/MM/yyyy"))</div>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="p-3 bg-light rounded-3">
+                        <div class="text-muted small">Thời lượng chơi</div>
+                        <div class="fw-bold text-danger">@($"{(int)Model.Duration.TotalHours:D2}h {Model.Duration.Minutes:D2}m {Model.Duration.Seconds:D2}s")</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                <div>
+                    <span class="text-muted">Đơn giá:</span> <strong>@Model.HourlyRate.ToString("#,##0 ₫")/giờ</strong>
+                </div>
+                <div>
+                    <span class="text-muted">Thành tiền giờ:</span>
+                    <span class="fw-bold fs-5 text-dark ms-2">@Model.TotalPlaytime.ToString("#,##0 ₫")</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 2: Đồ ăn & Đồ uống -->
+        <div class="data-card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0"><i class="bi bi-cup-straw me-2 text-danger"></i>Đồ ăn / Uống (F&B)</h5>
+                <span class="text-muted small">@Model.FandBItems.Count món đã phục vụ</span>
+            </div>
+
+            @if (!Model.FandBItems.Any())
+            {
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-cup text-secondary fs-3 d-block mb-1"></i>
+                    Bàn này chưa dùng món F&B nào.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Tên món</th>
+                                <th class="text-center">Số lượng</th>
+                                <th class="text-end">Đơn giá</th>
+                                <th class="text-end">Thành tiền</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var it in Model.FandBItems)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@it.ProductName</td>
+                                    <td class="text-center"><span class="badge bg-light text-dark border">@it.Quantity</span></td>
+                                    <td class="text-end text-muted">@it.UnitPrice.ToString("#,##0 ₫")</td>
+                                    <td class="text-end fw-bold">@it.Subtotal.ToString("#,##0 ₫")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-2">
+                <span class="text-muted">Tổng tiền F&B:</span>
+                <span class="fw-bold fs-5 text-dark">@Model.TotalFandB.ToString("#,##0 ₫")</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Khách hàng, Ưu đãi & Nút thanh toán -->
+    <div class="col-lg-4">
+        <!-- Thông tin hội viên & Ưu đãi -->
+        <div class="data-card p-4 mb-4">
+            <h6 class="fw-bold mb-3"><i class="bi bi-person-badge text-danger me-2"></i>Hội viên & Ưu đãi</h6>
+            @if (string.IsNullOrEmpty(Model.CustomerId))
+            {
+                <div class="p-3 bg-light rounded-3 text-muted small text-center mb-3">
+                    <i class="bi bi-person-slash d-block fs-4 mb-1"></i>
+                    Khách vãng lai (không áp dụng giảm giá hội viên)
+                </div>
+            }
+            else
+            {
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">Khách hàng:</span>
+                        <span class="fw-bold">@Model.CustomerName</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.CustomerPhone))
+                    {
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="text-muted small">SĐT:</span>
+                            <span>@Model.CustomerPhone</span>
+                        </div>
+                    }
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Hạng thành viên:</span>
+                        <span class="badge bg-warning text-dark fw-bold">@Model.TierName (Giảm @Model.DiscountPercent%)</span>
+                    </div>
+                </div>
+            }
+
+            <div class="p-3 border rounded-3 bg-light">
+                <div class="d-flex justify-content-between small text-muted mb-1">
+                    <span>Tổng tiền giờ:</span>
+                    <span>@Model.TotalPlaytime.ToString("#,##0 ₫")</span>
+                </div>
+                <div class="d-flex justify-content-between small text-muted mb-1">
+                    <span>Tổng F&B:</span>
+                    <span>@Model.TotalFandB.ToString("#,##0 ₫")</span>
+                </div>
+                <div class="d-flex justify-content-between small text-success fw-bold mb-2">
+                    <span>Giảm giá (@Model.TierName @Model.DiscountPercent%):</span>
+                    <span>-@Model.DiscountAmount.ToString("#,##0 ₫")</span>
+                </div>
+                <hr class="my-2" />
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">Cần thanh toán:</span>
+                    <span class="fw-bold fs-4 text-danger">@Model.FinalAmount.ToString("#,##0 ₫")</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nút thanh toán -->
+        <div class="data-card p-4">
+            <h6 class="fw-bold mb-3"><i class="bi bi-wallet2 text-danger me-2"></i>Chọn phương thức thanh toán</h6>
+
+            <!-- Form Tiền mặt -->
+            <form asp-action="PayCash" method="post" class="mb-3">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="sessionId" value="@Model.SessionId" />
+                <button type="submit" class="btn btn-success w-100 py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2"
+                        onclick="return confirm('Xác nhận đã thu đủ @Model.FinalAmount.ToString("#,##0 ₫") tiền mặt?');">
+                    <i class="bi bi-cash-stack fs-5"></i> Thanh toán TIỀN MẶT
+                </button>
+            </form>
+
+            <!-- Form VNPay -->
+            <form asp-action="PayVNPay" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="sessionId" value="@Model.SessionId" />
+                <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2">
+                    <i class="bi bi-qr-code-scan fs-5"></i> Thanh toán VNPAY (QR / ATM)
+                </button>
+            </form>
+
+            <div class="text-muted small text-center mt-3">
+                <i class="bi bi-shield-check text-success"></i> Giao dịch được bảo mật & lưu đối soát tự động
+            </div>
+        </div>
+    </div>
+</div>
+

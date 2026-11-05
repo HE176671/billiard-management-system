@@ -1,0 +1,146 @@
+@model Bms.Web.Models.InvoiceDetailViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"Biên lai hóa đơn #{Model.Id}";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 d-print-none flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-receipt text-danger me-2"></i>Biên lai hóa đơn #@Model.Id</h4>
+        <span class="text-muted small">Thanh toán hoàn tất cho bàn @Model.TableCode</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-controller="Order" asp-action="Counter" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Về gọi tại quầy
+        </a>
+        <a asp-action="Invoices" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-list-ul"></i> Danh sách hóa đơn
+        </a>
+        <button class="btn btn-danger btn-sm px-3 fw-bold shadow-sm" onclick="window.print()">
+            <i class="bi bi-printer-fill me-1"></i> In hóa đơn
+        </button>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show rounded-3 d-print-none" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Mẫu hóa đơn in -->
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="data-card p-5 bg-white shadow-sm border" id="printableInvoice">
+            <!-- Header Hóa đơn -->
+            <div class="text-center pb-4 border-bottom mb-4">
+                <h3 class="fw-bold mb-1 text-danger">🎱 BILLIARD CLUB BMS</h3>
+                <div class="text-muted small">Hệ thống quản lý CLB Bi-a thông minh</div>
+                <div class="text-muted small">Địa chỉ: Khu Công Nghệ Cao Hòa Lạc, Hà Nội</div>
+                <div class="text-muted small">Hotline: 0900.000.001</div>
+                <h5 class="fw-bold text-dark mt-3 mb-1">HÓA ĐƠN THANH TOÁN</h5>
+                <div class="small text-muted">Mã HĐ: <strong>#@Model.Id</strong> | Ngày lập: <strong>@Model.CreatedAtUtc.AddHours(7).ToString("HH:mm:ss dd/MM/yyyy")</strong></div>
+            </div>
+
+            <!-- Thông tin bàn & khách hàng -->
+            <div class="row mb-4">
+                <div class="col-sm-6">
+                    <div class="small text-muted">Khu vực: <strong class="text-dark fs-6">@Model.TableCode</strong></div>
+                    @if (Model.TotalPlaytime > 0)
+                    {
+                        <div class="small text-muted">Bắt đầu: <strong>@Model.StartAtUtc.AddHours(7).ToString("HH:mm dd/MM/yyyy")</strong></div>
+                        <div class="small text-muted">Kết thúc: <strong>@(Model.EndAtUtc?.AddHours(7).ToString("HH:mm dd/MM/yyyy") ?? "—")</strong></div>
+                        <div class="small text-muted">Thời lượng chơi: <strong>@($"{(int)Model.Duration.TotalHours:D2}h {Model.Duration.Minutes:D2}m {Model.Duration.Seconds:D2}s")</strong></div>
+                    }
+                    else
+                    {
+                        <div class="small text-muted">Hình thức: <strong>Đơn bán lẻ tại quầy / Mang về</strong></div>
+                    }
+                </div>
+                <div class="col-sm-6 text-sm-end">
+                    <div class="small text-muted">Khách hàng: <strong>@Model.CustomerName</strong></div>
+                    <div class="small text-muted">SĐT: <strong>@Model.CustomerPhone</strong></div>
+                    <div class="small text-muted">Trạng thái: <span class="badge bg-success">ĐÃ THANH TOÁN</span></div>
+                </div>
+            </div>
+
+            <!-- Bảng chi tiết -->
+            <table class="table table-bordered align-middle mb-4">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nội dung</th>
+                        <th class="text-center">Số lượng / Thời lượng</th>
+                        <th class="text-end">Đơn giá</th>
+                        <th class="text-end">Thành tiền</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.TotalPlaytime > 0)
+                    {
+                        <tr>
+                            <td><strong>Tiền giờ chơi bàn @Model.TableCode</strong></td>
+                            <td class="text-center">@($"{(int)Model.Duration.TotalHours}h {Model.Duration.Minutes}m")</td>
+                            <td class="text-end">@Model.HourlyRate.ToString("#,##0 ₫")/h</td>
+                            <td class="text-end fw-bold">@Model.TotalPlaytime.ToString("#,##0 ₫")</td>
+                        </tr>
+                    }
+                    @foreach (var it in Model.FandBItems)
+                    {
+                        <tr>
+                            <td>@it.ProductName</td>
+                            <td class="text-center">@it.Quantity</td>
+                            <td class="text-end">@it.UnitPrice.ToString("#,##0 ₫")</td>
+                            <td class="text-end fw-bold">@it.Subtotal.ToString("#,##0 ₫")</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" class="text-end text-muted">Tổng tiền dịch vụ:</td>
+                        <td class="text-end fw-bold">@((Model.TotalPlaytime + Model.TotalFandB).ToString("#,##0 ₫"))</td>
+                    </tr>
+                    @if (Model.DiscountAmount > 0)
+                    {
+                        <tr>
+                            <td colspan="3" class="text-end text-success">Chiết khấu hội viên:</td>
+                            <td class="text-end fw-bold text-success">-@Model.DiscountAmount.ToString("#,##0 ₫")</td>
+                        </tr>
+                    }
+                    <tr class="table-light">
+                        <td colspan="3" class="text-end fw-bold fs-5">TỔNG CỘNG THANH TOÁN:</td>
+                        <td class="text-end fw-bold fs-5 text-danger">@Model.FinalAmount.ToString("#,##0 ₫")</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <!-- Thông tin giao dịch -->
+            <div class="p-3 bg-light rounded-3 mb-4">
+                <div class="fw-bold small mb-2"><i class="bi bi-credit-card me-1 text-danger"></i> Chi tiết giao dịch thanh toán:</div>
+                @foreach (var tx in Model.Transactions)
+                {
+                    <div class="d-flex justify-content-between small">
+                        <span>Phương thức: <strong>@(tx.PaymentMethod == "Cash" ? "Tiền mặt" : "Cổng VNPay Sandbox")</strong></span>
+                        <span>Mã giao dịch: <strong>@(tx.GatewayRefCode ?? $"CASH-{tx.Id}")</strong></span>
+                        <span>Số tiền: <strong class="text-danger">@tx.AmountPaid.ToString("#,##0 ₫")</strong></span>
+                    </div>
+                }
+            </div>
+
+            <div class="text-center pt-3 border-top text-muted small">
+                <em>Cảm ơn Quý khách và hẹn gặp lại!</em>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @@media print {
+        body { background: #fff !important; }
+        .sidebar, .topbar, .d-print-none { display: none !important; }
+        .main-wrapper { margin-left: 0 !important; }
+        #printableInvoice { border: none !important; box-shadow: none !important; padding: 0 !important; }
+    }
+</style>
+

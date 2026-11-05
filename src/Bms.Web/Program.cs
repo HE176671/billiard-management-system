@@ -1,4 +1,5 @@
 using Bms.Web.Data;
+using Bms.Web.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+builder.Services.AddScoped<IVnPayService, VnPayService>();
 
 // DbContext trỏ vào BilliardDB (connection string trong appsettings)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -61,19 +63,19 @@ app.MapControllerRoute(
     defaults: new { controller = "CustomerProfile" });
 
 app.MapControllerRoute(
-    name: "playhistory",
-    pattern: "PlayHistory/{action=Index}/{id?}",
-    defaults: new { controller = "PlayHistory" });
-
-app.MapControllerRoute(
-    name: "loyalty",
-    pattern: "Loyalty/{action=Index}/{id?}",
-    defaults: new { controller = "Loyalty" });
+    name: "order_table",
+    pattern: "Order/Table/{tableCode}",
+    defaults: new { controller = "Order", action = "Table" });
 
 app.MapControllerRoute(
     name: "order",
     pattern: "Order/{action=Index}/{id?}",
     defaults: new { controller = "Order" });
+
+app.MapControllerRoute(
+    name: "checkout",
+    pattern: "Checkout/{action=Index}/{id?}",
+    defaults: new { controller = "Checkout" });
 
 app.MapControllerRoute(
     name: "default",

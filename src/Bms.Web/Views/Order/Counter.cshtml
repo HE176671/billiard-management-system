@@ -1,0 +1,517 @@
+@model Bms.Web.Models.OrderMenuViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Gọi món tại quầy & Quản lý F&B";
+    var activeSessions = ViewBag.ActiveSessions as List<Bms.Web.Data.PlaySession> ?? new();
+    var selectedSession = ViewBag.SelectedSession as Bms.Web.Data.PlaySession;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-cart3 text-danger me-2"></i>Gọi món tại quầy</h4>
+        <span class="text-muted small">Bán món lẻ cho khách vãng lai (mang về) hoặc thêm món cho bàn đang chơi</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-controller="Order" asp-action="Manage" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
+            <i class="bi bi-bell"></i> Duyệt đơn bàn QR
+        </a>
+        <a asp-controller="Checkout" asp-action="Invoices" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
+            <i class="bi bi-receipt"></i> Lịch sử hóa đơn
+        </a>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show rounded-3" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Tab chuyển đổi: Khách mua lẻ tại quầy vs Khách ngồi bàn -->
+<ul class="nav nav-pills mb-4 gap-2" id="counterTab" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active px-4 py-2 rounded-3 fw-bold shadow-xs" id="tab-takeaway-btn" data-bs-toggle="pill" data-bs-target="#tab-takeaway" type="button" role="tab">
+            <i class="bi bi-bag-check me-1"></i> 1. Khách mua lẻ tại quầy (Không vào bàn)
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link px-4 py-2 rounded-3 fw-bold shadow-xs" id="tab-table-btn" data-bs-toggle="pill" data-bs-target="#tab-table" type="button" role="tab">
+            <i class="bi bi-grid-3x3 me-1"></i> 2. Gọi thêm cho bàn đang chơi (@activeSessions.Count bàn)
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="counterTabContent">
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- TAB 1: KHÁCH MUA LẺ TẠI QUẦY (MANG VỀ, KHÔNG VÀO BÀN)           -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="tab-pane fade show active" id="tab-takeaway" role="tabpanel">
+        <form asp-action="SubmitCounterTakeaway" method="post" id="takeawayOrderForm">
+            @Html.AntiForgeryToken()
+
+            <div class="row g-4">
+                <!-- Cột trái: Thực đơn -->
+                <div class="col-lg-8">
+                    <div class="data-card p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0">Thực đơn tại quầy</h5>
+                            <span class="badge bg-light text-muted border">Bán lẻ mang về - Thu tiền ngay</span>
+                        </div>
+
+                        @foreach (var cat in Model.Categories)
+                        {
+                            <div class="mb-4">
+                                <h6 class="text-uppercase fw-bold text-muted small border-bottom pb-2 mb-3">
+                                    <i class="bi bi-tag-fill me-1 text-danger"></i> @cat.Name
+                                </h6>
+                                <div class="row g-3">
+                                    @foreach (var p in cat.Products)
+                                    {
+                                        <div class="col-md-6">
+                                            <div class="p-3 border rounded-3 d-flex justify-content-between align-items-center bg-white shadow-xs @(!p.IsAvailable ? "opacity-50" : "")">
+                                                <div>
+                                                    <div class="fw-bold text-dark">@p.Name</div>
+                                                    <div class="text-danger fw-bold small">@p.Price.ToString("#,##0 ₫")</div>
+                                                    <div class="text-muted" style="font-size: 0.75rem;">Còn: @p.StockQuantity</div>
+                                                </div>
+                                                @if (p.IsAvailable)
+                                                {
+                                                    <div class="d-flex align-items-center gap-1 staff-qty-box"
+                                                         data-id="@p.Id"
+                                                         data-price="@p.Price.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                                         data-stock="@p.StockQuantity"
+                                                         data-name="@p.Name">
+                                                        <button type="button" class="btn btn-outline-secondary btn-sm btn-staff-minus">-</button>
+                                                        <input type="number" class="form-control form-control-sm text-center fw-bold px-1 staff-qty-input" 
+                                                               id="qty-takeaway-@p.Id" value="0" min="0" max="@p.StockQuantity" style="width: 48px; height: 31px;" />
+                                                        <button type="button" class="btn btn-outline-danger btn-sm btn-staff-plus">+</button>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">Hết</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <div id="takeawayHiddenInputs"></div>
+                    </div>
+                </div>
+
+                <!-- Cột phải: Giỏ hàng thanh toán ngay tại quầy -->
+                <div class="col-lg-4">
+                    <div class="data-card p-4 sticky-top" style="top: 80px;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0"><i class="bi bi-receipt text-danger me-2"></i>Đơn hàng tại quầy</h5>
+                            <span class="badge bg-secondary">Mang về</span>
+                        </div>
+                        <p class="text-muted small mb-3">Đơn mua ngoài không vào bàn bi-a. Thu tiền và in biên lai trực tiếp.</p>
+
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Tổng số món:</span>
+                                <span class="fw-bold fs-5 text-dark" id="takeawayCountText">0</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center border-top pt-2">
+                                <span class="fw-bold">Tổng thanh toán:</span>
+                                <span class="fw-bold fs-4 text-danger" id="takeawayTotalText">0 ₫</span>
+                            </div>
+                        </div>
+
+                        <!-- 2 nút thanh toán -->
+                        <div class="d-grid gap-2">
+                            <button type="submit" name="paymentMethod" value="Cash" class="btn btn-success py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2 btn-takeaway-submit" disabled>
+                                <i class="bi bi-cash-stack fs-5"></i> Thu TIỀN MẶT & In hóa đơn
+                            </button>
+                            <button type="submit" name="paymentMethod" value="VNPay" class="btn btn-primary py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2 btn-takeaway-submit" disabled>
+                                <i class="bi bi-qr-code-scan fs-5"></i> Thanh toán VNPAY (QR Code)
+                            </button>
+                        </div>
+
+                        <div class="text-center text-muted small mt-3">
+                            <i class="bi bi-check-circle text-success me-1"></i> Tồn kho sẽ được trừ ngay khi bấm thanh toán
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- TAB 2: GỌI THÊM CHO BÀN ĐANG CHƠI                             -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div class="tab-pane fade" id="tab-table" role="tabpanel">
+        <!-- Chọn bàn đang chơi -->
+        <div class="data-card mb-4 p-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <span class="fw-bold"><i class="bi bi-grid-3x3 me-1 text-danger"></i> Chọn bàn đang chơi:</span>
+                <span class="text-muted small">Có @activeSessions.Count bàn đang mở</span>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                @if (!activeSessions.Any())
+                {
+                    <div class="text-muted fst-italic">Hiện tại không có bàn nào đang chơi.</div>
+                }
+                else
+                {
+                    @foreach (var s in activeSessions)
+                    {
+                        var isCurrent = Model.ActiveSessionId == s.Id;
+                        <a asp-action="Counter" asp-route-sessionId="@s.Id" 
+                           class="btn @(isCurrent ? "btn-danger fw-bold shadow-sm" : "btn-outline-secondary") btn-sm px-3 py-2 rounded-3">
+                            🎱 Bàn @s.Table.TableCode (@s.Table.TableType.Name)
+                        </a>
+                    }
+                }
+            </div>
+        </div>
+
+        @if (Model.HasActiveSession && Model.ActiveSessionId.HasValue)
+        {
+            <div class="row g-4">
+                <!-- Cột trái: Thực đơn cho bàn -->
+                <div class="col-lg-8">
+                    <div class="data-card p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0">Thực đơn kinh doanh</h5>
+                            <span class="badge bg-light text-muted border">Thêm món cho bàn @Model.TableCode</span>
+                        </div>
+
+                        <form asp-action="SubmitStaffOrder" method="post" id="staffOrderForm">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="sessionId" value="@Model.ActiveSessionId" />
+
+                            @foreach (var cat in Model.Categories)
+                            {
+                                <div class="mb-4">
+                                    <h6 class="text-uppercase fw-bold text-muted small border-bottom pb-2 mb-3">
+                                        <i class="bi bi-tag-fill me-1 text-danger"></i> @cat.Name
+                                    </h6>
+                                    <div class="row g-3">
+                                        @foreach (var p in cat.Products)
+                                        {
+                                            <div class="col-md-6">
+                                                <div class="p-3 border rounded-3 d-flex justify-content-between align-items-center bg-white shadow-xs @(!p.IsAvailable ? "opacity-50" : "")">
+                                                    <div>
+                                                        <div class="fw-bold text-dark">@p.Name</div>
+                                                        <div class="text-danger fw-bold small">@p.Price.ToString("#,##0 ₫")</div>
+                                                        <div class="text-muted" style="font-size: 0.75rem;">Còn: @p.StockQuantity</div>
+                                                    </div>
+                                                    @if (p.IsAvailable)
+                                                    {
+                                                        <div class="d-flex align-items-center gap-1 table-qty-box"
+                                                             data-id="@p.Id"
+                                                             data-price="@p.Price.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                                             data-stock="@p.StockQuantity"
+                                                             data-name="@p.Name">
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm btn-table-minus">-</button>
+                                                            <input type="number" class="form-control form-control-sm text-center fw-bold px-1 table-qty-input" 
+                                                                   id="qty-table-@p.Id" value="0" min="0" max="@p.StockQuantity" style="width: 48px; height: 31px;" />
+                                                            <button type="button" class="btn btn-outline-danger btn-sm btn-table-plus">+</button>
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary">Hết</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            <div id="tableHiddenInputs"></div>
+
+                            <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-3">
+                                <div>
+                                    <span class="text-muted">Tổng tạm tính:</span>
+                                    <span class="fw-bold fs-5 text-danger ms-2" id="tableCartTotalText">0 ₫</span>
+                                </div>
+                                <button type="submit" class="btn btn-danger px-4 py-2 rounded-3 fw-bold shadow-sm" id="btnSubmitStaff" disabled>
+                                    <i class="bi bi-plus-circle me-1"></i> Thêm món vào bàn (<span id="tableCartCountText">0</span>)
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Cột phải: Thông tin bàn & Đơn hiện tại -->
+                <div class="col-lg-4">
+                    <div class="data-card p-4 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0">Bàn @Model.TableCode</h5>
+                            <span class="badge bg-success">Đang chơi</span>
+                        </div>
+                        <div class="small text-muted mb-3">
+                            <div>Loại bàn: <strong>@Model.TableTypeName</strong></div>
+                            <div>Tầng: <strong>@Model.FloorNumber</strong></div>
+                            <div>Giờ bắt đầu: <strong>@Model.StartAtUtc?.AddHours(7).ToString("HH:mm dd/MM/yyyy")</strong></div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <a asp-controller="Checkout" asp-action="Session" asp-route-sessionId="@Model.ActiveSessionId" class="btn btn-danger fw-bold py-2 shadow-sm">
+                                <i class="bi bi-credit-card me-1"></i> Đi đến thanh toán bàn này
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="data-card p-4">
+                        <h6 class="fw-bold mb-3"><i class="bi bi-card-checklist text-danger me-1"></i> Món đã gọi trong phiên</h6>
+                        @if (!Model.MyOrders.Any())
+                        {
+                            <div class="text-muted small text-center py-3">Chưa có món nào được gọi.</div>
+                        }
+                        else
+                        {
+                            <div class="vstack gap-2">
+                                @foreach (var o in Model.MyOrders)
+                                {
+                                    var badgeClass = o.Status == "Pending" ? "badge bg-warning text-dark" : (o.Status == "Served" ? "badge bg-success" : "badge bg-danger");
+                                    <div class="p-2 border rounded-2 bg-light">
+                                        <div class="d-flex justify-content-between small fw-bold mb-1">
+                                            <span>Đơn #@o.OrderId (@o.OrderTimeUtc.AddHours(7).ToString("HH:mm"))</span>
+                                            <span class="@badgeClass">@o.StatusDisplay</span>
+                                        </div>
+                                        <ul class="list-unstyled mb-0" style="font-size: 0.8rem;">
+                                            @foreach (var it in o.Items)
+                                            {
+                                                <li class="d-flex justify-content-between">
+                                                    <span>@it.ProductName x @it.Quantity</span>
+                                                    <span class="text-muted">@it.Subtotal.ToString("#,##0 ₫")</span>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let staffToastTimeout = null;
+    function showStaffToast(msg) {
+        let toast = document.getElementById('staffToastNotification');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'staffToastNotification';
+            toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#1e293b;color:#fff;padding:0.75rem 1.25rem;border-radius:10px;font-size:0.875rem;z-index:9999;box-shadow:0 8px 20px rgba(0,0,0,0.2);border-left:4px solid #e94560;transition:opacity 0.3s ease;max-width:90%;';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = msg;
+        toast.style.display = 'block';
+        toast.style.opacity = '1';
+        if (staffToastTimeout) clearTimeout(staffToastTimeout);
+        staffToastTimeout = setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => { toast.style.display = 'none'; }, 300);
+        }, 3000);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // GIỎ HÀNG KHÁCH MUA LẺ TẠI QUẦY (TAB 1)
+    // ─────────────────────────────────────────────────────────────
+    const takeawayCart = {};
+
+    document.querySelectorAll('.staff-qty-box').forEach(box => {
+        const id = parseInt(box.getAttribute('data-id'));
+        const price = parseFloat(box.getAttribute('data-price')) || 0;
+        const stockMax = parseInt(box.getAttribute('data-stock')) || 0;
+        const name = box.getAttribute('data-name') || 'Món này';
+        const input = box.querySelector('.staff-qty-input');
+        const btnMinus = box.querySelector('.btn-staff-minus');
+        const btnPlus = box.querySelector('.btn-staff-plus');
+
+        input.addEventListener('input', function () {
+            let val = parseInt(this.value);
+            if (isNaN(val) || val < 0) { val = 0; this.value = 0; }
+
+            if (val > stockMax) {
+                val = stockMax;
+                this.value = val;
+                showStaffToast(`Món "${name}" trong kho chỉ còn tối đa ${stockMax} sản phẩm. Đã tự động điều chỉnh về ${stockMax}.`);
+            } else if (val > 20) {
+                val = 20;
+                this.value = val;
+                showStaffToast(`Mỗi lần chỉ được mua tối đa 20 sản phẩm.`);
+            }
+
+            if (val === 0) delete takeawayCart[id];
+            else takeawayCart[id] = { qty: val, price: price };
+            updateTakeawayCart();
+        });
+
+        btnPlus.addEventListener('click', function () {
+            let current = takeawayCart[id] ? takeawayCart[id].qty : 0;
+            let next = current + 1;
+            if (next > stockMax) {
+                showStaffToast(`Món "${name}" trong kho chỉ còn tối đa ${stockMax} sản phẩm!`);
+                next = stockMax;
+            } else if (next > 20) {
+                showStaffToast(`Mỗi lần chỉ được mua tối đa 20 sản phẩm.`);
+                next = 20;
+            }
+            input.value = next;
+            if (next === 0) delete takeawayCart[id];
+            else takeawayCart[id] = { qty: next, price: price };
+            updateTakeawayCart();
+        });
+
+        btnMinus.addEventListener('click', function () {
+            let current = takeawayCart[id] ? takeawayCart[id].qty : 0;
+            let next = current - 1;
+            if (next < 0) next = 0;
+            input.value = next;
+            if (next === 0) delete takeawayCart[id];
+            else takeawayCart[id] = { qty: next, price: price };
+            updateTakeawayCart();
+        });
+    });
+
+    function updateTakeawayCart() {
+        let count = 0;
+        let total = 0;
+        const container = document.getElementById('takeawayHiddenInputs');
+        container.innerHTML = '';
+
+        let i = 0;
+        for (const [id, item] of Object.entries(takeawayCart)) {
+            count += item.qty;
+            total += item.qty * item.price;
+
+            const inputId = document.createElement('input');
+            inputId.type = 'hidden';
+            inputId.name = `Items[${i}].ProductId`;
+            inputId.value = id;
+
+            const inputQty = document.createElement('input');
+            inputQty.type = 'hidden';
+            inputQty.name = `Items[${i}].Quantity`;
+            inputQty.value = item.qty;
+
+            container.appendChild(inputId);
+            container.appendChild(inputQty);
+            i++;
+        }
+
+        document.getElementById('takeawayCountText').textContent = count;
+        document.getElementById('takeawayTotalText').textContent = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(total);
+        document.querySelectorAll('.btn-takeaway-submit').forEach(btn => {
+            btn.disabled = count === 0;
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // GIỎ HÀNG THÊM MÓN CHO BÀN (TAB 2)
+    // ─────────────────────────────────────────────────────────────
+    const tableCart = {};
+
+    document.querySelectorAll('.table-qty-box').forEach(box => {
+        const id = parseInt(box.getAttribute('data-id'));
+        const price = parseFloat(box.getAttribute('data-price')) || 0;
+        const stockMax = parseInt(box.getAttribute('data-stock')) || 0;
+        const name = box.getAttribute('data-name') || 'Món này';
+        const input = box.querySelector('.table-qty-input');
+        const btnMinus = box.querySelector('.btn-table-minus');
+        const btnPlus = box.querySelector('.btn-table-plus');
+
+        input.addEventListener('input', function () {
+            let val = parseInt(this.value);
+            if (isNaN(val) || val < 0) { val = 0; this.value = 0; }
+            if (val > stockMax) {
+                val = stockMax;
+                this.value = val;
+                showStaffToast(`Món "${name}" trong kho chỉ còn tối đa ${stockMax} sản phẩm.`);
+            } else if (val > 20) {
+                val = 20;
+                this.value = val;
+                showStaffToast(`Mỗi lần thêm chỉ được đặt tối đa 20 sản phẩm.`);
+            }
+            if (val === 0) delete tableCart[id];
+            else tableCart[id] = { qty: val, price: price };
+            updateTableCart();
+        });
+
+        btnPlus.addEventListener('click', function () {
+            let current = tableCart[id] ? tableCart[id].qty : 0;
+            let next = current + 1;
+            if (next > stockMax) {
+                showStaffToast(`Món "${name}" trong kho chỉ còn tối đa ${stockMax} sản phẩm!`);
+                next = stockMax;
+            } else if (next > 20) {
+                showStaffToast(`Mỗi lần thêm chỉ được đặt tối đa 20 sản phẩm.`);
+                next = 20;
+            }
+            input.value = next;
+            if (next === 0) delete tableCart[id];
+            else tableCart[id] = { qty: next, price: price };
+            updateTableCart();
+        });
+
+        btnMinus.addEventListener('click', function () {
+            let current = tableCart[id] ? tableCart[id].qty : 0;
+            let next = current - 1;
+            if (next < 0) next = 0;
+            input.value = next;
+            if (next === 0) delete tableCart[id];
+            else tableCart[id] = { qty: next, price: price };
+            updateTableCart();
+        });
+    });
+
+    function updateTableCart() {
+        let count = 0;
+        let total = 0;
+        const container = document.getElementById('tableHiddenInputs');
+        if (!container) return;
+        container.innerHTML = '';
+
+        let i = 0;
+        for (const [id, item] of Object.entries(tableCart)) {
+            count += item.qty;
+            total += item.qty * item.price;
+
+            const inputId = document.createElement('input');
+            inputId.type = 'hidden';
+            inputId.name = `Items[${i}].ProductId`;
+            inputId.value = id;
+
+            const inputQty = document.createElement('input');
+            inputQty.type = 'hidden';
+            inputQty.name = `Items[${i}].Quantity`;
+            inputQty.value = item.qty;
+
+            container.appendChild(inputId);
+            container.appendChild(inputQty);
+            i++;
+        }
+
+        const countEl = document.getElementById('tableCartCountText');
+        const totalEl = document.getElementById('tableCartTotalText');
+        const btnSubmit = document.getElementById('btnSubmitStaff');
+
+        if (countEl) countEl.textContent = count;
+        if (totalEl) totalEl.textContent = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(total);
+        if (btnSubmit) btnSubmit.disabled = count === 0;
+    }
+</script>
+}

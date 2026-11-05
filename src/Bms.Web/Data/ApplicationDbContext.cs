@@ -17,6 +17,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Product>         Products          => Set<Product>();
     public DbSet<Order>           Orders            => Set<Order>();
     public DbSet<OrderDetail>     OrderDetails      => Set<OrderDetail>();
+    public DbSet<Invoice>         Invoices          => Set<Invoice>();
+    public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<MembershipTier>  MembershipTiers   => Set<MembershipTier>();
+    public DbSet<Combo>           Combos            => Set<Combo>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -85,6 +89,38 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         od.HasOne(x => x.Product).WithMany()
             .HasForeignKey(x => x.ProductId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // ── Invoices & PaymentTransactions ──
+        var inv = builder.Entity<Invoice>();
+        inv.Property(x => x.TotalPlaytime).HasColumnType("decimal(18,2)");
+        inv.Property(x => x.TotalFandB).HasColumnType("decimal(18,2)");
+        inv.Property(x => x.DiscountAmount).HasColumnType("decimal(18,2)");
+        inv.Property(x => x.FinalAmount).HasColumnType("decimal(20,2)").ValueGeneratedOnAddOrUpdate();
+        inv.Property(x => x.Status).HasMaxLength(20).IsRequired();
+        inv.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+        inv.HasOne(x => x.Session).WithMany()
+            .HasForeignKey(x => x.SessionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var pt = builder.Entity<PaymentTransaction>();
+        pt.Property(x => x.PaymentMethod).HasMaxLength(20).IsRequired();
+        pt.Property(x => x.AmountPaid).HasColumnType("decimal(18,2)");
+        pt.Property(x => x.GatewayRefCode).HasMaxLength(100);
+        pt.Property(x => x.TransactionTimeUtc).HasColumnType("datetime2(0)");
+        pt.HasOne(x => x.Invoice).WithMany(i => i.PaymentTransactions)
+            .HasForeignKey(x => x.InvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // ── MembershipTiers ──
+        var mt = builder.Entity<MembershipTier>();
+        mt.Property(x => x.TierName).HasMaxLength(50).IsRequired();
+        mt.Property(x => x.DiscountPercent).HasColumnType("decimal(5,2)");
+
+        // ── Combos ──
+        var cb = builder.Entity<Combo>();
+        cb.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        cb.Property(x => x.Price).HasColumnType("decimal(18,2)");
+        cb.Property(x => x.PlaytimeHours).HasColumnType("decimal(5,2)");
     }
 }
 

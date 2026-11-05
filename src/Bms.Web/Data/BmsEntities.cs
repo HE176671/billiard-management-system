@@ -169,3 +169,105 @@ public class OrderDetail
     public Order Order { get; set; } = null!;
     public Product Product { get; set; } = null!;
 }
+
+/// <summary>
+/// Ánh xạ bảng dbo.Invoices.
+/// </summary>
+[Table("Invoices")]
+public class Invoice
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int SessionId { get; set; }
+
+    [MaxLength(450)]
+    public string? CustomerId { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal TotalPlaytime { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal TotalFandB { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal DiscountAmount { get; set; }
+
+    [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+    [Column(TypeName = "decimal(20,2)")]
+    public decimal? FinalAmount { get; set; }
+
+    [Required, MaxLength(20)]
+    public string Status { get; set; } = "Unpaid"; // Unpaid | Paid | Cancelled
+
+    public DateTime CreatedAtUtc { get; set; }
+
+    // Navigation
+    public PlaySession Session { get; set; } = null!;
+    public ICollection<PaymentTransaction> PaymentTransactions { get; set; } = new List<PaymentTransaction>();
+}
+
+/// <summary>
+/// Ánh xạ bảng dbo.PaymentTransactions.
+/// </summary>
+[Table("PaymentTransactions")]
+public class PaymentTransaction
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int InvoiceId { get; set; }
+
+    [Required, MaxLength(20)]
+    public string PaymentMethod { get; set; } = string.Empty; // Cash | VNPay
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal AmountPaid { get; set; }
+
+    [MaxLength(100)]
+    public string? GatewayRefCode { get; set; }
+
+    public DateTime TransactionTimeUtc { get; set; }
+
+    // Navigation
+    public Invoice Invoice { get; set; } = null!;
+}
+
+/// <summary>
+/// Ánh xạ bảng dbo.MembershipTiers.
+/// </summary>
+[Table("MembershipTiers")]
+public class MembershipTier
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Required, MaxLength(50)]
+    public string TierName { get; set; } = string.Empty;
+
+    public int MinPoints { get; set; }
+
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal DiscountPercent { get; set; }
+}
+
+/// <summary>
+/// Ánh xạ bảng dbo.Combos.
+/// </summary>
+[Table("Combos")]
+public class Combo
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Required, MaxLength(100)]
+    public string Name { get; set; } = string.Empty;
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal Price { get; set; }
+
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal PlaytimeHours { get; set; }
+
+    public bool IsActive { get; set; } = true;
+}
