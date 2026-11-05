@@ -1,3 +1,5 @@
+@inject Bms.Web.Data.ApplicationDbContext LayoutDb
+@using Microsoft.EntityFrameworkCore
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -111,6 +113,7 @@
             padding: 0.3rem 0.75rem; font-size: 0.8rem;
             cursor: pointer; transition: all 0.15s;
             display: flex; align-items: center; gap: 0.4rem;
+            text-decoration: none;
         }
         .btn-logout:hover { border-color: var(--primary); color: var(--primary); }
         .page-content { padding: 1.5rem; flex: 1; }
@@ -165,6 +168,7 @@
             font-size: 0.875rem; font-weight: 500;
             transition: background 0.15s, transform 0.1s;
             display: inline-flex; align-items: center; gap: 0.4rem;
+            text-decoration: none;
         }
         .btn-primary-bms:hover { background: var(--primary-dark); transform: translateY(-1px); color: #fff; }
         .btn-outline-bms {
@@ -173,6 +177,7 @@
             padding: 0.4rem 0.85rem; font-size: 0.8rem;
             transition: all 0.15s;
             display: inline-flex; align-items: center; gap: 0.35rem;
+            text-decoration: none;
         }
         .btn-outline-bms:hover { background: var(--primary); color: #fff; }
         .btn-sm-icon {
@@ -180,7 +185,7 @@
             display: inline-flex; align-items: center; justify-content: center;
             font-size: 0.85rem; border: 1px solid #e2e8f0;
             background: #fff; color: #64748b; cursor: pointer;
-            transition: all 0.15s;
+            transition: all 0.15s; text-decoration: none;
         }
         .btn-sm-icon:hover { border-color: var(--primary); color: var(--primary); }
         .btn-sm-icon.danger:hover { border-color: #dc2626; color: #dc2626; }
@@ -225,85 +230,100 @@
         var curController = ViewContext.RouteData.Values["controller"]?.ToString();
         var curAction = ViewContext.RouteData.Values["action"]?.ToString();
         var isAdmin = User.IsInRole("Admin");
+        var curUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        int pendingAdjustCount = 0;
+        int unreadNotiCount = 0;
+        try
+        {
+            if (isAdmin)
+            {
+                pendingAdjustCount = await LayoutDb.PointAdjustmentRequests.AsNoTracking()
+                    .CountAsync(r => r.Status == Bms.Web.Data.PointAdjustmentRequest.StatusPending);
+            }
+            if (!string.IsNullOrEmpty(curUserId))
+            {
+                unreadNotiCount = await LayoutDb.Notifications.AsNoTracking()
+                    .CountAsync(n => n.UserId == curUserId && !n.IsRead);
+            }
+        }
+        catch { /* Bỏ qua nếu DB đang nâng cấp */ }
+
         string Active(string c, string? a = null) =>
             curController == c && (a == null || curAction == a) ? "active" : "";
     }
     <div class="sidebar-nav">
-        @if (User.IsInRole("Customer"))
+        @if (isAdmin)
         {
-            var ctrlName = ViewContext.RouteData.Values["controller"]?.ToString();
-            var actName = ViewContext.RouteData.Values["action"]?.ToString();
-            <div class="nav-section-label">Tài khoản của tôi</div>
-            <a class="sidebar-link @(ctrlName == "CustomerPortal" && actName == "Profile" ? "active" : "")"
-               asp-controller="CustomerPortal" asp-action="Profile">
-                <i class="bi bi-person-circle"></i> Hồ sơ & điểm thưởng
-            </a>
-            <a class="sidebar-link @(ctrlName == "CustomerPortal" && actName == "History" ? "active" : "")"
-               asp-controller="CustomerPortal" asp-action="History">
-                <i class="bi bi-receipt"></i> Lịch sử chơi & hóa đơn
-            </a>
-            <a class="sidebar-link @(ctrlName == "CustomerPortal" && actName == "Promotions" ? "active" : "")"
-               asp-controller="CustomerPortal" asp-action="Promotions">
-                <i class="bi bi-gift"></i> Khuyến mãi & đổi điểm
-            </a>
-            <a class="sidebar-link @(ctrlName == "Notification" ? "active" : "")"
-               asp-controller="Notification" asp-action="Index">
-                <i class="bi bi-bell"></i> Thông báo
-            </a>
-            <div class="nav-section-label">Dịch vụ</div>
-            <a class="sidebar-link @(ctrlName == "Customer" ? "active" : "")"
-               asp-controller="Customer" asp-action="Index">
-                <i class="bi bi-calendar-check"></i> Đặt bàn
-            </a>
+            <div class="nav-section-label">Admin</div>
+            <a class="sidebar-link @Active("Dashboard")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2"></i> Tổng quan</a>
+            <a class="sidebar-link @Active("Revenue")" asp-controller="Revenue" asp-action="Index"><i class="bi bi-graph-up"></i> Báo cáo doanh thu</a>
+            <a class="sidebar-link @Active("Shift", "Manage")" asp-controller="Shift" asp-action="Manage"><i class="bi bi-clipboard-check"></i> Quản lý ca</a>
+            <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index"><i class="bi bi-people"></i> Nhân viên</a>
+            <a class="sidebar-link @Active("Pricing")" asp-controller="Pricing" asp-action="Index"><i class="bi bi-tags"></i> Bảng giá</a>
         }
-        else
-        {
-            @if (isAdmin)
-            {
-                <div class="nav-section-label">Admin</div>
-                <a class="sidebar-link @Active("Dashboard")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2"></i> Tổng quan</a>
-                <a class="sidebar-link @Active("Revenue")" asp-controller="Revenue" asp-action="Index"><i class="bi bi-graph-up"></i> Báo cáo doanh thu</a>
-                <a class="sidebar-link @Active("Shift", "Manage")" asp-controller="Shift" asp-action="Manage"><i class="bi bi-clipboard-check"></i> Quản lý ca</a>
-                <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index"><i class="bi bi-people"></i> Nhân viên</a>
-                <a class="sidebar-link @Active("Pricing")" asp-controller="Pricing" asp-action="Index"><i class="bi bi-tags"></i> Bảng giá</a>
-            }
 
-            <div class="nav-section-label">Khách hàng thân thiết</div>
-            <a class="sidebar-link @Active("CustomerManagement")"
+        <div class="nav-section-label">Hội viên &amp; Ưu đãi</div>
+        <a class="sidebar-link @(curController == "CustomerManagement" && (curAction == "Lookup" || curAction == "Profile") ? "active" : "")"
+           asp-controller="CustomerManagement" asp-action="Lookup">
+            <i class="bi bi-search"></i> Tra cứu tại quầy
+        </a>
+        <a class="sidebar-link @Active("LoyaltyTest")"
+           asp-controller="LoyaltyTest" asp-action="Index">
+            <i class="bi bi-receipt-cutoff"></i> Tính tiền &amp; Tích điểm
+        </a>
+        @if (isAdmin)
+        {
+            <a class="sidebar-link @Active("CrmDashboard")"
+               asp-controller="CrmDashboard" asp-action="Index">
+                <i class="bi bi-bar-chart-line"></i> Thống kê hội viên
+            </a>
+            <a class="sidebar-link @(curController == "CustomerManagement" && curAction == "Index" ? "active" : "")"
                asp-controller="CustomerManagement" asp-action="Index">
-                <i class="bi bi-person-vcard"></i> Quản lý khách hàng
+                <i class="bi bi-person-lines-fill"></i> Danh sách hội viên
             </a>
-            <a class="sidebar-link @Active("Review")"
-               asp-controller="Review" asp-action="Index">
-                <i class="bi bi-star-half"></i> Đánh giá của khách
+            <a class="sidebar-link @Active("Campaign")"
+               asp-controller="Campaign" asp-action="Index">
+                <i class="bi bi-megaphone"></i> Gửi ưu đãi
             </a>
-            @if (isAdmin)
-            {
-                <a class="sidebar-link @Active("TierConfig")"
-                   asp-controller="TierConfig" asp-action="Index">
-                    <i class="bi bi-award"></i> Cấu hình hạng
-                </a>
-                <a class="sidebar-link @Active("LoyaltyTest")"
-                   asp-controller="LoyaltyTest" asp-action="Index">
-                    <i class="bi bi-cpu"></i> Giả lập Loyalty
-                </a>
-            }
-
-            <div class="nav-section-label">Nghiệp vụ</div>
-            <a class="sidebar-link @Active("Staff")" asp-controller="Staff" asp-action="Index"><i class="bi bi-house"></i> Trang nhân viên</a>
-            <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
-            @* TV1/TV4 thay href="#" bằng asp-controller khi có màn hình *@
-            <a class="sidebar-link @Active("Table")" href="#"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
-            <a class="sidebar-link @Active("Booking")" href="#"><i class="bi bi-calendar-check"></i> Đặt bàn</a>
-            <a class="sidebar-link @Active("Menu")" href="#"><i class="bi bi-cup-straw"></i> Thực đơn</a>
         }
+        <a class="sidebar-link @Active("PointAdjustment")"
+           asp-controller="PointAdjustment" asp-action="Index">
+            <i class="bi bi-sliders"></i> Điều chỉnh điểm
+            @if (isAdmin && pendingAdjustCount > 0)
+            {
+                <span class="badge-count">@pendingAdjustCount</span>
+            }
+        </a>
+        @if (isAdmin)
+        {
+            <a class="sidebar-link @Active("TierConfig")"
+               asp-controller="TierConfig" asp-action="Index">
+                <i class="bi bi-award"></i> Hạng thành viên
+            </a>
+            <a class="sidebar-link @Active("RewardItem")"
+               asp-controller="RewardItem" asp-action="Index">
+                <i class="bi bi-gift"></i> Quà đổi điểm
+            </a>
+        }
+        <a class="sidebar-link @Active("Review")"
+           asp-controller="Review" asp-action="Index">
+            <i class="bi bi-star-half"></i> Đánh giá dịch vụ
+        </a>
+
+        <div class="nav-section-label">Nghiệp vụ</div>
+        <a class="sidebar-link @Active("Staff")" asp-controller="Staff" asp-action="Index"><i class="bi bi-house"></i> Trang nhân viên</a>
+        <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
+        @* TV1/TV4 thay href="#" bằng asp-controller khi có màn hình *@
+        <a class="sidebar-link @Active("Table")" href="#"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
+        <a class="sidebar-link @Active("Booking")" href="#"><i class="bi bi-calendar-check"></i> Đặt bàn</a>
+        <a class="sidebar-link @Active("Menu")" href="#"><i class="bi bi-cup-straw"></i> Thực đơn</a>
     </div>
     <div class="sidebar-footer">
         <div class="user-chip">
             <div class="user-avatar">@(User.Identity?.Name?.FirstOrDefault().ToString().ToUpper() ?? "?")</div>
             <div>
                 <div class="user-name">@User.Identity?.Name</div>
-                <div class="user-role">@(isAdmin ? "Quản trị viên" : User.IsInRole("Staff") ? "Nhân viên" : "Khách hàng")</div>
+                <div class="user-role">@(isAdmin ? "Quản trị viên" : "Nhân viên")</div>
             </div>
         </div>
     </div>
@@ -319,6 +339,10 @@
             </a>
             <a asp-controller="Notification" asp-action="Index" class="btn-logout" title="Thông báo">
                 <i class="bi bi-bell"></i> Thông báo
+                @if (unreadNotiCount > 0)
+                {
+                    <span class="badge rounded-pill bg-danger" style="font-size:0.65rem">@unreadNotiCount</span>
+                }
             </a>
             <a asp-controller="Profile" asp-action="ChangePassword" class="btn-logout" title="Đổi mật khẩu">
                 <i class="bi bi-shield-lock"></i> Đổi mật khẩu

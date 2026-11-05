@@ -1,6 +1,6 @@
 namespace Bms.Web.Services;
 
-public record RedeemResult(bool Success, string Message, int RemainingPoints);
+public record RedeemResult(bool Success, string Message, int RemainingPoints, string? VoucherCode = null);
 
 public record PaymentLoyaltyResult(
     bool Success,
@@ -17,31 +17,73 @@ public record BillRedeemResult(
     decimal DiscountAmount,
     int RemainingPoints);
 
+public record CheckoutLoyaltyRequest(
+    string CustomerId,
+    string ReferenceCode,
+    int? InvoiceId,
+    decimal PlaytimeAmount,
+    decimal FandBAmount,
+    int PointsToRedeem,
+    string? VoucherCode,
+    string? CashierId);
+
+public record CheckoutLoyaltyPreview(
+    bool IsValid,
+    IReadOnlyList<string> Errors,
+    string TierName,
+    decimal TierDiscountPercent,
+    decimal TierDiscountAmount,
+    decimal VoucherDiscountAmount,
+    decimal PointsDiscountAmount,
+    int MaxRedeemablePoints,
+    decimal FinalAmount,
+    int PointsToEarn,
+    bool WillUpgradeTier,
+    string? NextTierName,
+    decimal Spend12MonthsAfter,
+    decimal AmountNeededForNextTier);
+
+public record CheckoutLoyaltyResult(
+    bool Success,
+    bool Duplicate,
+    string Message,
+    decimal Subtotal,
+    decimal TierDiscountAmount,
+    decimal VoucherDiscountAmount,
+    decimal PointsDiscountAmount,
+    decimal TotalDiscount,
+    decimal FinalAmount,
+    int PointsRedeemed,
+    int PointsEarned,
+    int NewRewardPoints,
+    string TierName,
+    bool UpgradedTier);
+
 /// <summary>
-/// Nghiệp vụ tích điểm / đổi điểm / phân hạng thành viên.
+/// Nghiệp vụ tích điểm / đổi điểm / phân hạng thành viên & hợp đồng Checkout Loyalty cho TV3.
 /// </summary>
 public interface ILoyaltyService
 {
-    /// <summary>Đổi điểm lấy quà/dịch vụ trong <see cref="RewardCatalog"/>.</summary>
+    /// <summary>Đổi điểm lấy quà/voucher trong bảng RewardItems.</summary>
     Task<RedeemResult> RedeemRewardAsync(string customerId, string rewardCode, CancellationToken ct = default);
 
+    /// <summary>Xem trước toàn bộ giảm giá theo hạng, voucher, đổi điểm và số điểm sẽ tích lũy khi thanh toán.</summary>
+    Task<CheckoutLoyaltyPreview> PreviewCheckoutAsync(CheckoutLoyaltyRequest req, CancellationToken ct = default);
+
     /// <summary>
-    /// Xử lý tích điểm và xét thăng hạng sau khi thanh toán hóa đơn.
-    /// Tỷ lệ: 20.000 VNĐ = 1 điểm * PointMultiplier của hạng hiện tại.
-    /// Cộng dồn TotalSpend, xét thăng hạng TierId, cập nhật LastPaidDate, ghi log PointTransactions('Earn'),
-    /// và gửi Notifications nếu khách được thăng hạng.
+    /// INTEGRATION: TV3 gọi CommitCheckoutAsync khi Invoice chuyển sang Paid.
+    /// Xử lý trọn gói (1 transaction, idempotent theo ReferenceCode):
+    /// Trừ điểm đổi hóa đơn -> Đánh dấu Voucher Used -> Cộng TotalSpend & LastPaidDate -> Cộng điểm Earn -> Xét hạng 12 tháng -> Bắn Notification tổng hợp.
+    /// Trả về TotalDiscount để TV3 ghi vào Invoices.DiscountAmount.
     /// </summary>
+    Task<CheckoutLoyaltyResult> CommitCheckoutAsync(CheckoutLoyaltyRequest req, CancellationToken ct = default);
+
+    [Obsolete("Sử dụng CommitCheckoutAsync để đảm bảo idempotent và áp đầy đủ ưu đãi hạng/voucher.")]
     Task<PaymentLoyaltyResult> ProcessPaymentLoyaltyAsync(string customerId, decimal finalAmount, CancellationToken ct = default);
 
-    /// <summary>
-    /// Đổi điểm để giảm trừ trực tiếp vào hóa đơn cần thanh toán.
-    /// Quy tắc: 1 Điểm = 1.000 VNĐ; Số tiền giảm tối đa không vượt quá 50% giá trị hóa đơn.
-    /// Trừ RewardPoints, ghi log PointTransactions('Redeem', số âm) và trả về số tiền được giảm.
-    /// </summary>
+    [Obsolete("Sử dụng PreviewCheckoutAsync / CommitCheckoutAsync để đổi điểm trong cùng giao dịch thanh toán.")]
     Task<BillRedeemResult> RedeemPointsForBillAsync(string customerId, int pointsToRedeem, decimal currentBillAmount, CancellationToken ct = default);
 
-    /// <summary>
-    /// Quét và xử lý hết hạn điểm thưởng cho các tài khoản không phát sinh hóa đơn quá 180 ngày.
-    /// </summary>
+    /// <summary>Quét và xử lý hết hạn điểm thưởng cho các tài khoản không phát sinh hóa đơn quá 180 ngày.</summary>
     Task<int> ProcessPointExpirationsAsync(CancellationToken ct = default);
 }

@@ -1,29 +1,33 @@
+using Bms.Web.Data;
+using Bms.Web.Services;
+
 namespace Bms.Web.Models;
 
 public class LoyaltyTestViewModel
 {
     public string? SelectedCustomerId { get; set; }
     public List<CustomerSelectItemViewModel> Customers { get; set; } = new();
-
-    // Thông tin chi tiết khách hàng đang chọn
     public SelectedCustomerDetailViewModel? CustomerDetail { get; set; }
 
-    // Dữ liệu form giả lập thanh toán
-    public decimal PaymentFinalAmount { get; set; } = 100000;
+    // Dữ liệu form Mô phỏng quầy thu ngân (F3)
+    public string ReferenceCode { get; set; } = $"SIM-{DateTime.UtcNow:yyyyMMddHHmmss}";
+    public decimal PlaytimeAmount { get; set; } = 300000;
+    public decimal FandBAmount { get; set; } = 80000;
+    public int PointsToRedeem { get; set; } = 0;
+    public string? VoucherCode { get; set; }
+    public List<CustomerVoucher> AvailableVouchers { get; set; } = new();
+    public CheckoutLoyaltyPreview? Preview { get; set; }
 
-    // Dữ liệu form giả lập đổi điểm hóa đơn
+    // Dữ liệu form cũ để tương thích
+    public decimal PaymentFinalAmount { get; set; } = 100000;
     public decimal BillAmount { get; set; } = 200000;
-    public int PointsToRedeem { get; set; } = 50;
 
     // Dữ liệu form giả lập khách hàng gửi đánh giá
     public int ReviewSessionId { get; set; } = 999;
     public byte ReviewRating { get; set; } = 5;
     public string ReviewComment { get; set; } = "Bàn chơi rất êm, nhân viên nhiệt tình, giá hợp lý!";
 
-    // Danh sách đánh giá gần đây trong hệ thống
     public List<SimulatedReviewItemViewModel> RecentReviews { get; set; } = new();
-
-    // Hộp thư thông báo của khách hàng đang chọn
     public List<SimulatedNotificationItemViewModel> CustomerNotifications { get; set; } = new();
 }
 
@@ -54,6 +58,7 @@ public class CustomerSelectItemViewModel
     public string Id { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
     public string? PhoneNumber { get; set; }
+    public string? CardCode { get; set; }
     public string? TierName { get; set; }
     public int RewardPoints { get; set; }
 }
@@ -63,11 +68,13 @@ public class SelectedCustomerDetailViewModel
     public string Id { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
     public string? PhoneNumber { get; set; }
+    public string? CardCode { get; set; }
     public string? TierName { get; set; }
     public int PointMultiplier { get; set; }
     public decimal DiscountPercent { get; set; }
     public int RewardPoints { get; set; }
     public decimal TotalSpend { get; set; }
+    public decimal Spend12Months { get; set; }
     public DateTime? LastPaidDate { get; set; }
     public List<PointTransactionRowViewModel> RecentTransactions { get; set; } = new();
 }

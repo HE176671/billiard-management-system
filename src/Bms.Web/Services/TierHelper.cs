@@ -63,4 +63,37 @@ public static class VnFormat
         "Member" => "background:#dbeafe;color:#1d4ed8",
         _        => "background:#f1f5f9;color:#64748b"
     };
+
+    /// <summary>Nhãn tiếng Việt tự nhiên cho 4 nhóm khách hàng (RFM): VIP, Thân thiết, Khách mới, Lâu rồi chưa ghé.</summary>
+    public static string SegmentLabel(string? segment) => segment switch
+    {
+        "Champion" => "VIP",
+        "Loyal"    => "Thân thiết",
+        "New"      => "Khách mới",
+        "AtRisk"   => "Lâu rồi chưa ghé",
+        "Lost"     => "Lâu rồi chưa ghé",
+        "Regular"  => "Thân thiết",
+        _          => segment ?? "Thân thiết"
+    };
+
+    /// <summary>Nhãn tiếng Việt cho loại ưu đãi/voucher.</summary>
+    public static string RewardTypeLabel(string? type) => type switch
+    {
+        "Gift"         => "Quà tại quầy",
+        "FreeHour"     => "Giờ chơi",
+        "BillDiscount" => "Giảm hóa đơn",
+        _              => type ?? "Ưu đãi"
+    };
+
+    /// <summary>Nhãn tiếng Việt cho loại giao dịch điểm.</summary>
+    public static string TxTypeLabel(string? type) => type switch
+    {
+        "Earn"    => "Tích điểm",
+        "Redeem"  => "Đổi điểm",
+        "Adjust"  => "Điều chỉnh",
+        "Bonus"   => "Điểm thưởng",
+        "Expire"  => "Hết hạn",
+        "Reverse" => "Hoàn điểm",
+        _         => type ?? "Khác"
+    };
 }

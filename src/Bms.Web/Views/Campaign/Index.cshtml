@@ -1,0 +1,202 @@
+@model Bms.Web.Models.CampaignIndexViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Chương trình gửi ưu đãi";
+    Layout = "_AdminLayout";
+    var f = Model.Form;
+    var prv = Model.Preview;
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-3">
+    <!-- Trái: Tạo chương trình ưu đãi & Xem trước người nhận -->
+    <div class="col-lg-6">
+        <div class="data-card p-4">
+            <h2 class="h6 fw-bold mb-3">
+                <i class="bi bi-megaphone me-2 text-danger"></i>Tạo chương trình gửi ưu đãi
+            </h2>
+
+            <form method="post">
+                @Html.AntiForgeryToken()
+
+                <div class="mb-3">
+                    <label class="form-label">Tên chương trình <span class="text-danger">*</span></label>
+                    <input type="text" name="Name" class="form-control" value="@f.Name"
+                           placeholder="VD: Ưu đãi mời khách quen quay lại tháng 10" required />
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Phân loại</label>
+                        <select name="CampaignType" class="form-select">
+                            <option value="Manual" selected="@(f.CampaignType == "Manual")">Gửi theo đợt</option>
+                            <option value="WinBack" selected="@(f.CampaignType == "WinBack")">Mời khách quay lại</option>
+                            <option value="Birthday" selected="@(f.CampaignType == "Birthday")">Mừng sinh nhật</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Nhóm khách hàng</label>
+                        <select name="TargetSegment" class="form-select">
+                            <option value="All" selected="@(f.TargetSegment == "All" || string.IsNullOrEmpty(f.TargetSegment))">Tất cả nhóm khách</option>
+                            @foreach (var s in new[] { "Champion", "Loyal", "New", "AtRisk" })
+                            {
+                                <option value="@s" selected="@(f.TargetSegment == s)">@VnFormat.SegmentLabel(s)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Hạng thành viên</label>
+                        <select name="TargetTierId" class="form-select">
+                            <option value="">Tất cả hạng</option>
+                            @foreach (var t in Model.Tiers)
+                            {
+                                <option value="@t.Id" selected="@(f.TargetTierId == t.Id)">Hạng @t.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-7">
+                        <label class="form-label">Voucher tặng kèm (không bắt buộc)</label>
+                        <select name="RewardItemId" class="form-select">
+                            <option value="">-- Không tặng kèm voucher --</option>
+                            @foreach (var r in Model.RewardItems)
+                            {
+                                <option value="@r.Id" selected="@(f.RewardItemId == r.Id)">
+                                    @r.Name (@VnFormat.RewardTypeLabel(r.RewardType)@(r.DiscountValue.HasValue ? " — " + VnFormat.Money(r.DiscountValue.Value) : ""))
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Điểm thưởng tặng thêm</label>
+                        <input type="number" name="BonusPoints" class="form-control" min="0" value="@f.BonusPoints" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Tiêu đề thông báo <span class="text-danger">*</span></label>
+                    <input type="text" name="MessageTitle" class="form-control" value="@f.MessageTitle" required />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Nội dung thông báo <span class="text-danger">*</span></label>
+                    <textarea name="MessageContent" class="form-control" rows="3" required>@f.MessageContent</textarea>
+                    <div class="form-text">
+                        Có thể chèn tự động: <code>{FullName}</code> (tên khách), <code>{TierName}</code> (hạng), <code>{Points}</code> (điểm hiện có).
+                        Hệ thống chỉ gửi cho tài khoản đang hoạt động và có đăng ký nhận thông báo ưu đãi.
+                    </div>
+                </div>
+
+                @if (prv != null)
+                {
+                    <div class="p-3 rounded-3 mb-3" style="background:#f8fafc;border:1px solid #cbd5e1;font-size:0.84rem">
+                        <div class="fw-semibold text-primary mb-1">
+                            <i class="bi bi-people me-1"></i>Danh sách dự kiến nhận: <strong>@prv.TotalEligibleCount hội viên phù hợp</strong>
+                        </div>
+                        @if (prv.SampleRecipients.Any())
+                        {
+                            <div class="text-muted mb-1" style="font-size:0.76rem">Một số hội viên trong danh sách:</div>
+                            <ul class="mb-0 ps-3" style="font-size:0.8rem">
+                                @foreach (var sr in prv.SampleRecipients)
+                                {
+                                    <li><strong>@sr.FullName</strong> (@(sr.PhoneNumber ?? "—")) — Hạng @sr.TierName · @VnFormat.SegmentLabel(sr.Segment) · Chi tiêu 12T: @VnFormat.Money(sr.Monetary12M)</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                }
+
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="submit" asp-action="Preview" class="btn-outline-bms">
+                        <i class="bi bi-eye"></i> Xem danh sách nhận
+                    </button>
+                    <button type="submit" asp-action="CreateAndSend" class="btn-primary-bms">
+                        <i class="bi bi-send"></i> Phát hành &amp; gửi ngay
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Phải: Lịch sử các đợt đã gửi -->
+    <div class="col-lg-6">
+        <div class="data-card">
+            <div class="data-card-header">
+                <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>Các đợt ưu đãi đã gửi (@Model.Campaigns.Count)</span>
+            </div>
+            @if (!Model.Campaigns.Any())
+            {
+                <div class="text-center py-5 text-muted">Chưa có chương trình ưu đãi nào được tạo.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Tên chương trình</th>
+                                <th>Đối tượng</th>
+                                <th>Quà tặng</th>
+                                <th class="text-end">Số người nhận</th>
+                                <th>Trạng thái</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in Model.Campaigns)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@c.Name</strong>
+                                        <div class="text-muted" style="font-size:0.75rem">@c.CreatedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">@(string.IsNullOrEmpty(c.TargetSegment) || c.TargetSegment == "All" ? "Tất cả" : VnFormat.SegmentLabel(c.TargetSegment))</span>
+                                        @if (c.TargetTier != null)
+                                        {
+                                            <span class="badge bg-secondary">Hạng @c.TargetTier.TierName</span>
+                                        }
+                                    </td>
+                                    <td style="font-size:0.8rem">
+                                        @if (c.RewardItem != null) { <div>@c.RewardItem.Name</div> }
+                                        @if (c.BonusPoints > 0) { <div class="text-success fw-semibold">+@c.BonusPoints điểm</div> }
+                                    </td>
+                                    <td class="text-end fw-semibold">@c.RecipientCount người</td>
+                                    <td>
+                                        @if (c.Status == "Sent") { <span class="badge-active">Đã gửi</span> }
+                                        else { <span class="badge bg-warning text-dark">Nháp</span> }
+                                    </td>
+                                    <td class="text-end">
+                                        <form asp-action="Send" asp-route-id="@c.Id" method="post">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn-sm-icon" title="Gửi bổ sung cho hội viên mới đủ điều kiện">
+                                                <i class="bi bi-send"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+

@@ -1,8 +1,10 @@
+using System.Reflection;
 using System.Security.Claims;
 using Bms.Web.Controllers;
 using Bms.Web.Data;
 using Bms.Web.Models;
 using Bms.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -38,6 +40,13 @@ connString ??= "Server=localhost\\SQLEXPRESS;Database=BilliardDB;Trusted_Connect
 services.AddDbContext<ApplicationDbContext>(o => o.UseSqlServer(connString));
 services.AddIdentity<ApplicationUser, IdentityRole>(o => o.Stores.MaxLengthForKeys = 128)
     .AddEntityFrameworkStores<ApplicationDbContext>().AddDefaultTokenProviders();
+services.AddMemoryCache();
+services.AddScoped<IPointLedgerService, PointLedgerService>();
+services.AddScoped<ITierEvaluationService, TierEvaluationService>();
+services.AddScoped<IVoucherService, VoucherService>();
+services.AddScoped<ILoyaltyService, LoyaltyService>();
+services.AddScoped<ICustomerSegmentService, CustomerSegmentService>();
+services.AddScoped<ICampaignService, CampaignService>();
 await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -48,9 +57,11 @@ void Check(bool condition, string label) {
     if (!condition) throw new Exception("FAIL: " + label);
     Console.WriteLine("PASS: " + label); passed++;
 }
-T Prepare<T>(T controller) where T : Controller {
+T Prepare<T>(T controller, ClaimsPrincipal? principal = null) where T : Controller {
+    var httpCtx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+    if (principal != null) httpCtx.User = principal;
     controller.ControllerContext = new ControllerContext {
-        HttpContext = new DefaultHttpContext { RequestServices = scope.ServiceProvider },
+        HttpContext = httpCtx,
         RouteData = new Microsoft.AspNetCore.Routing.RouteData(),
         ActionDescriptor = new Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor()
     };
@@ -174,6 +185,269 @@ try
     staff.TierId = null; customer.TierId = null; await db.SaveChangesAsync();
     await tierController.Delete(tier.Id);
     Check(!await db.MembershipTiers.AnyAsync(t => t.Id == tier.Id), "Unreferenced tier deletion");
+
+    // =========================================================================
+    // TV2 CRM & Loyalty V2 Acceptance Tests (T1 - T16)
+    // =========================================================================
+    var ledger = scope.ServiceProvider.GetRequiredService<IPointLedgerService>();
+    var tierEval = scope.ServiceProvider.GetRequiredService<ITierEvaluationService>();
+    var voucherSvc = scope.ServiceProvider.GetRequiredService<IVoucherService>();
+    var loyalty = scope.ServiceProvider.GetRequiredService<ILoyaltyService>();
+    var segmentSvc = scope.ServiceProvider.GetRequiredService<ICustomerSegmentService>();
+    var campaignSvc = scope.ServiceProvider.GetRequiredService<ICampaignService>();
+
+    var allTiers = await db.MembershipTiers.OrderBy(t => t.MinPoints).ToListAsync();
+    var memberTier = allTiers.First(t => t.MinPoints == 0);
+    var silverTier = allTiers.First(t => t.TierName == "Silver" || t.MinPoints == 200);
+    var goldTier = allTiers.First(t => t.TierName == "Gold" || t.MinPoints == 1000);
+
+    var adminUser = new ApplicationUser { UserName = "admin.tv2." + key, Email = "admin." + key + "@example.invalid", FullName = "TV2 Admin Checker" };
+    Check((await users.CreateAsync(adminUser, "SmokeAdmin!123")).Succeeded && (await users.AddToRoleAsync(adminUser, "Admin")).Succeeded, "TV2 Admin fixture creation");
+
+    var tv2Customer = new ApplicationUser
+    {
+        UserName = "tv2.cust." + key,
+        Email = "tv2." + key + "@example.invalid",
+        PhoneNumber = "09" + Random.Shared.Next(10000000, 99999999),
+        FullName = "TV2 Smoke Customer",
+        RewardPoints = 0,
+        TierId = memberTier.Id,
+        IsActive = true,
+        MarketingOptIn = true
+    };
+    Check((await users.CreateAsync(tv2Customer, "SmokeCustomer!123")).Succeeded && (await users.AddToRoleAsync(tv2Customer, "Customer")).Succeeded, "TV2 Customer fixture creation");
+
+    // T1: Commit checkout 2 lần cùng ReferenceCode -> Lần 2 trả Duplicate, điểm chỉ cộng 1 lần, chỉ 1 bút toán Earn
+    var refT1 = $"INV-T1-{key[..12]}";
+    var reqT1 = new CheckoutLoyaltyRequest(tv2Customer.Id, refT1, null, 200000m, 40000m, 0, null, staff.Id);
+    var commit1 = await loyalty.CommitCheckoutAsync(reqT1);
+    var commit2 = await loyalty.CommitCheckoutAsync(reqT1);
+    var ptsAfterT1 = await db.Users.AsNoTracking().Where(u => u.Id == tv2Customer.Id).Select(u => u.RewardPoints).SingleAsync();
+    var earnCountT1 = await db.PointTransactions.CountAsync(t => t.CustomerId == tv2Customer.Id && t.TransactionType == PointTransaction.Earn && t.ReferenceCode == refT1);
+    Check(commit1.Success && !commit1.Duplicate && commit1.PointsEarned == 12 && commit2.Success && commit2.Duplicate && ptsAfterT1 == 12 && earnCountT1 == 1,
+        "T1: Commit checkout twice with same ReferenceCode is idempotent (Duplicate=true, 1 Earn row)");
+
+    // T2: Ledger trừ quá số dư -> Thất bại, RewardPoints không đổi, không có bút toán
+    var overRef = $"OVER-{key[..12]}";
+    var overRes = await ledger.PostAsync(tv2Customer.Id, -50, PointTransaction.Redeem, overRef, null, "Test over deduction", staff.Id);
+    var ptsAfterT2 = await db.Users.AsNoTracking().Where(u => u.Id == tv2Customer.Id).Select(u => u.RewardPoints).SingleAsync();
+    Check(!overRes.Success && ptsAfterT2 == 12 && !await db.PointTransactions.AnyAsync(t => t.ReferenceCode == overRef),
+        "T2: Ledger rejects deduction exceeding available RewardPoints");
+
+    // T3: BalanceAfter -> Sau chuỗi Earn/Redeem/Adjust, BalanceAfter của bút toán cuối = RewardPoints
+    await ledger.PostAsync(tv2Customer.Id, 100, PointTransaction.Earn, $"T3-E-{key[..10]}", null, "T3 Earn", staff.Id, 2000000m);
+    await ledger.PostAsync(tv2Customer.Id, -30, PointTransaction.Redeem, $"T3-R-{key[..10]}", null, "T3 Redeem", staff.Id);
+    await ledger.PostAsync(tv2Customer.Id, 18, PointTransaction.Adjust, $"T3-A-{key[..10]}", null, "T3 Adjust", staff.Id);
+    var ptsAfterT3 = await db.Users.AsNoTracking().Where(u => u.Id == tv2Customer.Id).Select(u => u.RewardPoints).SingleAsync();
+    var lastTxT3 = await db.PointTransactions.AsNoTracking().Where(t => t.CustomerId == tv2Customer.Id).OrderByDescending(t => t.Id).FirstAsync();
+    Check(ptsAfterT3 == 100 && lastTxT3.BalanceAfter == ptsAfterT3,
+        "T3: BalanceAfter matches actual RewardPoints after Earn/Redeem/Adjust sequence");
+
+    // T4: Preview: đổi điểm vượt 50% -> IsValid=false, MaxRedeemablePoints đúng công thức
+    await ledger.PostAsync(tv2Customer.Id, 400, PointTransaction.Adjust, $"T4-SEED-{key[..10]}", null, "Seed T4", staff.Id);
+    var previewT4 = await loyalty.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(tv2Customer.Id, "PREV-T4", null, 100000m, 0m, 80, null, staff.Id));
+    Check(!previewT4.IsValid && previewT4.MaxRedeemablePoints == 50,
+        "T4: PreviewCheckout rejects points exceeding 50% of remaining bill and returns exact MaxRedeemablePoints");
+
+    // T5: Thứ tự giảm giá -> Hạng 10% chỉ áp tiền giờ; voucher; điểm <= 50% phần còn lại; FinalAmount đúng
+    await db.Users.Where(u => u.Id == tv2Customer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.TierId, goldTier.Id));
+    db.ChangeTracker.Clear();
+    var voucherT5 = new CustomerVoucher
+    {
+        Code = $"BMS-T5-{key[..6].ToUpperInvariant()}",
+        CustomerId = tv2Customer.Id,
+        Title = "Voucher T5 30k",
+        VoucherType = RewardItemEntity.TypeBillDiscount,
+        DiscountValue = 30000m,
+        Status = CustomerVoucher.StatusActive,
+        IssuedAtUtc = DateTime.UtcNow,
+        ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
+    };
+    db.CustomerVouchers.Add(voucherT5);
+    await db.SaveChangesAsync();
+    var previewT5 = await loyalty.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(tv2Customer.Id, "PREV-T5", null, 200000m, 100000m, 100, voucherT5.Code, staff.Id));
+    Check(previewT5.IsValid
+        && previewT5.TierDiscountAmount == 20000m
+        && previewT5.VoucherDiscountAmount == 30000m
+        && previewT5.MaxRedeemablePoints == 125
+        && previewT5.PointsDiscountAmount == 100000m
+        && previewT5.FinalAmount == 150000m,
+        "T5: Discount order applies 10% tier discount ONLY to PlaytimeAmount, then Voucher, then Points <= 50% remaining");
+
+    // T6: Earn tính trên FinalAmount × multiplier -> Đúng floor(Final/20000)*mult
+    Check(previewT5.PointsToEarn == 7 * goldTier.PointMultiplier,
+        "T6: PointsToEarn calculated on FinalAmount * PointMultiplier");
+
+    // T7: Lên hạng khi vượt ngưỡng 12 tháng -> TierId đổi, TierReviewAtUtc = +12 tháng, có Notification
+    var upCustomer = new ApplicationUser
+    {
+        UserName = "tv2.up." + key,
+        Email = "up." + key + "@example.invalid",
+        FullName = "TV2 Upgrade Customer",
+        RewardPoints = 0,
+        TierId = memberTier.Id,
+        IsActive = true,
+        MarketingOptIn = true
+    };
+    await users.CreateAsync(upCustomer, "SmokeCustomer!123");
+    await users.AddToRoleAsync(upCustomer, "Customer");
+    var silverSpendThreshold = silverTier.SpendThreshold;
+    var commitT7 = await loyalty.CommitCheckoutAsync(new CheckoutLoyaltyRequest(upCustomer.Id, $"INV-T7-{key[..10]}", null, silverSpendThreshold + 200000m, 0m, 0, null, staff.Id));
+    var upUserAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == upCustomer.Id);
+    var hasUpgradeNotif = await db.Notifications.AnyAsync(n => n.UserId == upCustomer.Id && n.Title.Contains(silverTier.TierName));
+    Check(commitT7.Success && commitT7.UpgradedTier && upUserAfter.TierId == silverTier.Id
+        && upUserAfter.TierReviewAtUtc.HasValue && upUserAfter.TierReviewAtUtc.Value > DateTime.UtcNow.AddMonths(11)
+        && hasUpgradeNotif,
+        "T7: Immediate tier upgrade on 12M spend threshold updates TierId, sets TierReviewAtUtc +12M, and creates Notification");
+
+    // T8: Hết review, chưa đủ chi tiêu -> Vào ân hạn 30 ngày, chưa hạ
+    var graceCustomer = new ApplicationUser
+    {
+        UserName = "tv2.grace." + key,
+        Email = "grace." + key + "@example.invalid",
+        FullName = "TV2 Grace Customer",
+        RewardPoints = 0,
+        TierId = goldTier.Id,
+        TierAchievedAtUtc = DateTime.UtcNow.AddMonths(-12),
+        TierReviewAtUtc = DateTime.UtcNow.AddDays(-1),
+        TierGraceUntilUtc = null,
+        IsActive = true
+    };
+    await users.CreateAsync(graceCustomer, "SmokeCustomer!123");
+    await users.AddToRoleAsync(graceCustomer, "Customer");
+    await tierEval.ProcessDailyTierReviewsAsync(DateTime.UtcNow);
+    var graceAfterT8 = await db.Users.AsNoTracking().SingleAsync(u => u.Id == graceCustomer.Id);
+    Check(graceAfterT8.TierId == goldTier.Id && graceAfterT8.TierGraceUntilUtc.HasValue && graceAfterT8.TierGraceUntilUtc.Value > DateTime.UtcNow.AddDays(28),
+        "T8: Expired tier review with insufficient 12M spend enters 30-day grace period without immediate downgrade");
+
+    // T9: Hết ân hạn -> Hạ đúng 1 bậc (Gold -> Silver, không tụt thẳng về Member dù chi tiêu = 0)
+    await db.Users.Where(u => u.Id == graceCustomer.Id)
+        .ExecuteUpdateAsync(s => s.SetProperty(u => u.TierGraceUntilUtc, DateTime.UtcNow.AddDays(-1)));
+    db.ChangeTracker.Clear();
+    await tierEval.ProcessDailyTierReviewsAsync(DateTime.UtcNow);
+    var graceAfterT9 = await db.Users.AsNoTracking().SingleAsync(u => u.Id == graceCustomer.Id);
+    Check(graceAfterT9.TierId == silverTier.Id && graceAfterT9.TierGraceUntilUtc == null,
+        "T9: Expired grace period downgrades tier by at most 1 step (Gold -> Silver)");
+
+    // T10: Đổi quà -> voucher Active; xác nhận -> Used; xác nhận lần 2 bị từ chối
+    var rewardItem = await db.RewardItems.FirstAsync(r => r.IsActive && r.RewardType == RewardItemEntity.TypeGift && r.PointCost > 0);
+    var redeem10 = await voucherSvc.RedeemRewardForVoucherAsync(tv2Customer.Id, rewardItem.Code);
+    var confirm1 = await voucherSvc.ConfirmGiftDeliveryAsync(redeem10.Voucher!.Code, staff.Id);
+    var confirm2 = await voucherSvc.ConfirmGiftDeliveryAsync(redeem10.Voucher!.Code, staff.Id);
+    var v10Reloaded = await db.CustomerVouchers.AsNoTracking().SingleAsync(v => v.Id == redeem10.Voucher.Id);
+    Check(redeem10.Success && confirm1.Success && !confirm2.Success && v10Reloaded.Status == CustomerVoucher.StatusUsed,
+        "T10: Redeem creates Active voucher; ConfirmGiftDelivery marks Used; second confirmation is rejected");
+
+    // T11: Admin hủy voucher -> Hoàn điểm bằng bút toán Reverse
+    var redeem11 = await voucherSvc.RedeemRewardForVoucherAsync(tv2Customer.Id, rewardItem.Code);
+    var ptsBeforeCancel = await db.Users.AsNoTracking().Where(u => u.Id == tv2Customer.Id).Select(u => u.RewardPoints).SingleAsync();
+    var cancel11 = await voucherSvc.CancelVoucherAsync(redeem11.Voucher!.Id, adminUser.Id, "Khách đổi ý T11");
+    var ptsAfterCancel = await db.Users.AsNoTracking().Where(u => u.Id == tv2Customer.Id).Select(u => u.RewardPoints).SingleAsync();
+    var hasReverseTx = await db.PointTransactions.AnyAsync(t => t.CustomerId == tv2Customer.Id && t.TransactionType == PointTransaction.Reverse && t.ReferenceCode == $"REV-VOUCHER-{redeem11.Voucher.Code}");
+    Check(cancel11.Success && ptsAfterCancel == ptsBeforeCancel + rewardItem.PointCost && hasReverseTx,
+        "T11: Admin CancelVoucher refunds points via Reverse ledger transaction");
+
+    // T12: Điều chỉnh 200 điểm bởi Staff -> Pending; maker không duyệt được; Admin duyệt -> có bút toán Adjust
+    var staffPrincipal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+    {
+        new Claim(ClaimTypes.NameIdentifier, staff.Id),
+        new Claim(ClaimTypes.Role, "Staff")
+    }, "TestAuth"));
+    var staffAdjCtrl = Prepare(new PointAdjustmentController(db, ledger), staffPrincipal);
+    await staffAdjCtrl.Create(tv2Customer.Id, 200, "Bù sự cố bàn/điện", "Test T12", null);
+    var adjReq = await db.PointAdjustmentRequests.OrderByDescending(r => r.Id).FirstAsync(r => r.CustomerId == tv2Customer.Id && r.Points == 200);
+    var isPendingInitially = adjReq.Status == PointAdjustmentRequest.StatusPending;
+
+    // Maker tries to approve own request -> rejected
+    var makerAsAdminPrincipal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+    {
+        new Claim(ClaimTypes.NameIdentifier, staff.Id),
+        new Claim(ClaimTypes.Role, "Admin")
+    }, "TestAuth"));
+    var makerAdjCtrl = Prepare(new PointAdjustmentController(db, ledger), makerAsAdminPrincipal);
+    await makerAdjCtrl.Approve(adjReq.Id, "Tự duyệt");
+    var stillPendingAfterSelfApprove = (await db.PointAdjustmentRequests.AsNoTracking().SingleAsync(r => r.Id == adjReq.Id)).Status == PointAdjustmentRequest.StatusPending;
+
+    // Separate Admin checker approves -> Approved + Adjust ledger entry
+    var checkerPrincipal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+    {
+        new Claim(ClaimTypes.NameIdentifier, adminUser.Id),
+        new Claim(ClaimTypes.Role, "Admin")
+    }, "TestAuth"));
+    var checkerAdjCtrl = Prepare(new PointAdjustmentController(db, ledger), checkerPrincipal);
+    await checkerAdjCtrl.Approve(adjReq.Id, "Admin checker duyệt");
+    var adjAfterApprove = await db.PointAdjustmentRequests.AsNoTracking().SingleAsync(r => r.Id == adjReq.Id);
+    var hasAdjustLedger = adjAfterApprove.PointTransactionId.HasValue
+        && await db.PointTransactions.AnyAsync(t => t.Id == adjAfterApprove.PointTransactionId.Value && t.TransactionType == PointTransaction.Adjust && t.Amount == 200);
+    Check(isPendingInitially && stillPendingAfterSelfApprove && adjAfterApprove.Status == PointAdjustmentRequest.StatusApproved && hasAdjustLedger,
+        "T12: Staff 200pt adjustment creates Pending request, blocks self-approval (Maker != Checker), and posts Adjust on Admin approval");
+
+    // T13: Phân khúc RFM -> Mỗi fixture rơi đúng 1 trong 4 phân khúc (VIP, Thân thiết, Khách mới, Lâu rồi chưa ghé)
+    var nowRef = DateTime.UtcNow;
+    var segNew = segmentSvc.ClassifySegment(nowRef.AddDays(-10), nowRef.AddDays(-2), 1, nowRef);
+    var segChampion = segmentSvc.ClassifySegment(nowRef.AddDays(-100), nowRef.AddDays(-5), 8, nowRef);
+    var segLoyal = segmentSvc.ClassifySegment(nowRef.AddDays(-100), nowRef.AddDays(-15), 3, nowRef);
+    var segAtRisk = segmentSvc.ClassifySegment(nowRef.AddDays(-120), nowRef.AddDays(-45), 3, nowRef);
+    Check(segNew == CustomerSegmentService.SegNew
+        && segChampion == CustomerSegmentService.SegChampion
+        && segLoyal == CustomerSegmentService.SegLoyal
+        && segAtRisk == CustomerSegmentService.SegAtRisk,
+        "T13: RFM ClassifySegment places each fixture into its exact 4-group segment (VIP, Loyal, New, AtRisk)");
+
+    // T14: Chiến dịch gửi 2 lần cho cùng người -> Không phát trùng voucher/điểm
+    var campT14 = new Campaign
+    {
+        Name = "Smoke Campaign T14 " + key[..6],
+        CampaignType = Campaign.TypeManual,
+        TargetSegment = "All",
+        TargetTierId = silverTier.Id,
+        BonusPoints = 25,
+        MessageTitle = "Ưu đãi T14 {FullName}",
+        MessageContent = "Tặng 25 điểm thưởng T14",
+        Status = Campaign.StatusDraft,
+        CreatedById = adminUser.Id,
+        CreatedAtUtc = DateTime.UtcNow
+    };
+    db.Campaigns.Add(campT14);
+    await db.SaveChangesAsync();
+    var send1 = await campaignSvc.SendCampaignAsync(campT14.Id, adminUser.Id);
+    var send2 = await campaignSvc.SendCampaignAsync(campT14.Id, adminUser.Id);
+    var cmpTxCount = await db.PointTransactions.CountAsync(t => t.CustomerId == upCustomer.Id && t.ReferenceCode == $"CMP-{campT14.Id}-{upCustomer.Id}");
+    Check(send1.Success && send1.SentCount >= 1 && send2.SentCount == 0 && cmpTxCount == 1,
+        "T14: Sending campaign twice does not duplicate bonus points or vouchers for the same customer");
+
+    // T15: Voucher sinh nhật -> Phát 1 lần/năm, chỉ hạng có BirthdayVoucherValue > 0
+    var vnToday = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+    var bdayDate = new DateOnly(1998, vnToday.Month, vnToday.Day);
+    await db.Users.Where(u => u.Id == upCustomer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.DateOfBirth, bdayDate));
+    await db.Users.Where(u => u.Id == tv2Customer.Id).ExecuteUpdateAsync(s => s
+        .SetProperty(u => u.TierId, memberTier.Id)
+        .SetProperty(u => u.DateOfBirth, bdayDate));
+    db.ChangeTracker.Clear();
+    var bdayRun1 = await campaignSvc.IssueBirthdayVouchersAsync(vnToday);
+    var bdayRun2 = await campaignSvc.IssueBirthdayVouchersAsync(vnToday);
+    var bdayRefSilver = $"BDAY-{vnToday.Year}-{upCustomer.Id}";
+    if (bdayRefSilver.Length > 50) bdayRefSilver = bdayRefSilver[..50];
+    var bdayRefMember = $"BDAY-{vnToday.Year}-{tv2Customer.Id}";
+    if (bdayRefMember.Length > 50) bdayRefMember = bdayRefMember[..50];
+    var silverBdayCount = await db.CustomerVouchers.CountAsync(v => v.CustomerId == upCustomer.Id && v.UsedReferenceCode == bdayRefSilver);
+    var memberBdayCount = await db.CustomerVouchers.CountAsync(v => v.CustomerId == tv2Customer.Id && v.UsedReferenceCode == bdayRefMember);
+    Check(bdayRun1 >= 1 && bdayRun2 == 0 && silverBdayCount == 1 && memberBdayCount == 0,
+        "T15: Birthday voucher issued once per year only for tiers with BirthdayVoucherValue > 0");
+
+    // T16: Staff truy cập /CrmDashboard, /Campaign, duyệt điều chỉnh -> Bị chặn bởi [Authorize(Roles = "Admin")]
+    var crmAuth = typeof(CrmDashboardController).GetCustomAttribute<AuthorizeAttribute>();
+    var campAuth = typeof(CampaignController).GetCustomAttribute<AuthorizeAttribute>();
+    var approveAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Approve))?.GetCustomAttribute<AuthorizeAttribute>();
+    var pendingAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Pending))?.GetCustomAttribute<AuthorizeAttribute>();
+    var rewardAuth = typeof(RewardItemController).GetCustomAttribute<AuthorizeAttribute>();
+    Check(crmAuth?.Roles == "Admin"
+        && campAuth?.Roles == "Admin"
+        && approveAuth?.Roles == "Admin"
+        && pendingAuth?.Roles == "Admin"
+        && rewardAuth?.Roles == "Admin",
+        "T16: CrmDashboard, Campaign, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Admin)]");
+
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }
 finally { await tx.RollbackAsync(); }

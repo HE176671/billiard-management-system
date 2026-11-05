@@ -10,17 +10,23 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         : base(options) { }
 
     // Custom business tables (Hung)
-    public DbSet<TableType>           TableTypes           => Set<TableType>();
-    public DbSet<PricingConfig>       PricingConfigs       => Set<PricingConfig>();
-    public DbSet<PaymentTransaction>  PaymentTransactions  => Set<PaymentTransaction>();
-    public DbSet<BilliardTable>       BilliardTables       => Set<BilliardTable>();
-    public DbSet<WorkShift>           WorkShifts           => Set<WorkShift>();
+    public DbSet<TableType>              TableTypes              => Set<TableType>();
+    public DbSet<PricingConfig>          PricingConfigs          => Set<PricingConfig>();
+    public DbSet<PaymentTransaction>     PaymentTransactions     => Set<PaymentTransaction>();
+    public DbSet<BilliardTable>          BilliardTables          => Set<BilliardTable>();
+    public DbSet<WorkShift>              WorkShifts              => Set<WorkShift>();
 
-    // Loyalty tables (Dung - TV2)
-    public DbSet<MembershipTier>      MembershipTiers      => Set<MembershipTier>();
-    public DbSet<PointTransaction>    PointTransactions    => Set<PointTransaction>();
-    public DbSet<Review>              Reviews              => Set<Review>();
-    public DbSet<Notification>        Notifications        => Set<Notification>();
+    // Loyalty & CRM tables (Dung - TV2)
+    public DbSet<MembershipTier>         MembershipTiers         => Set<MembershipTier>();
+    public DbSet<PointTransaction>       PointTransactions       => Set<PointTransaction>();
+    public DbSet<Review>                 Reviews                 => Set<Review>();
+    public DbSet<Notification>           Notifications           => Set<Notification>();
+    public DbSet<RewardItemEntity>       RewardItems             => Set<RewardItemEntity>();
+    public DbSet<CustomerVoucher>        CustomerVouchers        => Set<CustomerVoucher>();
+    public DbSet<PointAdjustmentRequest> PointAdjustmentRequests => Set<PointAdjustmentRequest>();
+    public DbSet<CustomerNote>           CustomerNotes           => Set<CustomerNote>();
+    public DbSet<Campaign>               Campaigns               => Set<Campaign>();
+    public DbSet<CustomerAuditLog>       CustomerAuditLogs       => Set<CustomerAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -40,9 +46,16 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         user.HasIndex(x => x.EmployeeCode).HasDatabaseName("UX_User_EmployeeCode")
             .IsUnique().HasFilter("[EmployeeCode] IS NOT NULL");
 
-        // ---- Loyalty (TV2) ----
+        // ---- Loyalty & CRM (TV2) ----
         user.Property(x => x.TotalSpend).HasColumnType("decimal(18,2)");
         user.Property(x => x.LastPaidDate).HasColumnType("datetime2");
+        user.Property(x => x.DateOfBirth).HasColumnType("date");
+        user.Property(x => x.MarketingOptIn).HasDefaultValue(true);
+        user.Property(x => x.AccountSource).HasColumnType("varchar(20)").HasDefaultValue("Self").IsRequired();
+        user.Property(x => x.ClaimedAtUtc).HasColumnType("datetime2(0)");
+        user.Property(x => x.TierAchievedAtUtc).HasColumnType("datetime2(0)");
+        user.Property(x => x.TierReviewAtUtc).HasColumnType("datetime2(0)");
+        user.Property(x => x.TierGraceUntilUtc).HasColumnType("datetime2(0)");
         user.HasOne(x => x.Tier).WithMany(t => t.Users)
             .HasForeignKey(x => x.TierId).OnDelete(DeleteBehavior.SetNull);
 
@@ -60,6 +73,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.TierName).HasMaxLength(50).IsRequired();
             e.Property(x => x.DiscountPercent).HasColumnType("decimal(5,2)");
             e.Property(x => x.SpendThreshold).HasColumnType("decimal(18,2)");
+            e.Property(x => x.BirthdayVoucherValue).HasColumnType("decimal(18,2)");
         });
 
         // PointTransactions (TV2)
@@ -68,8 +82,122 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         pt.Property(x => x.CustomerId).HasMaxLength(450).IsRequired();
         pt.Property(x => x.TransactionType).HasColumnType("varchar(20)").IsRequired();
         pt.Property(x => x.CreatedAt).HasColumnType("datetime2");
+        pt.Property(x => x.ReferenceCode).HasColumnType("varchar(50)");
+        pt.Property(x => x.Reason).HasMaxLength(300);
+        pt.Property(x => x.CreatedById).HasMaxLength(450);
+        pt.Property(x => x.SpendAmount).HasColumnType("decimal(18,2)");
+        pt.HasIndex(x => new { x.ReferenceCode, x.TransactionType })
+            .HasDatabaseName("UX_PointTxn_Earn_Ref")
+            .IsUnique()
+            .HasFilter("[ReferenceCode] IS NOT NULL");
         pt.HasOne(x => x.Customer).WithMany(u => u.PointTransactions)
             .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+        pt.HasOne(x => x.CreatedBy).WithMany()
+            .HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+
+        // RewardItems (TV2)
+        builder.Entity<RewardItemEntity>(e =>
+        {
+            e.ToTable("RewardItems");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Code).HasColumnType("varchar(30)").IsRequired();
+            e.HasIndex(x => x.Code).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(300);
+            e.Property(x => x.RewardType).HasColumnType("varchar(20)").IsRequired();
+            e.Property(x => x.DiscountValue).HasColumnType("decimal(18,2)");
+            e.HasOne(x => x.MinTier).WithMany().HasForeignKey(x => x.MinTierId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Campaigns (TV2)
+        builder.Entity<Campaign>(e =>
+        {
+            e.ToTable("Campaigns");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            e.Property(x => x.CampaignType).HasColumnType("varchar(20)").IsRequired();
+            e.Property(x => x.TargetSegment).HasColumnType("varchar(20)");
+            e.Property(x => x.MessageTitle).HasMaxLength(200).IsRequired();
+            e.Property(x => x.MessageContent).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.Status).HasColumnType("varchar(20)").IsRequired();
+            e.Property(x => x.CreatedById).HasMaxLength(450).IsRequired();
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.SentAtUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.TargetTier).WithMany().HasForeignKey(x => x.TargetTierId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.RewardItem).WithMany().HasForeignKey(x => x.RewardItemId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // CustomerVouchers (TV2)
+        builder.Entity<CustomerVoucher>(e =>
+        {
+            e.ToTable("CustomerVouchers");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Code).HasColumnType("varchar(20)").IsRequired();
+            e.HasIndex(x => x.Code).IsUnique();
+            e.Property(x => x.CustomerId).HasMaxLength(450).IsRequired();
+            e.Property(x => x.Title).HasMaxLength(150).IsRequired();
+            e.Property(x => x.VoucherType).HasColumnType("varchar(20)").IsRequired();
+            e.Property(x => x.DiscountValue).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Status).HasColumnType("varchar(20)").IsRequired();
+            e.Property(x => x.IssuedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ExpiresAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.UsedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.UsedById).HasMaxLength(450);
+            e.Property(x => x.UsedReferenceCode).HasColumnType("varchar(50)");
+            e.HasIndex(x => new { x.CustomerId, x.Status }).HasDatabaseName("IX_Voucher_Customer_Status");
+            e.HasOne(x => x.Customer).WithMany(u => u.Vouchers).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.RewardItem).WithMany().HasForeignKey(x => x.RewardItemId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Campaign).WithMany().HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.UsedBy).WithMany().HasForeignKey(x => x.UsedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.PointTransaction).WithMany().HasForeignKey(x => x.PointTransactionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // PointAdjustmentRequests (TV2)
+        builder.Entity<PointAdjustmentRequest>(e =>
+        {
+            e.ToTable("PointAdjustmentRequests");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CustomerId).HasMaxLength(450).IsRequired();
+            e.Property(x => x.Reason).HasMaxLength(300).IsRequired();
+            e.Property(x => x.Status).HasColumnType("varchar(20)").IsRequired();
+            e.Property(x => x.RequestedById).HasMaxLength(450).IsRequired();
+            e.Property(x => x.RequestedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ReviewedById).HasMaxLength(450);
+            e.Property(x => x.ReviewedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ReviewNote).HasMaxLength(300);
+            e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.RequestedBy).WithMany().HasForeignKey(x => x.RequestedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ReviewedBy).WithMany().HasForeignKey(x => x.ReviewedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.PointTransaction).WithMany().HasForeignKey(x => x.PointTransactionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // CustomerNotes (TV2)
+        builder.Entity<CustomerNote>(e =>
+        {
+            e.ToTable("CustomerNotes");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CustomerId).HasMaxLength(450).IsRequired();
+            e.Property(x => x.Content).HasMaxLength(500).IsRequired();
+            e.Property(x => x.CreatedById).HasMaxLength(450).IsRequired();
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.Customer).WithMany(u => u.Notes).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // CustomerAuditLogs (TV2)
+        builder.Entity<CustomerAuditLog>(e =>
+        {
+            e.ToTable("CustomerAuditLogs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CustomerId).HasMaxLength(450).IsRequired();
+            e.Property(x => x.Action).HasColumnType("varchar(30)").IsRequired();
+            e.Property(x => x.Detail).HasMaxLength(1000);
+            e.Property(x => x.ActorId).HasMaxLength(450);
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.Customer).WithMany(u => u.AuditLogs).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Actor).WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+        });
 
         // Reviews (TV2)
         var review = builder.Entity<Review>();

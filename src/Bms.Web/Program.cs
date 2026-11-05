@@ -8,14 +8,20 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+builder.Services.AddMemoryCache();
 
 // DbContext trỏ vào BilliardDB (connection string trong appsettings)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Loyalty: tích điểm / đổi điểm
-builder.Services.AddScoped<Bms.Web.Services.ILoyaltyService, Bms.Web.Services.LoyaltyService>();
-builder.Services.AddHostedService<Bms.Web.Services.PointExpirationBackgroundService>();
+// Loyalty & CRM V2 (TV2)
+builder.Services.AddScoped<IPointLedgerService, PointLedgerService>();
+builder.Services.AddScoped<ITierEvaluationService, TierEvaluationService>();
+builder.Services.AddScoped<IVoucherService, VoucherService>();
+builder.Services.AddScoped<ICustomerSegmentService, CustomerSegmentService>();
+builder.Services.AddScoped<ICampaignService, CampaignService>();
+builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
+builder.Services.AddHostedService<LoyaltyDailyJob>();
 
 // Identity — khớp schema SQL V1, khóa login/token dài 128
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -85,7 +91,7 @@ app.MapControllerRoute(
 
 #endregion
 
-#region Tu nang cap schema con thieu (script 08)
+#region Tu nang cap schema con thieu (script 08 & script 09)
 using (var upgradeScope = app.Services.CreateScope())
 {
     var upgradeLogger = upgradeScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
@@ -97,7 +103,7 @@ using (var upgradeScope = app.Services.CreateScope())
     catch (Exception ex)
     {
         upgradeLogger.LogError(ex,
-            "Không tự nâng cấp được schema. Hãy chạy tay BMS_Database_Starter/08_AddWorkShiftReconciliation.sql.");
+            "Không tự nâng cấp được schema. Hãy chạy tay BMS_Database_Starter/08_AddWorkShiftReconciliation.sql và 09_TV2_CrmLoyaltyV2.sql.");
     }
 }
 

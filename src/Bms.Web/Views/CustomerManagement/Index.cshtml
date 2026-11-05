@@ -1,7 +1,7 @@
 @model Bms.Web.Models.CustomerManagementViewModel
 @using Bms.Web.Services
 @{
-    ViewData["Title"] = "Quản lý khách hàng";
+    ViewData["Title"] = "Danh sách hội viên";
     Layout = "_AdminLayout";
     var form = Model.Form;
     var selectedId = form?.Id;
@@ -31,43 +31,45 @@
 }
 
 <div class="row g-3">
-    <!-- ═══════════ Trái: danh sách ═══════════ -->
-    <div class="col-md-7">
+    <!-- ═══════════ Danh sách hội viên ═══════════ -->
+    <div class="@(form != null ? "col-lg-8" : "col-12")">
         <div class="data-card">
             <div class="data-card-header">
-                <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách khách hàng (@Model.TotalCount)</span>
-                <a asp-action="Index"
-                   asp-route-add="true"
-                   asp-route-search="@Model.Search"
-                   asp-route-tierId="@Model.TierId"
-                   asp-route-status="@Model.Status"
-                   asp-route-page="@Model.Page"
-                   id="btnAddCustomer" class="btn-primary-bms">
-                    <i class="bi bi-plus-lg"></i> Add Customer
-                </a>
+                <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách hội viên (@Model.TotalCount)</span>
+                <div class="d-flex gap-2">
+                    <a asp-action="ExportCsv"
+                       asp-route-search="@Model.Search"
+                       asp-route-tierId="@Model.TierId"
+                       asp-route-segment="@Model.Segment"
+                       class="btn-outline-bms">
+                        <i class="bi bi-download"></i> Xuất CSV
+                    </a>
+                </div>
             </div>
 
-            <form method="get" id="searchForm" class="d-flex gap-2 flex-wrap p-3 border-bottom">
-                <input type="text" name="search" value="@Model.Search" placeholder="Tìm tên / SĐT..."
-                       class="form-control" style="flex:1;min-width:160px;font-size:0.8rem" />
-                <select name="tierId" class="form-select" style="width:130px;font-size:0.8rem"
+            <form method="get" id="searchForm" class="d-flex gap-2 flex-wrap p-3 border-bottom bg-light bg-opacity-50">
+                <input type="text" name="search" value="@Model.Search" placeholder="Tìm theo họ tên, số điện thoại hoặc mã thẻ..."
+                       class="form-control" style="flex:1;min-width:200px" />
+                <select name="segment" class="form-select" style="width:175px"
                         onchange="this.form.submit()">
-                    <option value="" selected="@(Model.TierId == null)">All Tiers</option>
-                    @foreach (var t in Model.Tiers)
+                    <option value="" selected="@(string.IsNullOrEmpty(Model.Segment))">Tất cả nhóm khách</option>
+                    @foreach (var seg in new[] { "Champion", "Loyal", "New", "AtRisk" })
                     {
-                        <option value="@t.Id" selected="@(Model.TierId == t.Id)">@t.Name</option>
+                        <option value="@seg" selected="@(Model.Segment == seg)">@VnFormat.SegmentLabel(seg)</option>
                     }
                 </select>
-                <select name="status" class="form-select" style="width:130px;font-size:0.8rem"
+                <select name="tierId" class="form-select" style="width:140px"
                         onchange="this.form.submit()">
-                    <option value="" selected="@(Model.Status == null)">All Status</option>
-                    <option value="active" selected="@(Model.Status == "active")">Active</option>
-                    <option value="locked" selected="@(Model.Status == "locked")">Locked</option>
+                    <option value="" selected="@(Model.TierId == null)">Tất cả hạng</option>
+                    @foreach (var t in Model.Tiers)
+                    {
+                        <option value="@t.Id" selected="@(Model.TierId == t.Id)">Hạng @t.Name</option>
+                    }
                 </select>
-                <button type="submit" class="btn-primary-bms" title="Tìm kiếm"><i class="bi bi-search"></i></button>
-                @if (!string.IsNullOrEmpty(Model.Search) || Model.TierId != null || Model.Status != null)
+                <button type="submit" class="btn-primary-bms" title="Tìm kiếm"><i class="bi bi-search"></i> Tìm</button>
+                @if (!string.IsNullOrEmpty(Model.Search) || Model.TierId != null || !string.IsNullOrEmpty(Model.Segment))
                 {
-                    <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x"></i> Xóa lọc</a>
+                    <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x-lg"></i> Xóa lọc</a>
                 }
             </form>
 
@@ -75,7 +77,7 @@
             {
                 <div class="text-center py-5 text-muted">
                     <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                    Không tìm thấy khách hàng nào.
+                    Không tìm thấy hội viên nào phù hợp.
                 </div>
             }
             else
@@ -84,32 +86,47 @@
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Full Name</th>
-                                <th>Phone</th>
-                                <th>Tier</th>
-                                <th class="text-end">Points</th>
-                                <th>Status</th>
+                                <th>Họ và tên</th>
+                                <th>Số điện thoại</th>
+                                <th>Mã thẻ</th>
+                                <th>Hạng</th>
+                                <th>Nhóm khách</th>
+                                <th class="text-end">Chi tiêu 12T</th>
+                                <th class="text-end">Điểm</th>
+                                <th class="text-end">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var c in Model.Customers)
                             {
-                                var href = Url.Action("Index", new { search = Model.Search, tierId = Model.TierId, status = Model.Status, page = Model.Page, id = c.Id });
-                                <tr style="cursor:pointer;@(c.Id == selectedId ? "background:#fff1f3" : "")"
-                                    onclick="location.href='@href'">
-                                    <td><strong>@c.FullName</strong></td>
+                                var editHref = Url.Action("Index", new { search = Model.Search, tierId = Model.TierId, segment = Model.Segment, page = Model.Page, id = c.Id });
+                                <tr style="@(c.Id == selectedId ? "background:#fff1f3" : "")">
+                                    <td>
+                                        <a asp-action="Profile" asp-route-id="@c.Id" class="fw-semibold text-dark text-decoration-none">
+                                            @c.FullName
+                                        </a>
+                                    </td>
                                     <td>@(c.PhoneNumber ?? "—")</td>
+                                    <td><code class="text-secondary">@(c.CardCode ?? "—")</code></td>
                                     <td>
                                         @if (c.TierName != null)
                                         {
-                                            <span style="@(TierStyle(c.TierName));padding:2px 10px;border-radius:20px;font-size:0.75rem;font-weight:600">@c.TierName</span>
+                                            <span style="@(TierStyle(c.TierName));padding:2px 10px;border-radius:6px;font-size:0.75rem;font-weight:600">@c.TierName</span>
                                         }
                                         else { <span class="text-muted">—</span> }
                                     </td>
-                                    <td class="text-end">@VnFormat.Number(c.RewardPoints)</td>
                                     <td>
-                                        @if (c.IsActive) { <span class="badge-active">Active</span> }
-                                        else { <span class="badge-inactive">Locked</span> }
+                                        <span style="@(c.SegmentStyle);padding:2px 10px;border-radius:6px;font-size:0.75rem;font-weight:600">@VnFormat.SegmentLabel(c.Segment)</span>
+                                    </td>
+                                    <td class="text-end text-muted">@VnFormat.Money(c.Spend12M)</td>
+                                    <td class="text-end fw-semibold">@VnFormat.Number(c.RewardPoints)</td>
+                                    <td class="text-end text-nowrap">
+                                        <a asp-action="Profile" asp-route-id="@c.Id" class="btn-sm-icon me-1" title="Xem hồ sơ hội viên">
+                                            <i class="bi bi-person-vcard"></i>
+                                        </a>
+                                        <a href="@editHref" class="btn-sm-icon" title="Sửa thông tin">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
                                     </td>
                                 </tr>
                             }
@@ -119,13 +136,13 @@
 
                 @if (Model.TotalPages > 1)
                 {
-                    <div class="d-flex justify-content-center align-items-center gap-2 py-3 flex-wrap">
+                    <div class="d-flex justify-content-center align-items-center gap-2 py-3 flex-wrap border-top">
                         @for (int i = 1; i <= Model.TotalPages; i++)
                         {
                             <a asp-action="Index"
                                asp-route-search="@Model.Search"
                                asp-route-tierId="@Model.TierId"
-                               asp-route-status="@Model.Status"
+                               asp-route-segment="@Model.Segment"
                                asp-route-page="@i"
                                asp-route-id="@selectedId"
                                class="btn-sm-icon"
@@ -137,26 +154,23 @@
         </div>
     </div>
 
-    <!-- ═══════════ Phải: chi tiết ═══════════ -->
-    <div class="col-md-5">
-        @if (form == null)
-        {
-            <div class="form-card text-center text-muted py-5">
-                <i class="bi bi-person-lines-fill fs-1 d-block mb-2"></i>
-                Chọn một khách hàng ở danh sách bên trái<br />hoặc bấm <strong>Add Customer</strong> để thêm mới.
-            </div>
-        }
-        else
-        {
-            <div class="form-card" id="customerDetailPanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
+    <!-- ═══════════ Khung sửa thông tin hội viên ═══════════ -->
+    @if (form != null)
+    {
+        <div class="col-lg-4">
+            <div class="form-card" id="customerDetailPanel" style="max-width:none">
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
                     <h2 class="h6 fw-bold mb-0">
-                        <i class="bi @(form.IsNew ? "bi-person-plus" : "bi-person-vcard") me-2"></i>
-                        @(form.IsNew ? "Thêm khách hàng mới" : "Chi tiết khách hàng")
+                        <i class="bi bi-pencil-square me-2 text-danger"></i>Cập nhật thông tin
                     </h2>
-                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-tierId="@Model.TierId"
-                       asp-route-status="@Model.Status" asp-route-page="@Model.Page"
-                       class="btn-sm-icon" title="Đóng"><i class="bi bi-x-lg"></i></a>
+                    <div class="d-flex gap-1">
+                        <a asp-action="Profile" asp-route-id="@form.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
+                            <i class="bi bi-person-vcard"></i> Hồ sơ chi tiết
+                        </a>
+                        <a asp-action="Index" asp-route-search="@Model.Search" asp-route-tierId="@Model.TierId"
+                           asp-route-segment="@Model.Segment" asp-route-page="@Model.Page"
+                           class="btn-sm-icon" title="Đóng"><i class="bi bi-x-lg"></i></a>
+                    </div>
                 </div>
 
                 <form asp-action="Save" method="post" id="customerForm">
@@ -164,8 +178,9 @@
                     <input type="hidden" name="Id" value="@form.Id" />
                     <input type="hidden" name="search" value="@Model.Search" />
                     <input type="hidden" name="tierId" value="@Model.TierId" />
-                    <input type="hidden" name="status" value="@Model.Status" />
+                    <input type="hidden" name="segment" value="@Model.Segment" />
                     <input type="hidden" name="page" value="@Model.Page" />
+                    <input type="hidden" name="IsActive" value="@(form.IsActive ? "true" : "false")" />
 
                     @if (ViewData.ModelState[string.Empty]?.Errors.Count > 0)
                     {
@@ -175,90 +190,77 @@
                     }
 
                     <div class="mb-3">
-                        <label class="form-label" for="FullName">Full Name <span class="text-danger">*</span></label>
+                        <label class="form-label" for="FullName">Họ và tên <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="FullName" name="FullName" maxlength="100"
                                value="@form.FullName" required />
                         @Html.ValidationMessage("FullName", new { @class = "field-error" })
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label" for="PhoneNumber">Phone Number <span class="text-danger">*</span></label>
+                        <label class="form-label" for="PhoneNumber">Số điện thoại <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="PhoneNumber" name="PhoneNumber" maxlength="10"
-                               inputmode="numeric" pattern="\d{10}" title="Đúng 10 chữ số"
+                               inputmode="numeric" pattern="^0\d{9}$" title="Bắt đầu bằng 0 và gồm 10 chữ số"
                                value="@form.PhoneNumber" required />
-                        <div class="form-text">10 chữ số, dùng làm tên đăng nhập.</div>
                         @Html.ValidationMessage("PhoneNumber", new { @class = "field-error" })
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label" for="Email">Email <span class="text-muted fw-normal">(không bắt buộc)</span></label>
-                        <input type="email" class="form-control" id="Email" name="Email" maxlength="256"
-                               value="@form.Email" />
-                        @Html.ValidationMessage("Email", new { @class = "field-error" })
+                    <div class="row g-2 mb-3">
+                        <div class="col-7">
+                            <label class="form-label" for="Email">Email</label>
+                            <input type="email" class="form-control" id="Email" name="Email" maxlength="256"
+                                   value="@form.Email" />
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label" for="DateOfBirth">Ngày sinh</label>
+                            <input type="date" class="form-control" id="DateOfBirth" name="DateOfBirth"
+                                   value="@(form.DateOfBirth?.ToString("yyyy-MM-dd"))" />
+                        </div>
                     </div>
 
                     <div class="row g-3 mb-3">
                         <div class="col-6">
-                            <label class="form-label">Membership Tier</label>
+                            <label class="form-label">Hạng hiện tại</label>
                             <input type="text" class="form-control" value="@(form.TierName ?? "—")" readonly disabled />
                         </div>
                         <div class="col-6">
-                            <label class="form-label">Total Points</label>
+                            <label class="form-label">Điểm tích lũy</label>
                             <input type="text" class="form-control" value="@VnFormat.Number(form.RewardPoints)" readonly disabled />
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Total Spend</label>
-                            <input type="text" class="form-control" value="@VnFormat.Money(form.TotalSpend)" readonly disabled />
                         </div>
                     </div>
 
-                    <div class="mb-4">
-                        <label class="form-label d-block">Account Status</label>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="IsActive" id="statusActive"
-                                   value="true" checked="@form.IsActive" />
-                            <label class="form-check-label" for="statusActive"><span class="badge-active">Active</span></label>
-                        </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="IsActive" id="statusLocked"
-                                   value="false" checked="@(!form.IsActive)" />
-                            <label class="form-check-label" for="statusLocked"><span class="badge-inactive">Locked</span></label>
-                        </div>
+                    <div class="form-check mb-4">
+                        <input class="form-check-input" type="checkbox" name="MarketingOptIn" value="true" id="chkOptIn" checked="@form.MarketingOptIn" />
+                        <label class="form-check-label" for="chkOptIn" style="font-size:0.84rem">Nhận thông báo chương trình ưu đãi</label>
                     </div>
 
                     <div class="d-flex gap-2 flex-wrap">
                         <button type="submit" class="btn-primary-bms" id="btnSaveCustomer">
-                            <i class="bi bi-save"></i> @(form.IsNew ? "Thêm khách hàng" : "Cập nhật")
+                            <i class="bi bi-check-lg"></i> Lưu thay đổi
                         </button>
                         <a asp-action="Index" asp-route-search="@Model.Search" asp-route-tierId="@Model.TierId"
-                           asp-route-status="@Model.Status" asp-route-page="@Model.Page"
-                           class="btn-outline-bms">Hủy</a>
+                           asp-route-segment="@Model.Segment" asp-route-page="@Model.Page"
+                           class="btn-outline-bms">Đóng</a>
                     </div>
                 </form>
 
-                @if (!form.IsNew)
-                {
-                    <hr class="my-4" />
-
-                    <!-- Gắn thẻ thành viên -->
-                    <form asp-action="AssignCard" method="post">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="id" value="@form.Id" />
-                        <input type="hidden" name="search" value="@Model.Search" />
-                        <input type="hidden" name="tierId" value="@Model.TierId" />
-                        <input type="hidden" name="status" value="@Model.Status" />
-                        <input type="hidden" name="page" value="@Model.Page" />
-                        <label class="form-label" for="cardCode"><i class="bi bi-credit-card-2-front me-1"></i>Thẻ thành viên</label>
-                        <div class="d-flex gap-2">
-                            <input type="text" class="form-control" id="cardCode" name="cardCode" maxlength="20"
-                                   value="@form.CardCode" placeholder="Để trống = tự sinh mã (MB0001…)" />
-                            <button type="submit" class="btn-primary-bms text-nowrap" id="btnAssignCard">
-                                <i class="bi bi-link-45deg"></i> Gắn thẻ
-                            </button>
-                        </div>
-                    </form>
-                }
+                <hr class="my-4" />
+                <form asp-action="AssignCard" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@form.Id" />
+                    <input type="hidden" name="search" value="@Model.Search" />
+                    <input type="hidden" name="tierId" value="@Model.TierId" />
+                    <input type="hidden" name="segment" value="@Model.Segment" />
+                    <input type="hidden" name="page" value="@Model.Page" />
+                    <label class="form-label" for="cardCode"><i class="bi bi-credit-card-2-front me-1"></i>Mã thẻ thành viên</label>
+                    <div class="d-flex gap-2">
+                        <input type="text" class="form-control" id="cardCode" name="cardCode" maxlength="20"
+                               value="@form.CardCode" placeholder="Để trống để cấp mã tự động" />
+                        <button type="submit" class="btn-primary-bms text-nowrap" id="btnAssignCard">
+                            Cấp thẻ
+                        </button>
+                    </div>
+                </form>
             </div>
-        }
-    </div>
+        </div>
+    }
 </div>

@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize]
+[Authorize(Roles = "Admin,Staff")]
 public class NotificationController : Controller
 {
     private readonly ApplicationDbContext _context;

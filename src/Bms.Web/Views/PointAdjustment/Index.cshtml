@@ -1,0 +1,205 @@
+@model Bms.Web.Models.PointAdjustmentIndexViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Điều chỉnh điểm thưởng";
+    Layout = "_AdminLayout";
+    var isAdmin = User.IsInRole("Admin");
+    var curUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-3">
+    <!-- Trái: Tạo phiếu điều chỉnh điểm -->
+    <div class="col-lg-5">
+        <div class="data-card p-4">
+            <h2 class="h6 fw-bold mb-2"><i class="bi bi-sliders me-2 text-danger"></i>Lập phiếu điều chỉnh điểm</h2>
+            <p class="text-muted mb-3" style="font-size:0.8rem">
+                Điều chỉnh từ 50 điểm trở xuống do Quản trị viên lập sẽ được ghi nhận ngay. Phiếu do nhân viên lập hoặc trên 50 điểm cần Quản trị viên khác duyệt.
+            </p>
+
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label">Hội viên <span class="text-danger">*</span></label>
+                    <select name="customerId" class="form-select" required>
+                        <option value="">-- Chọn hội viên --</option>
+                        @foreach (var c in Model.Customers)
+                        {
+                            <option value="@c.Id" selected="@(c.Id == Model.SelectedCustomerId)">
+                                @c.FullName — @(c.PhoneNumber ?? "—") (@VnFormat.Number(c.RewardPoints) điểm)
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Số điểm cộng / trừ <span class="text-danger">*</span></label>
+                    <input type="number" name="points" class="form-control" placeholder="Số dương để cộng (vd: 50), số âm để trừ (vd: -30)" required />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Lý do điều chỉnh <span class="text-danger">*</span></label>
+                    <select name="reasonCategory" class="form-select" required>
+                        <option value="Bù điểm hóa đơn lỗi">Bù điểm hóa đơn thiếu</option>
+                        <option value="Khiếu nại dịch vụ">Hỗ trợ trải nghiệm khách hàng</option>
+                        <option value="Thu hồi điểm sai">Thu hồi điểm cộng nhầm</option>
+                        <option value="Khác">Lý do khác</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Ghi chú chi tiết <span class="text-danger">*</span></label>
+                    <textarea name="reasonNote" class="form-control" rows="2" maxlength="250"
+                              placeholder="Nhập mã hóa đơn hoặc nội dung đối chiếu..." required></textarea>
+                </div>
+
+                <button type="submit" class="btn-primary-bms w-100 justify-content-center">
+                    <i class="bi bi-check-lg"></i> Lưu phiếu điều chỉnh
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Phải: Danh sách chờ duyệt + Lịch sử -->
+    <div class="col-lg-7">
+        <div class="data-card mb-3">
+            <div class="data-card-header">
+                <span class="data-card-title">
+                    <i class="bi bi-hourglass-split me-2 text-warning"></i>Phiếu đang chờ duyệt (@Model.PendingRequests.Count)
+                </span>
+            </div>
+            @if (!Model.PendingRequests.Any())
+            {
+                <div class="text-center py-4 text-muted">Không có phiếu nào đang chờ duyệt.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Mã</th>
+                                <th>Hội viên</th>
+                                <th class="text-end">Số điểm</th>
+                                <th>Lý do</th>
+                                <th>Người lập</th>
+                                <th class="text-end">Xét duyệt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.PendingRequests)
+                            {
+                                <tr>
+                                    <td>#@r.Id</td>
+                                    <td>
+                                        <a asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@r.CustomerId" class="fw-semibold text-dark text-decoration-none">
+                                            @(r.Customer?.FullName ?? r.CustomerId)
+                                        </a>
+                                    </td>
+                                    <td class="text-end fw-bold @(r.Points > 0 ? "text-success" : "text-danger")">
+                                        @(r.Points > 0 ? "+" : "")@VnFormat.Number(r.Points)
+                                    </td>
+                                    <td>@r.Reason</td>
+                                    <td>
+                                        <div>@(r.RequestedBy?.FullName ?? r.RequestedById)</div>
+                                        <small class="text-muted">@r.RequestedAtUtc.ToVn().ToString("dd/MM HH:mm")</small>
+                                    </td>
+                                    <td class="text-end">
+                                        @if (!isAdmin)
+                                        {
+                                            <span class="badge bg-warning text-dark">Chờ duyệt</span>
+                                        }
+                                        else if (r.RequestedById == curUserId)
+                                        {
+                                            <span class="badge bg-secondary" title="Cần Quản trị viên khác xác nhận">Chờ QTV khác</span>
+                                        }
+                                        else
+                                        {
+                                            <form asp-action="Approve" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@r.Id" />
+                                                <button type="submit" class="btn-primary-bms py-1 px-2" style="font-size:0.75rem">
+                                                    <i class="bi bi-check-lg"></i> Duyệt
+                                                </button>
+                                            </form>
+                                            <form asp-action="Reject" method="post" class="d-inline ms-1">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@r.Id" />
+                                                <button type="submit" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
+                                                    Từ chối
+                                                </button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <div class="data-card">
+            <div class="data-card-header">
+                <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>Lịch sử điều chỉnh điểm gần đây</span>
+            </div>
+            @if (!Model.RecentHistory.Any())
+            {
+                <div class="text-center py-4 text-muted">Chưa có lịch sử điều chỉnh điểm.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Mã</th>
+                                <th>Hội viên</th>
+                                <th class="text-end">Số điểm</th>
+                                <th>Lý do</th>
+                                <th>Trạng thái</th>
+                                <th>Người duyệt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var h in Model.RecentHistory)
+                            {
+                                <tr>
+                                    <td>#@h.Id</td>
+                                    <td>@(h.Customer?.FullName ?? h.CustomerId)</td>
+                                    <td class="text-end fw-bold @(h.Points > 0 ? "text-success" : "text-danger")">
+                                        @(h.Points > 0 ? "+" : "")@VnFormat.Number(h.Points)
+                                    </td>
+                                    <td>@h.Reason</td>
+                                    <td>
+                                        @if (h.Status == "Approved") { <span class="badge-active">Đã duyệt</span> }
+                                        else { <span class="badge-inactive">Từ chối</span> }
+                                    </td>
+                                    <td>
+                                        @(h.ReviewedBy?.FullName ?? "Quản trị viên")
+                                        <small class="text-muted d-block">@(h.ReviewedAtUtc?.ToVn().ToString("dd/MM HH:mm"))</small>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+

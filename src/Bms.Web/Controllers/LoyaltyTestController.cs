@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Bms.Web.Data;
 using Bms.Web.Models;
 using Bms.Web.Services;
@@ -12,15 +13,35 @@ public class LoyaltyTestController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly ILoyaltyService _loyaltyService;
+    private readonly IPointLedgerService _ledger;
+    private readonly ITierEvaluationService _tierEval;
 
-    public LoyaltyTestController(ApplicationDbContext context, ILoyaltyService loyaltyService)
+    public LoyaltyTestController(
+        ApplicationDbContext context,
+        ILoyaltyService loyaltyService,
+        IPointLedgerService ledger,
+        ITierEvaluationService tierEval)
     {
         _context = context;
         _loyaltyService = loyaltyService;
+        _ledger = ledger;
+        _tierEval = tierEval;
     }
 
-    // GET /LoyaltyTest?customerId=...
-    public async Task<IActionResult> Index(string? customerId)
+    private string? CurrentActorId => User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    // GET /LoyaltyTest hoặc /CashierSimulator
+    [HttpGet("/LoyaltyTest")]
+    [HttpGet("/LoyaltyTest/Index")]
+    [HttpGet("/CashierSimulator")]
+    [HttpGet("/CashierSimulator/Index")]
+    public async Task<IActionResult> Index(
+        string? customerId = null,
+        decimal playtimeAmount = 300000m,
+        decimal fandBAmount = 80000m,
+        int pointsToRedeem = 0,
+        string? voucherCode = null,
+        string? referenceCode = null)
     {
         var roleId = await _context.Roles.Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync();
 
@@ -33,6 +54,7 @@ public class LoyaltyTestController : Controller
                 Id = u.Id,
                 FullName = u.FullName,
                 PhoneNumber = u.PhoneNumber,
+                CardCode = u.EmployeeCode,
                 TierName = u.Tier != null ? u.Tier.TierName : null,
                 RewardPoints = u.RewardPoints
             })
@@ -44,6 +66,12 @@ public class LoyaltyTestController : Controller
         }
 
         SelectedCustomerDetailViewModel? detail = null;
+        var availableVouchers = new List<CustomerVoucher>();
+        CheckoutLoyaltyPreview? preview = null;
+        var refCode = string.IsNullOrWhiteSpace(referenceCode)
+            ? $"HD-{DateTime.UtcNow:yyyyMMddHHmmss}"
+            : referenceCode.Trim();
+
         if (!string.IsNullOrEmpty(customerId))
         {
             var user = await _context.Users
@@ -53,16 +81,20 @@ public class LoyaltyTestController : Controller
 
             if (user != null)
             {
+                var spend12M = await _tierEval.GetSpendLast12MonthsAsync(customerId);
                 var transactions = await _context.PointTransactions
                     .AsNoTracking()
                     .Where(t => t.CustomerId == customerId)
-                    .OrderByDescending(t => t.CreatedAt)
+                    .OrderByDescending(t => t.CreatedAt).ThenByDescending(t => t.Id)
                     .Take(10)
                     .Select(t => new PointTransactionRowViewModel
                     {
                         CreatedAt = t.CreatedAt,
                         TransactionType = t.TransactionType,
-                        Amount = t.Amount
+                        Amount = t.Amount,
+                        BalanceAfter = t.BalanceAfter,
+                        ReferenceCode = t.ReferenceCode,
+                        Reason = t.Reason
                     })
                     .ToListAsync();
 
@@ -71,18 +103,38 @@ public class LoyaltyTestController : Controller
                     Id = user.Id,
                     FullName = user.FullName,
                     PhoneNumber = user.PhoneNumber,
-                    TierName = user.Tier?.TierName ?? "Chưa có",
+                    CardCode = user.EmployeeCode,
+                    TierName = user.Tier?.TierName ?? "Member",
                     PointMultiplier = user.Tier?.PointMultiplier ?? 1,
                     DiscountPercent = user.Tier?.DiscountPercent ?? 0,
                     RewardPoints = user.RewardPoints,
                     TotalSpend = user.TotalSpend,
+                    Spend12Months = spend12M,
                     LastPaidDate = user.LastPaidDate,
                     RecentTransactions = transactions
                 };
+
+                var now = DateTime.UtcNow;
+                availableVouchers = await _context.CustomerVouchers.AsNoTracking()
+                    .Where(v => v.CustomerId == customerId
+                             && v.Status == CustomerVoucher.StatusActive
+                             && v.ExpiresAtUtc > now
+                             && v.VoucherType != RewardItemEntity.TypeGift)
+                    .OrderBy(v => v.ExpiresAtUtc)
+                    .ToListAsync();
+
+                preview = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
+                    CustomerId: customerId,
+                    ReferenceCode: refCode,
+                    InvoiceId: null,
+                    PlaytimeAmount: playtimeAmount,
+                    FandBAmount: fandBAmount,
+                    PointsToRedeem: pointsToRedeem,
+                    VoucherCode: voucherCode,
+                    CashierId: CurrentActorId));
             }
         }
 
-        // Tải danh sách đánh giá gần đây trong hệ thống
         var recentReviews = await _context.Reviews
             .AsNoTracking()
             .Include(r => r.Customer)
@@ -101,7 +153,6 @@ public class LoyaltyTestController : Controller
             })
             .ToListAsync();
 
-        // Tải danh sách thông báo gửi tới khách hàng đang chọn (nếu có)
         var customerNotifications = new List<SimulatedNotificationItemViewModel>();
         if (!string.IsNullOrEmpty(customerId))
         {
@@ -127,6 +178,13 @@ public class LoyaltyTestController : Controller
             SelectedCustomerId = customerId,
             Customers = customers,
             CustomerDetail = detail,
+            ReferenceCode = refCode,
+            PlaytimeAmount = playtimeAmount,
+            FandBAmount = fandBAmount,
+            PointsToRedeem = pointsToRedeem,
+            VoucherCode = voucherCode,
+            AvailableVouchers = availableVouchers,
+            Preview = preview,
             RecentReviews = recentReviews,
             CustomerNotifications = customerNotifications
         };
@@ -134,20 +192,109 @@ public class LoyaltyTestController : Controller
         return View(vm);
     }
 
-    // POST /LoyaltyTest/SimulatePayment
+    // GET /CashierSimulator/Preview (AJAX JSON cho receipt live preview)
+    [HttpGet("/CashierSimulator/Preview")]
+    [HttpGet("/LoyaltyTest/Preview")]
+    public async Task<IActionResult> Preview(
+        string customerId,
+        decimal playtimeAmount,
+        decimal fandBAmount,
+        int pointsToRedeem = 0,
+        string? voucherCode = null,
+        string? referenceCode = null)
+    {
+        var res = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
+            CustomerId: customerId ?? string.Empty,
+            ReferenceCode: referenceCode ?? "PREVIEW",
+            InvoiceId: null,
+            PlaytimeAmount: playtimeAmount,
+            FandBAmount: fandBAmount,
+            PointsToRedeem: pointsToRedeem,
+            VoucherCode: string.IsNullOrWhiteSpace(voucherCode) ? null : voucherCode,
+            CashierId: CurrentActorId));
+
+        return Json(new
+        {
+            isValid = res.IsValid,
+            errors = res.Errors,
+            tierName = res.TierName,
+            tierDiscountPercent = res.TierDiscountPercent,
+            subtotal = playtimeAmount + fandBAmount,
+            tierDiscountAmount = res.TierDiscountAmount,
+            voucherDiscountAmount = res.VoucherDiscountAmount,
+            pointsDiscountAmount = res.PointsDiscountAmount,
+            maxRedeemablePoints = res.MaxRedeemablePoints,
+            finalAmount = res.FinalAmount,
+            pointsToEarn = res.PointsToEarn,
+            willUpgradeTier = res.WillUpgradeTier,
+            nextTierName = res.NextTierName,
+            spend12MonthsAfter = res.Spend12MonthsAfter,
+            amountNeededForNextTier = res.AmountNeededForNextTier
+        });
+    }
+
+    // POST /CashierSimulator/CommitCheckout (Thanh toán trọn gói F3)
+    [HttpPost("/CashierSimulator/CommitCheckout")]
+    [HttpPost("/LoyaltyTest/CommitCheckout")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CommitCheckout(
+        string customerId,
+        string referenceCode,
+        decimal playtimeAmount,
+        decimal fandBAmount,
+        int pointsToRedeem = 0,
+        string? voucherCode = null)
+    {
+        var result = await _loyaltyService.CommitCheckoutAsync(new CheckoutLoyaltyRequest(
+            CustomerId: customerId,
+            ReferenceCode: referenceCode,
+            InvoiceId: null,
+            PlaytimeAmount: playtimeAmount,
+            FandBAmount: fandBAmount,
+            PointsToRedeem: pointsToRedeem,
+            VoucherCode: string.IsNullOrWhiteSpace(voucherCode) ? null : voucherCode,
+            CashierId: CurrentActorId));
+
+        if (!result.Success)
+        {
+            TempData["Error"] = result.Message;
+        }
+        else if (result.Duplicate)
+        {
+            TempData["Warning"] = result.Message;
+        }
+        else
+        {
+            TempData["Success"] = result.Message;
+        }
+
+        return RedirectToAction(nameof(Index), new
+        {
+            customerId,
+            playtimeAmount,
+            fandBAmount,
+            pointsToRedeem = 0,
+            referenceCode
+        });
+    }
+
+    // POST /LoyaltyTest/SimulatePayment (Giữ lại cho tương thích cũ)
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SimulatePayment(string customerId, decimal finalAmount)
     {
-        var result = await _loyaltyService.ProcessPaymentLoyaltyAsync(customerId, finalAmount);
-        if (result.Success)
-        {
-            TempData["Success"] = result.Message;
-        }
-        else
-        {
-            TempData["Error"] = result.Message;
-        }
+        var result = await _loyaltyService.CommitCheckoutAsync(new CheckoutLoyaltyRequest(
+            CustomerId: customerId,
+            ReferenceCode: $"SIM-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+            InvoiceId: null,
+            PlaytimeAmount: finalAmount,
+            FandBAmount: 0m,
+            PointsToRedeem: 0,
+            VoucherCode: null,
+            CashierId: CurrentActorId));
+
+        if (result.Success) TempData["Success"] = result.Message;
+        else TempData["Error"] = result.Message;
 
         return RedirectToAction(nameof(Index), new { customerId });
     }
@@ -157,15 +304,11 @@ public class LoyaltyTestController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SimulateRedeem(string customerId, int pointsToRedeem, decimal billAmount)
     {
+#pragma warning disable CS0618
         var result = await _loyaltyService.RedeemPointsForBillAsync(customerId, pointsToRedeem, billAmount);
-        if (result.Success)
-        {
-            TempData["Success"] = result.Message;
-        }
-        else
-        {
-            TempData["Error"] = result.Message;
-        }
+#pragma warning restore CS0618
+        if (result.Success) TempData["Success"] = result.Message;
+        else TempData["Error"] = result.Message;
 
         return RedirectToAction(nameof(Index), new { customerId });
     }
@@ -183,7 +326,7 @@ public class LoyaltyTestController : Controller
         return RedirectToAction(nameof(Index), new { customerId });
     }
 
-    // POST /LoyaltyTest/SimulateAging (Hỗ trợ test: Đặt ngày thanh toán cuối về 185 ngày trước)
+    // POST /LoyaltyTest/SimulateAging (Dùng IPointLedgerService thay vì gán trực tiếp)
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SimulateAging(string customerId)
@@ -191,19 +334,27 @@ public class LoyaltyTestController : Controller
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == customerId);
         if (user == null) return NotFound();
 
-        user.LastPaidDate = DateTime.UtcNow.AddDays(-185);
         if (user.RewardPoints == 0)
         {
-            user.RewardPoints = 120; // Đảm bảo có điểm để test hết hạn
+            await _ledger.PostAsync(
+                customerId: user.Id,
+                delta: 120,
+                type: PointTransaction.Bonus,
+                referenceCode: $"SIM-AGING-{DateTime.UtcNow:yyyyMMddHHmmss}",
+                invoiceId: null,
+                reason: "Cấp điểm giả lập để kiểm thử hết hạn 180 ngày",
+                actorId: CurrentActorId);
         }
 
+        await _context.Entry(user).ReloadAsync();
+        user.LastPaidDate = DateTime.UtcNow.AddDays(-185);
         await _context.SaveChangesAsync();
 
         TempData["Success"] = $"[ĐÃ GIẢ LẬP] Đặt LastPaidDate của {user.FullName} về 185 ngày trước (Điểm hiện có: {user.RewardPoints}). Bạn có thể bấm 'Quét hết hạn điểm' ngay để kiểm tra kết quả!";
         return RedirectToAction(nameof(Index), new { customerId });
     }
 
-    // POST /LoyaltyTest/SimulateReview (Hỗ trợ test: Giả lập khách hàng gửi đánh giá)
+    // POST /LoyaltyTest/SimulateReview
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SimulateReview(string customerId, int sessionId, byte rating, string? comment)
@@ -233,7 +384,6 @@ public class LoyaltyTestController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        // 1. Đảm bảo phiên chơi hợp lệ trong PlaySessions để thỏa mãn FK_Review_Session
         var sessionExists = (await _context.Database
             .SqlQuery<int>($"SELECT COUNT(*) AS [Value] FROM dbo.PlaySessions WHERE Id = {sessionId}")
             .ToListAsync()).FirstOrDefault() > 0;
@@ -255,14 +405,13 @@ public class LoyaltyTestController : Controller
             ");
         }
 
-        // 2. Thêm hoặc cập nhật đánh giá (đảm bảo ràng buộc UQ_Review_Session)
         var review = await _context.Reviews.FirstOrDefaultAsync(r => r.SessionId == sessionId);
         if (review != null)
         {
             review.CustomerId = customerId;
             review.Rating = rating;
             review.Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
-            review.AdminReply = null; // Reset để tester có thể vào test nút Phản hồi
+            review.AdminReply = null;
             review.CreatedAtUtc = DateTime.UtcNow;
         }
         else
@@ -281,11 +430,11 @@ public class LoyaltyTestController : Controller
 
         await _context.SaveChangesAsync();
 
-        TempData["Success"] = $"[ĐÃ GIẢ LẬP] Đã tạo đánh giá {rating}★ cho phiên #{sessionId} của khách {customer.FullName}! Bạn có thể sang màn hình 'Quản lý Đánh giá' để test chức năng Lọc theo số sao & Gửi phản hồi (AdminReply).";
+        TempData["Success"] = $"[ĐÃ GIẢ LẬP] Đã tạo đánh giá {rating}★ cho phiên #{sessionId} của khách {customer.FullName}!";
         return RedirectToAction(nameof(Index), new { customerId });
     }
 
-    // POST /LoyaltyTest/SeedSampleReviews (Tạo nhanh 5 đánh giá mẫu từ 1★ đến 5★)
+    // POST /LoyaltyTest/SeedSampleReviews
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SeedSampleReviews(string? customerId)
@@ -296,9 +445,7 @@ public class LoyaltyTestController : Controller
             .ToListAsync();
 
         if (customers.Count == 0)
-        {
             customers = await _context.Users.Take(5).ToListAsync();
-        }
 
         var samples = new[]
         {
@@ -362,11 +509,11 @@ public class LoyaltyTestController : Controller
 
         await _context.SaveChangesAsync();
 
-        TempData["Success"] = "Đã khởi tạo thành công 5 đánh giá mẫu đa dạng từ 1★ đến 5★! Bạn có thể vào ngay màn hình [Quản lý Đánh giá] để test lọc theo sao và trả lời phản hồi.";
+        TempData["Success"] = "Đã khởi tạo thành công 5 đánh giá mẫu đa dạng từ 1★ đến 5★!";
         return RedirectToAction(nameof(Index), new { customerId });
     }
 
-    // POST /LoyaltyTest/ClearReviews (Xóa toàn bộ đánh giá để test lại từ đầu)
+    // POST /LoyaltyTest/ClearReviews
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ClearReviews(string? customerId)
@@ -374,7 +521,7 @@ public class LoyaltyTestController : Controller
         _context.Reviews.RemoveRange(_context.Reviews);
         await _context.SaveChangesAsync();
 
-        TempData["Success"] = "Đã xóa toàn bộ dữ liệu đánh giá trong hệ thống để làm sạch môi trường test.";
+        TempData["Success"] = "Đã xóa toàn bộ dữ liệu đánh giá trong hệ thống.";
         return RedirectToAction(nameof(Index), new { customerId });
     }
 }

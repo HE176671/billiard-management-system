@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Bms.Web.Services;
 
 namespace Bms.Web.Controllers;
 
@@ -24,7 +23,7 @@ public class AccountController : Controller
         _context = context;
     }
 
-    #region UC01 - Dang nhap
+    #region UC01 - Dang nhap noi bo (Admin & Staff)
 
     [HttpGet]
     [AllowAnonymous]
@@ -44,10 +43,23 @@ public class AccountController : Controller
         ViewData["ReturnUrl"] = returnUrl;
         if (!ModelState.IsValid) return View(model);
 
-        var user = await _userManager.FindByNameAsync(model.Username);
+        var loginInput = (model.Username ?? string.Empty).Trim();
+        var user = await _userManager.FindByNameAsync(loginInput)
+                   ?? await _userManager.FindByEmailAsync(loginInput)
+                   ?? await _context.Users.FirstOrDefaultAsync(u => u.PhoneNumber == loginInput);
+
         if (user == null || !user.IsActive)
         {
-            ModelState.AddModelError(string.Empty, "Ten dang nhap hoac mat khau khong dung.");
+            ModelState.AddModelError(string.Empty, "Tên đăng nhập hoặc mật khẩu không đúng.");
+            return View(model);
+        }
+
+        // Hệ thống quản lý nội bộ: chỉ cho phép Admin và Staff đăng nhập
+        bool isStaffOrAdmin = await _userManager.IsInRoleAsync(user, "Admin")
+                           || await _userManager.IsInRoleAsync(user, "Staff");
+        if (!isStaffOrAdmin)
+        {
+            ModelState.AddModelError(string.Empty, "Hệ thống quản lý nội bộ chỉ dành cho Nhân viên và Quản trị viên.");
             return View(model);
         }
 
@@ -63,88 +75,12 @@ public class AccountController : Controller
 
         if (result.IsLockedOut)
         {
-            ModelState.AddModelError(string.Empty, "Tai khoan bi khoa tam thoi. Thu lai sau 5 phut.");
+            ModelState.AddModelError(string.Empty, "Tài khoản bị khóa tạm thời. Thử lại sau 5 phút.");
             return View(model);
         }
 
-        ModelState.AddModelError(string.Empty, "Ten dang nhap hoac mat khau khong dung.");
+        ModelState.AddModelError(string.Empty, "Tên đăng nhập hoặc mật khẩu không đúng.");
         return View(model);
-    }
-
-    #endregion
-
-    #region UC19 - Dang ky khach hang
-
-    [HttpGet]
-    [AllowAnonymous]
-    public IActionResult Register()
-    {
-        if (User.Identity?.IsAuthenticated == true)
-            return RedirectToAction("Index", "Home");
-        return View(new RegisterViewModel());
-    }
-
-    [HttpPost]
-    [AllowAnonymous]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Register(RegisterViewModel model)
-    {
-        if (!ModelState.IsValid) return View(model);
-
-        var phone = model.PhoneNumber?.Trim();
-        var email = model.Email.Trim();
-
-        // Validate trùng SĐT / Email
-        if (!string.IsNullOrWhiteSpace(phone) && await _context.Users.AnyAsync(u => u.PhoneNumber == phone))
-        {
-            ModelState.AddModelError(nameof(model.PhoneNumber), "Số điện thoại đã được đăng ký.");
-            return View(model);
-        }
-        if (await _userManager.FindByEmailAsync(email) != null)
-        {
-            ModelState.AddModelError(nameof(model.Email), "Email đã được dùng bởi tài khoản khác.");
-            return View(model);
-        }
-
-        // Hạng mặc định: hạng thấp nhất (Member)
-        var tiers = await _context.MembershipTiers.AsNoTracking().ToListAsync();
-        var defaultTier = TierHelper.Resolve(tiers, 0)
-            ?? await _context.MembershipTiers.Where(t => t.MinPoints == 0).OrderBy(t => t.Id).FirstOrDefaultAsync();
-
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-        var user = new ApplicationUser
-        {
-            UserName     = model.UserName.Trim(),
-            Email        = email,
-            FullName     = model.FullName.Trim(),
-            PhoneNumber  = phone,
-            IsActive     = true,
-            CreatedAtUtc = DateTime.UtcNow,
-            TierId       = defaultTier?.Id,
-            RewardPoints = 0,
-            TotalSpend   = 0
-        };
-
-        var createResult = await _userManager.CreateAsync(user, model.Password);
-        if (!createResult.Succeeded)
-        {
-            await transaction.RollbackAsync();
-            foreach (var err in createResult.Errors)
-                ModelState.AddModelError(string.Empty, TranslateIdentityError(err));
-            return View(model);
-        }
-
-        var roleResult = await _userManager.AddToRoleAsync(user, "Customer");
-        if (!roleResult.Succeeded)
-        {
-            await transaction.RollbackAsync();
-            ModelState.AddModelError(string.Empty, "Đăng ký thất bại. Vui lòng thử lại.");
-            return View(model);
-        }
-
-        await transaction.CommitAsync();
-        await _signInManager.SignInAsync(user, isPersistent: false);
-        return RedirectToAction("Profile", "CustomerPortal");
     }
 
     #endregion
@@ -170,7 +106,7 @@ public class AccountController : Controller
 
     #endregion
 
-    #region Dieu huong theo role va dich loi Identity
+    #region Dieu huong theo role
 
     private async Task<IActionResult> RedirectByRoleAsync(ApplicationUser user)
     {
@@ -178,20 +114,8 @@ public class AccountController : Controller
             return RedirectToAction("Index", "Dashboard");
         if (await _userManager.IsInRoleAsync(user, "Staff"))
             return RedirectToAction("Index", "Staff");
-        if (await _userManager.IsInRoleAsync(user, "Customer"))
-            return RedirectToAction("Profile", "CustomerPortal");
-        return RedirectToAction("Index", "Home");
+        return RedirectToAction("Login", "Account");
     }
 
-    private static string TranslateIdentityError(IdentityError err) => err.Code switch
-    {
-        "DuplicateUserName"  => "Ten dang nhap da ton tai.",
-        "DuplicateEmail"     => "Email da duoc dung boi tai khoan khac.",
-        "PasswordTooShort"   => "Mat khau toi thieu 8 ky tu.",
-        "PasswordRequiresNonAlphanumeric" => "Mat khau phai co it nhat 1 ky tu dac biet (vd: @, #, !).",
-        "PasswordRequiresDigit"           => "Mat khau phai co it nhat 1 chu so.",
-        "PasswordRequiresUpper"           => "Mat khau phai co it nhat 1 chu hoa.",
-        _ => err.Description
-    };
     #endregion
 }
