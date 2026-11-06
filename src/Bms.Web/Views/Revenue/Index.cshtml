@@ -1,22 +1,695 @@
 @model Bms.Web.Models.RevenueReportViewModel
-@{ ViewData["Title"] = "Báo cáo doanh thu — UC46"; Layout = "~/Views/Shared/_AdminLayout.cshtml"; }
-<p class="text-muted">Doanh thu thực thu từ PaymentTransactions theo thời điểm giao dịch (giờ Việt Nam UTC+7).</p>
-<form method="get" class="row g-3 mb-4">
-    <div class="col-md-3"><label for="from" class="form-label">Từ ngày</label><input id="from" name="from" type="date" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" required /></div>
-    <div class="col-md-3"><label for="to" class="form-label">Đến ngày</label><input id="to" name="to" type="date" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" required /></div>
-    <div class="col-md-3"><label for="groupBy" class="form-label">Nhóm theo</label><select id="groupBy" name="groupBy" class="form-select"><option value="day" selected="@(Model.GroupBy == "day")">Ngày</option><option value="month" selected="@(Model.GroupBy == "month")">Tháng</option></select></div>
-    <div class="col-md-3 d-flex align-items-end gap-2"><button class="btn-primary-bms" type="submit">Xem báo cáo</button><a asp-action="Export" asp-route-from="@Model.From.ToString("yyyy-MM-dd")" asp-route-to="@Model.To.ToString("yyyy-MM-dd")" asp-route-groupBy="@Model.GroupBy" class="btn-outline-bms">Xuất CSV</a></div>
-</form>
-<div asp-validation-summary="All" class="text-danger mb-3"></div>
-<div class="row g-3 mb-4">
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.TotalRevenue.ToString("N0") ₫</div><div class="stat-label">Tổng doanh thu</div></div></div></div>
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.PaymentCount</div><div class="stat-label">Giao dịch thanh toán</div></div></div></div>
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.InvoiceCount</div><div class="stat-label">Hóa đơn có thanh toán</div></div></div></div>
+@using Bms.Web.Data
+@using Bms.Web.Models
+@{
+    ViewData["Title"] = "Quản trị Tài chính (P&L), Chi phí & Kiểm toán Thất thoát";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<!-- Thông báo trạng thái (MSG-FIN) -->
+@if (TempData["Success"] is string okMsg)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@okMsg
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] is string errMsg)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-exclamation-octagon-fill me-2"></i>@errMsg
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+@if (Model.TotalLeakageCases > 0)
+{
+    <div class="alert alert-danger d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 rounded-3">
+        <div>
+            <i class="bi bi-shield-exclamation me-2 fs-5"></i>
+            <strong>@FinancialMessages.FormatMsgFin09AuditAlert(Model.TotalLeakageCases, Model.TotalLeakageAmount)</strong>
+        </div>
+        <a href="#leakage-audit-section" class="btn btn-sm btn-danger fw-semibold">
+            <i class="bi bi-search me-1"></i>Xem vị trí thất thoát
+        </a>
+    </div>
+}
+else if (Model.PaymentCount > 0)
+{
+    <div class="alert alert-success py-2 mb-3" style="font-size:0.85rem">
+        <i class="bi bi-shield-check me-2"></i>@FinancialMessages.MsgFin08AuditClean
+    </div>
+}
+
+<!-- Bộ lọc kỳ tài chính & Thanh công cụ -->
+<div class="data-card p-3 mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <span class="text-muted" style="font-size:0.82rem">
+            <i class="bi bi-clock-history me-1"></i>@FinancialMessages.MsgFin12TimezoneInfo
+        </span>
+        <form asp-action="SeedYearData" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-success fw-semibold" title="Nạp bộ dữ liệu chuẩn 12 tháng (Lãi/Lỗ/Chi phí/Sai lệch)">
+                <i class="bi bi-database-fill-Add me-1"></i>↻ Đồng bộ dữ liệu mẫu 12 tháng (2026)
+            </button>
+        </form>
+    </div>
+
+    <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label for="from" class="form-label">Từ ngày</label>
+            <input id="from" name="from" type="date" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" required />
+        </div>
+        <div class="col-md-3">
+            <label for="to" class="form-label">Đến ngày</label>
+            <input id="to" name="to" type="date" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" required />
+        </div>
+        <div class="col-md-2">
+            <label for="groupBy" class="form-label">Nhóm theo</label>
+            <select id="groupBy" name="groupBy" class="form-select">
+                <option value="month" selected="@(Model.GroupBy == "month")">Tháng (P&amp;L 12T)</option>
+                <option value="day" selected="@(Model.GroupBy == "day")">Ngày</option>
+            </select>
+        </div>
+        <div class="col-md-4 d-flex gap-2 flex-wrap">
+            <button class="btn-primary-bms" type="submit">
+                <i class="bi bi-funnel-fill"></i> Phân tích tài chính
+            </button>
+            <a asp-action="Index" asp-route-from="2026-01-01" asp-route-to="2026-12-31" asp-route-groupBy="month" class="btn-outline-bms">
+                <i class="bi bi-calendar3"></i> Cả năm 2026
+            </a>
+            <a asp-action="Export"
+               asp-route-from="@Model.From.ToString("yyyy-MM-dd")"
+               asp-route-to="@Model.To.ToString("yyyy-MM-dd")"
+               asp-route-groupBy="@Model.GroupBy"
+               class="btn-outline-bms">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Xuất CSV P&amp;L &amp; Audit
+            </a>
+        </div>
+    </form>
+    <div asp-validation-summary="All" class="text-danger mt-2" style="font-size:0.85rem"></div>
 </div>
-@if (Model.PaymentCount == 0) { <div class="alert alert-info">Chưa có giao dịch trong khoảng ngày đã chọn.</div> }
-<div class="data-card mb-4"><div class="data-card-header"><span class="data-card-title">Doanh thu theo kỳ</span></div><div class="table-responsive"><table class="table"><thead><tr><th>Kỳ</th><th>Doanh thu</th><th>Giao dịch</th></tr></thead><tbody>
-@foreach (var row in Model.Periods) { <tr><td>@row.Period</td><td>@row.Revenue.ToString("N0") ₫</td><td>@row.PaymentCount</td></tr> }
-</tbody></table></div></div>
-<div class="data-card"><div class="data-card-header"><span class="data-card-title">Theo phương thức thanh toán</span></div><table class="table"><thead><tr><th>Phương thức</th><th>Doanh thu</th><th>Giao dịch</th></tr></thead><tbody>
-@foreach (var row in Model.Methods) { <tr><td>@row.Method</td><td>@row.Revenue.ToString("N0") ₫</td><td>@row.PaymentCount</td></tr> }
-</tbody></table></div>
+
+@if (Model.PaymentCount == 0 && Model.ExpenseItems.Count == 0)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle-fill me-2"></i>@FinancialMessages.MsgFin10EmptyData
+    </div>
+}
+
+<!-- HÀNG 1: 5 THẺ CHỈ SỐ TÀI CHÍNH CỐT LÕI (MỖI THẺ TRẢ LỜI: NHẰM GIẢI QUYẾT VẤN ĐỀ GÌ?) -->
+<div class="row g-3 mb-4">
+    <!-- 1. Tổng Doanh thu thực thu -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card flex-column align-items-start h-100">
+            <div class="d-flex align-items-center gap-3 w-100">
+                <div class="stat-icon green"><i class="bi bi-cash-coin"></i></div>
+                <div>
+                    <div class="stat-value text-success">@Model.TotalRevenue.ToString("N0") ₫</div>
+                    <div class="stat-label">Tổng Doanh thu Thực thu (@Model.InvoiceCount HĐ · @Model.PaymentCount GD)</div>
+                </div>
+            </div>
+            <div class="w-100 pt-2 mt-2 border-top" style="font-size:0.76rem;color:#475569">
+                <div>Giờ bàn: <strong>@Model.TotalPlaytimeRevenue.ToString("N0") ₫</strong> · Nước/Bia: <strong>@Model.TotalFnbRevenue.ToString("N0") ₫ (@Model.FnbSharePercent%)</strong></div>
+                <div class="text-success fw-semibold mt-1">🎯 Giải quyết: Tách bạch tiền thực vào két vs doanh thu treo trên giấy.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Tổng Chi phí Vận hành (4 luồng mất tiền) -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card flex-column align-items-start h-100">
+            <div class="d-flex align-items-center gap-3 w-100">
+                <div class="stat-icon amber"><i class="bi bi-tools"></i></div>
+                <div>
+                    <div class="stat-value text-warning">@Model.TotalOperatingCost.ToString("N0") ₫</div>
+                    <div class="stat-label">Tổng Chi phí Vận hành (@Model.ExpenseItems.Count bút toán)</div>
+                </div>
+            </div>
+            <div class="w-100 pt-2 mt-2 border-top" style="font-size:0.76rem;color:#475569">
+                <div>Gồm: Bảo trì bàn/gậy, Giá vốn bia/nước, Điện nước &amp; Lương ca.</div>
+                <div class="text-warning fw-semibold mt-1">🎯 Giải quyết: Nhận diện 4 luồng làm mất tiền ăn mòn lợi nhuận quán.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Lợi nhuận ròng (P&L) -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card flex-column align-items-start h-100">
+            <div class="d-flex align-items-center gap-3 w-100">
+                <div class="stat-icon @(Model.NetProfit >= 0 ? "blue" : "red")">
+                    <i class="bi @(Model.NetProfit >= 0 ? "bi-graph-up-arrow" : "bi-graph-down-arrow")"></i>
+                </div>
+                <div>
+                    <div class="stat-value @(Model.NetProfit >= 0 ? "text-primary" : "text-danger")">
+                        @(Model.NetProfit >= 0 ? "+" : "")@Model.NetProfit.ToString("N0") ₫
+                    </div>
+                    <div class="stat-label">Lợi nhuận ròng P&amp;L (Biên ròng: @Model.NetMarginPercent%)</div>
+                </div>
+            </div>
+            <div class="w-100 pt-2 mt-2 border-top" style="font-size:0.76rem;color:#475569">
+                <div>Kết quả kỳ: <strong class="text-success">@Model.ProfitablePeriodsCount kỳ Lãi</strong> · <strong class="text-danger">@Model.LossPeriodsCount kỳ Lỗ</strong></div>
+                <div class="text-primary fw-semibold mt-1">🎯 Giải quyết: Chấm dứt ảo tưởng "doanh thu cao = lãi cao", biết tháng nào lỗ thật.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Tổng Thất thoát phát hiện (Audit) -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card flex-column align-items-start h-100" style="border-color: @(Model.TotalLeakageCases > 0 ? "#ef4444" : "#e2e8f0")">
+            <div class="d-flex align-items-center gap-3 w-100">
+                <div class="stat-icon red"><i class="bi bi-shield-fill-exclamation"></i></div>
+                <div>
+                    <div class="stat-value text-danger">-@Model.TotalLeakageAmount.ToString("N0") ₫</div>
+                    <div class="stat-label">Thất thoát Doanh thu phát hiện (@Model.TotalLeakageCases vụ)</div>
+                </div>
+            </div>
+            <div class="w-100 pt-2 mt-2 border-top" style="font-size:0.76rem;color:#475569">
+                <div>Quét 5 lỗ hổng: Phiên bỏ HĐ, Unpaid, sửa giảm bill, lệch két, KM khống.</div>
+                <div class="text-danger fw-semibold mt-1">🎯 Giải quyết: Chỉ đích danh mất tiền ở đâu, bàn nào, ca nào, do ai.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- HÀNG 2: PHÂN TÍCH QUY LUẬT MÙA VỤ (T3-T5, T4-T6) & HIỆU SUẤT CA ĐÊM VS CA NGÀY -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="data-card p-3 h-100 border-start border-4 border-success">
+            <div class="fw-bold text-success mb-1" style="font-size:0.88rem">
+                <i class="bi bi-fire me-1"></i>1. Quy luật Đỉnh Doanh Thu (Tháng 3, 4, 5)
+            </div>
+            <p class="mb-0 text-muted" style="font-size:0.8rem">@Model.PeakRevenueMonthsSummary</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="data-card p-3 h-100 border-start border-4 border-info">
+            <div class="fw-bold text-info mb-1" style="font-size:0.88rem">
+                <i class="bi bi-cup-straw me-1"></i>2. Quy luật Đỉnh Bán Nước &amp; Bia (Tháng 4, 5, 6)
+            </div>
+            <p class="mb-0 text-muted" style="font-size:0.8rem">@Model.PeakBeverageMonthsSummary</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="data-card p-3 h-100 border-start border-4 border-warning">
+            <div class="fw-bold text-warning mb-1" style="font-size:0.88rem">
+                <i class="bi bi-moon-stars-fill me-1"></i>3. Tỷ lệ Chơi Đêm (@Model.DayNight.NightRevenueSharePercent%) vs Ngày (@Model.DayNight.DayRevenueSharePercent%)
+            </div>
+            <p class="mb-0 text-muted" style="font-size:0.8rem">@Model.DayNight.ProblemSolvedExplanation</p>
+        </div>
+    </div>
+</div>
+
+<!-- HÀNG 3: BIỂU ĐỒ TRỰC QUAN P&L 12 THÁNG & CƠ CẤU 4 LUỒNG MẤT TIỀN (CHART.JS) -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="data-card-title">
+                    <i class="bi bi-bar-chart-steps me-2 text-danger"></i>Biểu đồ Doanh thu (Giờ + Nước) vs Tổng Chi phí &amp; Lợi nhuận ròng (P&amp;L)
+                </span>
+                <span class="text-muted" style="font-size:0.75rem">Đơn vị: VNĐ · Cột âm thể hiện tháng LỖ</span>
+            </div>
+            <div class="p-3">
+                <div style="position:relative;height:330px;width:100%">
+                    <canvas id="pnlChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="data-card-title">
+                    <i class="bi bi-pie-chart-fill me-2 text-warning"></i>Cơ cấu 4 Luồng Chi phí Mất tiền
+                </span>
+            </div>
+            <div class="p-3">
+                <div style="position:relative;height:210px;width:100%">
+                    <canvas id="expensePieChart"></canvas>
+                </div>
+                <div class="mt-3 pt-2 border-top d-flex flex-column gap-2" style="font-size:0.8rem">
+                    @foreach (var cat in Model.ExpenseCategories)
+                    {
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><strong>@cat.CategoryName</strong></span>
+                            <span>
+                                <strong>@cat.TotalAmount.ToString("N0") ₫</strong>
+                                <span class="text-muted">(@cat.ShareOfTotalExpensePercent%)</span>
+                            </span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- HÀNG 4 (BÀI TOÁN 1 & 2A): BẢNG ĐỐI CHIẾU P&L & MÙA VỤ THEO KỲ -->
+<div class="data-card mb-4">
+    <div class="data-card-header">
+        <span class="data-card-title">
+            <i class="bi bi-table me-2 text-primary"></i>BÀI TOÁN 1 &amp; 2A: Bảng Đối chiếu Doanh thu – Chi phí – Lãi/Lỗ (P&amp;L) &amp; Mùa vụ theo kỳ
+        </span>
+        <span class="text-muted" style="font-size:0.78rem">
+            Giải quyết câu hỏi: Tháng nào lãi, tháng nào lỗ và nguyên nhân cốt lõi do đâu?
+        </span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Kỳ</th>
+                    <th>Thu Giờ (Ngày / Đêm)</th>
+                    <th>Thu Nước &amp; Bia (% Tổng)</th>
+                    <th>Tổng Thực Thu</th>
+                    <th>Chi Bảo trì</th>
+                    <th>Chi Giá vốn Nước</th>
+                    <th>Chi Điện nước</th>
+                    <th>Chi Lương</th>
+                    <th>Lợi nhuận ròng (P&amp;L)</th>
+                    <th>Chẩn đoán Tài chính (Giải quyết vấn đề gì?)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.PnlPeriods)
+                {
+                    var isLoss = row.TotalExpense > 0 && row.NetProfit < 0;
+                    <tr class="@(isLoss ? "table-danger" : (row.IsPeakRevenue ? "table-success" : ""))">
+                        <td class="fw-bold">
+                            @row.Period
+                            @if (row.IsPeakRevenue)
+                            {
+                                <span class="badge bg-success ms-1" title="Tháng cao điểm doanh thu">🔥 Đỉnh Thu</span>
+                            }
+                            @if (row.IsPeakBeverage)
+                            {
+                                <span class="badge bg-info text-dark ms-1" title="Tháng cao điểm bán nước">🥤 Đỉnh Nước</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@row.PlaytimeRevenue.ToString("N0") ₫</div>
+                            @if (row.PlaytimeRevenue > 0)
+                            {
+                                <small class="text-muted">Đêm: @row.NightSharePercent%</small>
+                            }
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@row.FnbRevenue.ToString("N0") ₫</div>
+                            @if (row.FnbSharePercent > 0)
+                            {
+                                <small class="@(row.IsPeakBeverage ? "text-primary fw-bold" : "text-muted")">(@row.FnbSharePercent%)</small>
+                            }
+                        </td>
+                        <td class="fw-bold">@row.CollectedRevenue.ToString("N0") ₫</td>
+                        <td>@row.MaintenanceCost.ToString("N0") ₫</td>
+                        <td>@row.InventoryCogsCost.ToString("N0") ₫</td>
+                        <td>@row.UtilitiesCost.ToString("N0") ₫</td>
+                        <td>@row.PayrollCost.ToString("N0") ₫</td>
+                        <td class="fw-bold @(row.NetProfit >= 0 ? "text-success" : "text-danger")">
+                            @(row.NetProfit >= 0 ? "+" : "")@row.NetProfit.ToString("N0") ₫
+                        </td>
+                        <td style="max-width:300px;font-size:0.8rem">@row.DiagnosticReason</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- PHƯƠNG THỨC THANH TOÁN & TOP ĐỒ UỐNG CHỦ LỰC MÙA NÓNG (T4-T6) -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-5">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="data-card-title">
+                    <i class="bi bi-credit-card-2-front me-2"></i>Cơ cấu theo Phương thức Thanh toán
+                </span>
+            </div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Phương thức</th>
+                        <th>Doanh thu thực thu</th>
+                        <th>Số giao dịch</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Methods)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@row.Method</td>
+                            <td>@row.Revenue.ToString("N0") ₫</td>
+                            <td>@row.PaymentCount</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="data-card-title">
+                    <i class="bi bi-cup-hot-fill me-2 text-info"></i>Phân tích Mặt hàng Nước &amp; Bia chủ lực (Trọng tâm T4–T5–T6)
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Mặt hàng Nước / Bia</th>
+                            <th>SL Bán</th>
+                            <th>Tổng Doanh thu</th>
+                            <th>Riêng T4–T5–T6</th>
+                            <th>Mục đích Quản trị Tồn kho</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.TopBeverages.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-muted text-center py-3">Chưa có dữ liệu đơn hàng đồ uống trong kỳ.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var bev in Model.TopBeverages)
+                            {
+                                <tr>
+                                    <td class="fw-bold">@bev.ProductName</td>
+                                    <td>@bev.TotalQuantitySold</td>
+                                    <td class="fw-semibold">@bev.TotalRevenue.ToString("N0") ₫ (@bev.ShareOfFnbPercent%)</td>
+                                    <td class="text-info fw-semibold">@bev.PeakSummerRevenue.ToString("N0") ₫</td>
+                                    <td style="font-size:0.78rem" class="text-muted">@bev.ProblemSolvedNote</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- HÀNG 5 (BÀI TOÁN 2B): SỔ CÁI 4 LUỒNG CHI PHÍ MẤT TIỀN & FORM GHI NHẬN CHI PHÍ (UC-FIN-02) -->
+<div class="row g-4 mb-4">
+    <!-- Cột trái: Form thêm bút toán chi phí vận hành -->
+    <div class="col-lg-4">
+        <div class="data-card p-3 h-100">
+            <h6 class="fw-bold mb-2">
+                <i class="bi bi-plus-circle-fill text-danger me-1"></i>Ghi nhận Chi phí Vận hành mới (UC-FIN-02)
+            </h6>
+            <p class="text-muted mb-3" style="font-size:0.78rem">
+                Ghi nhận các khoản mất tiền thực tế (bảo trì bàn/vải nỉ/gậy/bi, nhập bia/nước, tiền điện nước, lương ca) để tính đúng Lãi/Lỗ ròng.
+            </p>
+            <form asp-action="AddExpense" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="from" value="@Model.From.ToString("yyyy-MM-dd")" />
+                <input type="hidden" name="to" value="@Model.To.ToString("yyyy-MM-dd")" />
+                <input type="hidden" name="groupBy" value="@Model.GroupBy" />
+
+                <div class="mb-2">
+                    <label class="form-label">Ngày chi (*)</label>
+                    <input name="NewExpense.ExpenseDate" type="date" value="@Model.NewExpense.ExpenseDate.ToString("yyyy-MM-dd")" class="form-control" required />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Nhóm chi phí mất tiền (*)</label>
+                    <select name="NewExpense.Category" class="form-select" required>
+                        <option value="@OperatingExpense.CatMaintenance">Bảo trì bàn, vải nỉ, gậy, đầu cơ &amp; bi</option>
+                        <option value="@OperatingExpense.CatInventoryCogs">Giá vốn nhập bia, bò húc &amp; nước uống</option>
+                        <option value="@OperatingExpense.CatUtilities">Tiền điện điều hòa, đèn bàn &amp; nước</option>
+                        <option value="@OperatingExpense.CatPayroll">Lương nhân viên theo ca</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Nội dung khoản chi (*)</label>
+                    <input name="NewExpense.Title" type="text" maxlength="150" placeholder="VD: Thay vải nỉ bàn B04 & 10 đầu cơ Kamui" class="form-control" required />
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Số tiền (VNĐ) (*)</label>
+                        <input name="NewExpense.Amount" type="number" min="1000" max="1000000000" step="1000" value="1500000" class="form-control" required />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Phân bổ Ca</label>
+                        <select name="NewExpense.ShiftPeriod" class="form-select">
+                            <option value="All">Cả ngày &amp; đêm</option>
+                            <option value="Day">Ca Ngày (08h–18h)</option>
+                            <option value="Night">Ca Đêm (18h–02h)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Bàn liên quan (nếu bảo trì bàn)</label>
+                    <select name="NewExpense.TableId" class="form-select">
+                        <option value="">-- Không gắn bàn cụ thể --</option>
+                        @foreach (var t in Model.TableOptions)
+                        {
+                            <option value="@t.Id">@t.DisplayName</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Ghi chú chứng từ</label>
+                    <input name="NewExpense.Notes" type="text" maxlength="500" placeholder="Hóa đơn nhà cung cấp / lý do chi..." class="form-control" />
+                </div>
+                <button type="submit" class="btn-primary-bms w-100 justify-content-center">
+                    <i class="bi bi-save2"></i> Lưu bút toán chi phí
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cột phải: Bảng tổng hợp 4 nhóm chi phí & Danh sách bút toán -->
+    <div class="col-lg-8">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="data-card-title">
+                    <i class="bi bi-journal-minus me-2 text-warning"></i>BÀI TOÁN 2B: Sổ cái 4 Luồng Chi phí Mất tiền (@Model.ExpenseItems.Count bút toán)
+                </span>
+            </div>
+            <div class="p-3 border-bottom bg-light">
+                <div class="row g-2">
+                    @foreach (var cat in Model.ExpenseCategories)
+                    {
+                        <div class="col-md-6">
+                            <div class="p-2 bg-white rounded border h-100" style="font-size:0.78rem">
+                                <div class="d-flex justify-content-between fw-bold">
+                                    <span>@cat.CategoryName</span>
+                                    <span class="text-danger">@cat.TotalAmount.ToString("N0") ₫ (@cat.RatioToRevenuePercent% DT)</span>
+                                </div>
+                                <div class="text-muted mt-1">@cat.ProblemSolvedPurpose</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="table-responsive" style="max-height:360px;overflow-y:auto">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Ngày</th>
+                            <th>Nhóm chi phí</th>
+                            <th>Nội dung khoản chi</th>
+                            <th>Ca / Bàn</th>
+                            <th>Số tiền</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.ExpenseItems.Take(30))
+                        {
+                            <tr>
+                                <td>@item.ExpenseDate.ToString("dd/MM/yyyy")</td>
+                                <td><span class="badge bg-secondary">@item.CategoryName</span></td>
+                                <td>
+                                    <div class="fw-semibold">@item.Title</div>
+                                    <small class="text-muted">@item.ExpenseCode @(string.IsNullOrEmpty(item.Notes) ? "" : "· " + item.Notes)</small>
+                                </td>
+                                <td>
+                                    <small>@(item.TableCode != null ? $"Bàn {item.TableCode} · " : "")@item.ShiftDisplayName</small>
+                                </td>
+                                <td class="fw-bold text-danger">-@item.Amount.ToString("N0") ₫</td>
+                                <td class="text-end">
+                                    <form asp-action="DeleteExpense" method="post" class="d-inline" onsubmit="return confirm('Xóa bút toán chi phí này?');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@item.Id" />
+                                        <input type="hidden" name="from" value="@Model.From.ToString("yyyy-MM-dd")" />
+                                        <input type="hidden" name="to" value="@Model.To.ToString("yyyy-MM-dd")" />
+                                        <input type="hidden" name="groupBy" value="@Model.GroupBy" />
+                                        <button type="submit" class="btn-sm-icon danger" title="Xóa bút toán">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- HÀNG 6 (BÀI TOÁN 3): RADAR KIỂM TOÁN & TRUY VẾT THẤT THOÁT DOANH THU (UC-FIN-03) -->
+<div id="leakage-audit-section" class="data-card border-danger">
+    <div class="data-card-header bg-danger bg-opacity-10">
+        <div>
+            <span class="data-card-title text-danger">
+                <i class="bi bi-radar me-2"></i>BÀI TOÁN 3: Bảng Kiểm toán &amp; Truy vết Thất thoát Doanh thu (Revenue Leakage Audit)
+            </span>
+            <div class="text-muted" style="font-size:0.78rem">
+                Đối chiếu chéo tự động giữa <code>PlaySessions</code> ↔ <code>Orders</code> ↔ <code>Invoices</code> ↔ <code>PaymentTransactions</code> ↔ <code>WorkShifts</code> để tìm ra thất thoát ở đâu, do ai.
+            </div>
+        </div>
+        <span class="badge bg-danger fs-6">
+            @Model.TotalLeakageCases vụ vi phạm · Tổng thất thoát: -@Model.TotalLeakageAmount.ToString("N0") ₫
+        </span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Mã Lỗi</th>
+                    <th>Thời điểm (UTC+7)</th>
+                    <th>Loại Thất thoát</th>
+                    <th>Vị trí (Bàn / Ca / HĐ)</th>
+                    <th>Nhân viên Liên quan</th>
+                    <th>Số tiền Đúng</th>
+                    <th>Đã Ghi nhận</th>
+                    <th>Thất thoát</th>
+                    <th>Bằng chứng Dữ liệu &amp; Vấn đề Giải quyết</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.LeakageItems.Count == 0)
+                {
+                    <tr>
+                        <td colspan="9" class="text-center text-success py-4 fw-semibold">
+                            <i class="bi bi-check2-circle me-1"></i>@FinancialMessages.MsgFin08AuditClean
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var leak in Model.LeakageItems)
+                    {
+                        <tr>
+                            <td><span class="badge bg-danger">@leak.RuleCode</span></td>
+                            <td>@leak.OccurredAtVn.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td class="fw-bold text-danger">@leak.LeakageType</td>
+                            <td class="fw-semibold">
+                                @if (leak.RelatedShiftId.HasValue)
+                                {
+                                    <a asp-controller="Shift" asp-action="Details" asp-route-id="@leak.RelatedShiftId.Value" class="text-decoration-underline">
+                                        @leak.LocationOrRef
+                                    </a>
+                                }
+                                else
+                                {
+                                    @leak.LocationOrRef
+                                }
+                            </td>
+                            <td>@leak.ResponsibleStaff</td>
+                            <td>@leak.ExpectedAmount.ToString("N0") ₫</td>
+                            <td>@leak.RecordedAmount.ToString("N0") ₫</td>
+                            <td class="fw-bold text-danger">-@leak.LeakageAmount.ToString("N0") ₫</td>
+                            <td style="max-width:340px;font-size:0.78rem">
+                                <div><strong>Bằng chứng:</strong> @leak.EvidenceDetail</div>
+                                <div class="text-danger fw-semibold mt-1">🎯 @leak.ProblemSolvedAction</div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script>
+        const pnlLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PnlPeriods.Select(x => x.Period)));
+        const revData   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PnlPeriods.Select(x => x.CollectedRevenue)));
+        const expData   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PnlPeriods.Select(x => x.TotalExpense)));
+        const netData   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PnlPeriods.Select(x => x.NetProfit)));
+
+        const ctxPnl = document.getElementById('pnlChart').getContext('2d');
+        new Chart(ctxPnl, {
+            type: 'bar',
+            data: {
+                labels: pnlLabels,
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'Lợi nhuận ròng P&L (VNĐ)',
+                        data: netData,
+                        borderColor: '#e94560',
+                        backgroundColor: '#e94560',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        yAxisID: 'y'
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Tổng Thực thu (VNĐ)',
+                        data: revData,
+                        backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                        borderRadius: 4,
+                        yAxisID: 'y'
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Tổng Chi phí OPEX+COGS (VNĐ)',
+                        data: expData,
+                        backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                        borderRadius: 4,
+                        yAxisID: 'y'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' }
+                },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: function(value) {
+                                if (Math.abs(value) >= 1000000) return (value / 1000000) + ' tr';
+                                return value;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const catLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ExpenseCategories.Select(x => x.CategoryName)));
+        const catValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ExpenseCategories.Select(x => x.TotalAmount)));
+        const ctxPie = document.getElementById('expensePieChart').getContext('2d');
+        new Chart(ctxPie, {
+            type: 'doughnut',
+            data: {
+                labels: catLabels,
+                datasets: [{
+                    data: catValues,
+                    backgroundColor: ['#e94560', '#f59e0b', '#3b82f6', '#10b981'],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                cutout: '62%'
+            }
+        });
+    </script>
+}

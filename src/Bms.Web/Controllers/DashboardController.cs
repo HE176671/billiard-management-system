@@ -177,6 +177,23 @@ public class DashboardController : Controller
             }
         }
 
+        // ══════════════════════════════════════════════════════════════
+        // 6. Tóm tắt Tài chính P&L 12 tháng & Kiểm toán thất thoát (2026)
+        // ══════════════════════════════════════════════════════════════
+        try
+        {
+            var yStartUtc = new DateTime(2026, 1, 1, 0, 0, 0).AddHours(-7);
+            var yEndUtc = new DateTime(2027, 1, 1, 0, 0, 0).AddHours(-7);
+            vm.YearRevenue2026 = await _context.PaymentTransactions.AsNoTracking()
+                .Where(p => p.TransactionTimeUtc >= yStartUtc && p.TransactionTimeUtc < yEndUtc)
+                .SumAsync(p => (decimal?)p.AmountPaid) ?? 0m;
+
+            vm.YearExpense2026 = await _context.OperatingExpenses.AsNoTracking()
+                .Where(e => e.ExpenseDate >= new DateOnly(2026, 1, 1) && e.ExpenseDate <= new DateOnly(2026, 12, 31))
+                .SumAsync(e => (decimal?)e.Amount) ?? 0m;
+        }
+        catch { /* Bỏ qua nếu DB đang nâng cấp */ }
+
         return View(vm);
     }
 
