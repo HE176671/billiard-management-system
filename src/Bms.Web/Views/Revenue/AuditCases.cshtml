@@ -1,127 +1,124 @@
 @model Bms.Web.Models.AuditCaseListViewModel
 @{
-    ViewData["Title"] = "Danh sách Hồ sơ Kiểm toán Thất thoát & Quét 5 Quy tắc (UC-FIN-05)";
+    ViewData["Title"] = "Kiểm toán & Đối soát thất thoát";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
 
 @await Html.PartialAsync("_FinancialNav", "AuditCases")
 @await Html.PartialAsync("_Alerts")
 
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-    <div>
-        <h4 class="fw-bold mb-1">🛡️ Màn Hình 5: Danh Sách Hồ Sơ Kiểm Toán Thất Thoát &amp; Quét Đối Soát 5 Quy Tắc</h4>
-        <p class="text-muted small mb-0">
-            <strong>Giải quyết vấn đề gì?</strong> Không dừng ở việc "hiển thị lỗi", hệ thống định danh từng sai lệch dữ liệu (<code>LEAK-01..05</code>) thành <strong>Hồ sơ vụ việc (Audit Case)</strong> để CFO điều tra, quy trách nhiệm nhân viên và thu hồi tiền thất thoát về quỹ.
-        </p>
+<!-- 4 Thẻ thống kê kiểm toán -->
+<div class="row g-3 mb-3">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-exclamation-octagon"></i></div>
+            <div>
+                <div class="stat-value text-danger">@Model.TotalDetectedLeakage.ToString("N0") ₫</div>
+                <div class="stat-label">Tổng thất thoát phát hiện</div>
+            </div>
+        </div>
     </div>
-    <div class="d-flex gap-2">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-arrow-return-left"></i></div>
+            <div>
+                <div class="stat-value text-success">+@Model.TotalRecoveredAmount.ToString("N0") ₫</div>
+                <div class="stat-label">Đã thu hồi / Khấu trừ</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="bi bi-folder2-open"></i></div>
+            <div>
+                <div class="stat-value text-warning">@(Model.OpenCount + Model.InvestigatingCount) vụ</div>
+                <div class="stat-label">Chờ xử lý (@Model.OpenCount mới · @Model.InvestigatingCount đang tra soát)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-shield-check"></i></div>
+            <div>
+                <div class="stat-value text-primary">@Model.ResolvedCount vụ</div>
+                <div class="stat-label">Đã xử lý (Còn lại: @Model.RemainingUnresolvedLeakage.ToString("N0") ₫)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Danh sách hồ sơ & Bộ lọc -->
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title">
+            <i class="bi bi-shield-exclamation me-2 text-danger"></i>Danh sách hồ sơ đối soát thất thoát (@Model.Cases.Count hồ sơ)
+        </span>
         <form asp-action="SyncAuditCases" method="post" class="d-inline">
             @Html.AntiForgeryToken()
-            <button type="submit" class="btn btn-primary-bms">🔍 Quét &amp; Đồng Bộ 5 Quy Tắc Thất Thoát</button>
+            <button type="submit" class="btn-primary-bms">
+                <i class="bi bi-arrow-repeat"></i> Quét đối soát dữ liệu
+            </button>
         </form>
-        <a asp-action="Index" asp-route-from="2026-01-01" asp-route-to="2026-12-31" asp-route-groupBy="month" class="btn btn-outline-secondary">📊 Về Bảng P&amp;L 12 Tháng</a>
     </div>
-</div>
 
-<!-- 4 KPI Cards -->
-<div class="row g-3 mb-3">
-    <div class="col-md-3">
-        <div class="stat-card h-100 border-start border-4 border-danger">
-            <div class="text-muted small fw-semibold">TỔNG THẤT THOÁT PHÁT HIỆN</div>
-            <div class="fs-4 fw-bold text-danger mt-1">@Model.TotalDetectedLeakage.ToString("N0") ₫</div>
-            <div class="small text-muted mt-1">Tổng hợp từ 5 quy tắc LEAK-01..05</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stat-card h-100 border-start border-4 border-success">
-            <div class="text-muted small fw-semibold">TIỀN ĐÃ THU HỒI / KHẤU TRỪ LƯƠNG</div>
-            <div class="fs-4 fw-bold text-success mt-1">+@Model.TotalRecoveredAmount.ToString("N0") ₫</div>
-            <div class="small text-muted mt-1">Đã cộng bù trực tiếp vào Lợi nhuận ròng P&amp;L</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stat-card h-100 border-start border-4 border-warning">
-            <div class="text-muted small fw-semibold">HỒ SƠ ĐANG MỞ / ĐIỀU TRA</div>
-            <div class="fs-4 fw-bold text-warning mt-1">@(Model.OpenCount + Model.InvestigatingCount) vụ</div>
-            <div class="small text-muted mt-1">Mới phát hiện: @Model.OpenCount · Đang điều tra: @Model.InvestigatingCount</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="stat-card h-100 border-start border-4 border-primary">
-            <div class="text-muted small fw-semibold">HỒ SƠ ĐÃ XỬ LÝ XONG (RESOLVED)</div>
-            <div class="fs-4 fw-bold text-primary mt-1">@Model.ResolvedCount vụ</div>
-            <div class="small text-muted mt-1">Còn chờ thu hồi: @Model.RemainingUnresolvedLeakage.ToString("N0") ₫</div>
-        </div>
-    </div>
-</div>
-
-<!-- Bộ lọc đa chiều -->
-<div class="data-card mb-3 p-3">
-    <form asp-action="AuditCases" method="get" class="row g-2 align-items-end">
+    <form asp-action="AuditCases" method="get" class="row g-2 align-items-end p-3 border-bottom bg-light bg-opacity-50">
         <div class="col-md-3">
-            <label class="form-label small fw-semibold">Quy tắc kiểm toán (5 Rules)</label>
+            <label class="form-label small">Nhóm sai lệch</label>
             <select name="ruleCode" class="form-select form-select-sm">
-                <option value="">-- Tất cả 5 quy tắc --</option>
+                <option value="">Tất cả quy tắc</option>
                 <option value="LEAK-01" selected="@(Model.RuleCode == "LEAK-01")">LEAK-01: Đóng bàn không lập hóa đơn</option>
-                <option value="LEAK-02" selected="@(Model.RuleCode == "LEAK-02")">LEAK-02: Hóa đơn treo Unpaid / Thu thiếu</option>
-                <option value="LEAK-03" selected="@(Model.RuleCode == "LEAK-03")">LEAK-03: Bớt giờ chơi / Xóa món đã Served</option>
-                <option value="LEAK-04" selected="@(Model.RuleCode == "LEAK-04")">LEAK-04: Thụt két tiền mặt khi đóng ca</option>
-                <option value="LEAK-05" selected="@(Model.RuleCode == "LEAK-05")">LEAK-05: Áp giảm giá khống khách vãng lai</option>
+                <option value="LEAK-02" selected="@(Model.RuleCode == "LEAK-02")">LEAK-02: Hóa đơn treo chưa thu đủ</option>
+                <option value="LEAK-03" selected="@(Model.RuleCode == "LEAK-03")">LEAK-03: Giảm giờ chơi / Bỏ sót đồ uống</option>
+                <option value="LEAK-04" selected="@(Model.RuleCode == "LEAK-04")">LEAK-04: Chênh lệch tiền mặt cuối ca</option>
+                <option value="LEAK-05" selected="@(Model.RuleCode == "LEAK-05")">LEAK-05: Áp giảm giá không hợp lệ</option>
             </select>
         </div>
         <div class="col-md-2">
-            <label class="form-label small fw-semibold">Mức độ nghiêm trọng</label>
+            <label class="form-label small">Mức độ</label>
             <select name="severity" class="form-select form-select-sm">
-                <option value="">-- Tất cả mức độ --</option>
-                <option value="Critical" selected="@(Model.Severity == "Critical")">🔴 Critical (Nghiêm trọng)</option>
-                <option value="High" selected="@(Model.Severity == "High")">🟠 High (Cao)</option>
-                <option value="Warning" selected="@(Model.Severity == "Warning")">🟡 Warning (Cảnh báo)</option>
+                <option value="">Tất cả mức độ</option>
+                <option value="Critical" selected="@(Model.Severity == "Critical")">Nghiêm trọng (Critical)</option>
+                <option value="High" selected="@(Model.Severity == "High")">Cao (High)</option>
+                <option value="Warning" selected="@(Model.Severity == "Warning")">Cảnh báo (Warning)</option>
             </select>
         </div>
         <div class="col-md-3">
-            <label class="form-label small fw-semibold">Trạng thái xử lý hồ sơ</label>
+            <label class="form-label small">Trạng thái xử lý</label>
             <select name="status" class="form-select form-select-sm">
-                <option value="">-- Tất cả trạng thái --</option>
-                <option value="Open" selected="@(Model.Status == "Open")">🚨 Mới phát hiện (Open)</option>
-                <option value="Investigating" selected="@(Model.Status == "Investigating")">🔎 Đang điều tra (Investigating)</option>
-                <option value="Resolved" selected="@(Model.Status == "Resolved")">✅ Đã xử lý &amp; Thu hồi (Resolved)</option>
+                <option value="">Tất cả trạng thái</option>
+                <option value="Open" selected="@(Model.Status == "Open")">Mới phát hiện</option>
+                <option value="Investigating" selected="@(Model.Status == "Investigating")">Đang tra soát</option>
+                <option value="Resolved" selected="@(Model.Status == "Resolved")">Đã xử lý</option>
             </select>
         </div>
         <div class="col-md-4">
-            <label class="form-label small fw-semibold">Tìm theo Mã hồ sơ, Bàn, Ca hoặc Nhân viên</label>
+            <label class="form-label small">Tìm kiếm</label>
             <div class="input-group input-group-sm">
-                <input type="text" name="keyword" value="@Model.Keyword" class="form-control" placeholder="Nhập tên nhân viên, bàn, mã AUDIT..." />
-                <button type="submit" class="btn btn-primary-bms">Lọc Hồ Sơ</button>
+                <input type="text" name="keyword" value="@Model.Keyword" class="form-control" placeholder="Mã hồ sơ, bàn, ca, nhân viên..." />
+                <button type="submit" class="btn-primary-bms"><i class="bi bi-search"></i> Tìm</button>
             </div>
         </div>
     </form>
-</div>
 
-<!-- Danh sách Hồ sơ Kiểm toán -->
-<div class="data-card">
-    <div class="data-card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0 fw-bold">Danh Sách Hồ Sơ Vụ Việc Thất Thoát Doanh Thu (@Model.Cases.Count hồ sơ)</h6>
-        <span class="small text-muted">Bấm <strong>🔎 Điều tra &amp; Xử lý</strong> để mở Màn hình 6 và thu hồi tiền thất thoát</span>
-    </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
+            <thead>
                 <tr>
-                    <th>Mã hồ sơ / Rule</th>
-                    <th>Thời gian (UTC+7)</th>
-                    <th>Vị trí &amp; Nhân sự liên quan</th>
-                    <th>Bằng chứng đối soát SQL</th>
+                    <th>Mã hồ sơ</th>
+                    <th>Thời điểm</th>
+                    <th>Vị trí &amp; Nhân viên</th>
+                    <th>Chi tiết chênh lệch</th>
                     <th class="text-end">Thất thoát</th>
                     <th class="text-end">Đã thu hồi</th>
                     <th>Trạng thái</th>
-                    <th class="text-end">Hành động</th>
+                    <th class="text-end">Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 @if (Model.Cases.Count == 0)
                 {
                     <tr>
-                        <td colspan="8" class="text-center py-4 text-muted">Không có hồ sơ kiểm toán nào khớp điều kiện lọc.</td>
+                        <td colspan="8" class="text-center py-4 text-muted">Không có hồ sơ kiểm toán nào phù hợp với điều kiện lọc.</td>
                     </tr>
                 }
                 else
@@ -136,9 +133,8 @@
                         };
                         <tr>
                             <td>
-                                <div class="fw-bold"><code>@c.CaseCode</code></div>
-                                <span class="badge bg-dark">@c.RuleCode</span>
-                                <span class="badge bg-secondary">@c.Severity</span>
+                                <div class="fw-semibold"><code>@c.CaseCode</code></div>
+                                <span class="badge bg-secondary">@c.RuleCode</span>
                             </td>
                             <td>@c.OccurredAtVn.ToString("dd/MM/yyyy HH:mm")</td>
                             <td>
@@ -150,11 +146,11 @@
                                 <div class="small text-muted">@c.EvidenceDetail</div>
                                 @if (!string.IsNullOrEmpty(c.InvestigationNote))
                                 {
-                                    <div class="small text-primary mt-1"><strong>Kết luận CFO:</strong> @c.InvestigationNote</div>
+                                    <div class="small text-primary mt-1"><strong>Ghi chú xử lý:</strong> @c.InvestigationNote</div>
                                 }
                             </td>
                             <td class="text-end fw-bold text-danger">-@c.LeakageAmount.ToString("N0") ₫</td>
-                            <td class="text-end fw-bold text-success">
+                            <td class="text-end fw-semibold text-success">
                                 @(c.RecoveredAmount > 0 ? $"+{c.RecoveredAmount:N0} ₫" : "0 ₫")
                             </td>
                             <td>
@@ -167,8 +163,8 @@
                             <td class="text-end">
                                 @if (c.AuditCaseId.HasValue)
                                 {
-                                    <a asp-action="AuditDetail" asp-route-id="@c.AuditCaseId.Value" class="btn btn-sm btn-primary-bms">
-                                        🔎 Điều tra &amp; Xử lý
+                                    <a asp-action="AuditDetail" asp-route-id="@c.AuditCaseId.Value" class="btn-outline-bms" style="padding:0.25rem 0.65rem;font-size:0.78rem">
+                                        <i class="bi bi-folder2-open"></i> Xử lý
                                     </a>
                                 }
                             </td>
