@@ -360,5 +360,41 @@ public static class SchemaUpgrader
                 logger.LogWarning(ex, "Đã thêm cột CRM V2 nhưng gặp lỗi khi tạo ràng buộc/bảng phụ.");
             }
         }
+
+        // 3. Nâng cấp Bảng Sổ cái Chi phí Vận hành (OperatingExpenses - Script 11)
+        var missingFin = await db.Database.SqlQueryRaw<int>("""
+            SELECT CASE WHEN OBJECT_ID('dbo.OperatingExpenses', 'U') IS NULL THEN 1 ELSE 0 END AS Value
+            """).SingleAsync();
+        if (missingFin != 0)
+        {
+            logger.LogWarning("Database thiếu bảng OperatingExpenses (script 11). Đang tự nâng cấp schema...");
+            await db.Database.ExecuteSqlRawAsync("""
+                SET ANSI_NULLS ON;
+                SET QUOTED_IDENTIFIER ON;
+                IF OBJECT_ID('dbo.OperatingExpenses', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.OperatingExpenses (
+                        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_OperatingExpenses PRIMARY KEY,
+                        ExpenseCode varchar(50) NOT NULL CONSTRAINT UQ_OperatingExpenses_Code UNIQUE,
+                        ExpenseDate date NOT NULL,
+                        Category varchar(30) NOT NULL
+                            CONSTRAINT CK_OperatingExpenses_Category CHECK (Category IN ('Maintenance', 'InventoryCOGS', 'Utilities', 'Payroll')),
+                        Title nvarchar(150) NOT NULL,
+                        Amount decimal(18,2) NOT NULL
+                            CONSTRAINT CK_OperatingExpenses_Amount CHECK (Amount > 0),
+                        TableId int NULL,
+                        ShiftPeriod varchar(20) NOT NULL CONSTRAINT DF_OperatingExpenses_Shift DEFAULT 'All'
+                            CONSTRAINT CK_OperatingExpenses_Shift CHECK (ShiftPeriod IN ('Day', 'Night', 'All')),
+                        Notes nvarchar(500) NULL,
+                        CreatedById nvarchar(450) NULL,
+                        CreatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_OperatingExpenses_Created DEFAULT SYSUTCDATETIME(),
+                        CONSTRAINT FK_OperatingExpenses_Table FOREIGN KEY (TableId) REFERENCES dbo.BilliardTables(Id) ON DELETE NO ACTION,
+                        CONSTRAINT FK_OperatingExpenses_Actor FOREIGN KEY (CreatedById) REFERENCES dbo.AspNetUsers(Id) ON DELETE NO ACTION
+                    );
+                    CREATE INDEX IX_OperatingExpenses_Date_Category ON dbo.OperatingExpenses(ExpenseDate, Category) INCLUDE (Amount, ShiftPeriod);
+                END;
+                """);
+            logger.LogInformation("Đã tạo bảng dbo.OperatingExpenses thành công.");
+        }
     }
 }

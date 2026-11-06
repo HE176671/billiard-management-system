@@ -15,6 +15,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PaymentTransaction>     PaymentTransactions     => Set<PaymentTransaction>();
     public DbSet<BilliardTable>          BilliardTables          => Set<BilliardTable>();
     public DbSet<WorkShift>              WorkShifts              => Set<WorkShift>();
+    public DbSet<OperatingExpense>       OperatingExpenses       => Set<OperatingExpense>();
 
     // Loyalty & CRM tables (Dung - TV2)
     public DbSet<MembershipTier>         MembershipTiers         => Set<MembershipTier>();
@@ -272,6 +273,25 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.ToTable("BilliardTables");
             e.Property(x => x.TableCode).HasMaxLength(20);
             e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
+        });
+
+        // OperatingExpenses (Quản trị Tài chính & P&L 12 tháng)
+        builder.Entity<OperatingExpense>(e =>
+        {
+            e.ToTable("OperatingExpenses");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ExpenseCode).HasColumnType("varchar(50)").IsRequired();
+            e.HasIndex(x => x.ExpenseCode).IsUnique();
+            e.Property(x => x.ExpenseDate).HasColumnType("date");
+            e.Property(x => x.Category).HasColumnType("varchar(30)").IsRequired();
+            e.Property(x => x.Title).HasMaxLength(150).IsRequired();
+            e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.ShiftPeriod).HasColumnType("varchar(20)").HasDefaultValue("All").IsRequired();
+            e.Property(x => x.Notes).HasMaxLength(500);
+            e.Property(x => x.CreatedById).HasMaxLength(450);
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.Table).WithMany().HasForeignKey(x => x.TableId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
