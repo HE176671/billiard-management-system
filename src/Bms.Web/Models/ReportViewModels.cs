@@ -3,50 +3,50 @@ using System.ComponentModel.DataAnnotations;
 namespace Bms.Web.Models;
 
 /// <summary>
-/// Bảng mã thông báo chuẩn tiếng Việt (MSG-FIN-01 -> MSG-FIN-19) theo đặc tả SRS.
+/// Bảng mã thông báo chuẩn tiếng Việt theo đặc tả SRS.
 /// </summary>
 public static class FinancialMessages
 {
     public const string MsgFin01InvalidOrder =
-        "MSG-FIN-01: Ngày bắt đầu không được lớn hơn ngày kết thúc. Vui lòng chọn lại khoảng thời gian.";
+        "Ngày bắt đầu không được lớn hơn ngày kết thúc. Vui lòng chọn lại khoảng thời gian.";
     public const string MsgFin02RangeTooLong =
-        "MSG-FIN-02: Khoảng thời gian phân tích tối đa là 367 ngày (1 năm tài chính). Vui lòng thu hẹp khoảng ngày.";
+        "Khoảng thời gian phân tích tối đa là 367 ngày (1 năm tài chính). Vui lòng thu hẹp khoảng ngày.";
     public const string MsgFin03InvalidTitleOrCategory =
-        "MSG-FIN-03: Vui lòng nhập tên khoản chi phí vận hành (tối đa 150 ký tự) và chọn đúng danh mục chi phí.";
+        "Vui lòng nhập tên khoản chi phí vận hành (tối đa 150 ký tự) và chọn đúng danh mục chi phí.";
     public const string MsgFin04InvalidAmount =
-        "MSG-FIN-04: Số tiền chi phí phải lớn hơn 0 ₫ và không vượt quá 1.000.000.000 ₫.";
+        "Số tiền chi phí phải lớn hơn 0 ₫ và không vượt quá 1.000.000.000 ₫.";
     public const string MsgFin06Deleted =
-        "MSG-FIN-06: Đã xóa bút toán chi phí và tính toán lại báo cáo Lãi/Lỗ.";
+        "Đã xóa phiếu chi và tính toán lại báo cáo Lãi/Lỗ.";
     public const string MsgFin07SeedSuccess =
-        "MSG-FIN-07: Đã đồng bộ thành công bộ dữ liệu tài chính 12 tháng (gồm doanh thu, 4 nhóm chi phí vận hành, định mức ngân sách và 5 kịch bản kiểm toán thất thoát).";
+        "Đã đồng bộ thành công bộ dữ liệu tài chính 12 tháng.";
     public const string MsgFin08AuditClean =
-        "MSG-FIN-08: Đối soát hoàn tất: Không phát hiện chênh lệch hay thất thoát doanh thu nào trong khoảng thời gian đã chọn.";
+        "Đối soát hoàn tất: Không phát hiện chênh lệch hay thất thoát doanh thu nào trong kỳ đã chọn.";
     public const string MsgFin10EmptyData =
-        "MSG-FIN-10: Chưa có dữ liệu giao dịch trong khoảng thời gian này. Bạn có thể bấm 'Đồng bộ dữ liệu mẫu 12 tháng' để nạp dữ liệu phân tích.";
+        "Chưa có dữ liệu giao dịch trong khoảng thời gian này. Bạn có thể bấm 'Đồng bộ dữ liệu' để nạp dữ liệu phân tích.";
     public const string MsgFin11NotFound =
-        "MSG-FIN-11: Không tìm thấy bút toán hoặc hồ sơ cần thao tác.";
+        "Không tìm thấy phiếu chi hoặc hồ sơ cần thao tác.";
     public const string MsgFin12TimezoneInfo =
-        "MSG-FIN-12: Toàn bộ số liệu Doanh thu, Chi phí vận hành (P&L) và Kiểm toán thất thoát được tính theo múi giờ Việt Nam (UTC+7).";
+        "Số liệu doanh thu, chi phí vận hành và đối soát được tính theo múi giờ Việt Nam (UTC+7).";
     public const string MsgFin13ExpenseUpdated =
-        "MSG-FIN-13: Đã cập nhật thông tin phiếu chi vận hành thành công.";
+        "Đã cập nhật thông tin phiếu chi vận hành thành công.";
     public const string MsgFin14ExpenseReviewed =
-        "MSG-FIN-14: Đã cập nhật trạng thái phê duyệt phiếu chi và đồng bộ lại Báo cáo Lãi/Lỗ (P&L).";
+        "Đã cập nhật trạng thái phê duyệt phiếu chi và đồng bộ lại báo cáo Lãi/Lỗ.";
     public const string MsgFin15BudgetCapWarning =
-        "MSG-FIN-15: Cảnh báo: Khoản chi này làm tổng chi danh mục vượt định mức ngân sách tháng đã thiết lập!";
+        "Lưu ý: Khoản chi này làm tổng chi của danh mục vượt định mức ngân sách tháng đã thiết lập.";
     public const string MsgFin16AuditSynced =
-        "MSG-FIN-16: Đã quét 5 quy tắc đối soát và đồng bộ danh sách Hồ sơ Kiểm toán Thất thoát thành công.";
+        "Đã quét 5 quy tắc đối soát và cập nhật danh sách hồ sơ kiểm toán thất thoát.";
     public const string MsgFin17AuditResolved =
-        "MSG-FIN-17: Đã lưu quyết định xử lý vụ việc thất thoát và cập nhật khoản tiền thu hồi vào Báo cáo P&L.";
+        "Đã lưu quyết định xử lý hồ sơ thất thoát và cập nhật khoản tiền thu hồi vào báo cáo Lãi/Lỗ.";
     public const string MsgFin18AuditInvalidResolution =
-        "MSG-FIN-18: Số tiền thu hồi/khấu trừ phải lớn hơn 0 và không vượt quá số tiền thất thoát phát hiện (hoặc phải nhập lý do giải trình khi miễn trừ).";
+        "Số tiền thu hồi/khấu trừ phải lớn hơn 0 và không vượt quá số tiền thất thoát (hoặc phải nhập lý do giải trình khi miễn trừ).";
     public const string MsgFin19BudgetSaved =
-        "MSG-FIN-19: Đã lưu định mức ngân sách tháng và kế hoạch hành động tối ưu mùa vụ thành công.";
+        "Đã lưu định mức ngân sách tháng và kế hoạch vận hành thành công.";
 
     public static string FormatMsgFin05Created(string code, decimal amount) =>
-        $"MSG-FIN-05: Đã ghi nhận bút toán chi phí [{code}] ({amount:N0} ₫) vào sổ cái vận hành và cập nhật lại báo cáo Lãi/Lỗ.";
+        $"Đã ghi nhận phiếu chi [{code}] ({amount:N0} ₫) vào sổ cái vận hành.";
 
     public static string FormatMsgFin09AuditAlert(int count, decimal totalLoss) =>
-        $"MSG-FIN-09: Cảnh báo Kiểm toán — Phát hiện {count} vụ sai lệch dữ liệu với tổng thất thoát {totalLoss:N0} ₫. Xem chi tiết tại bảng Truy vết bên dưới!";
+        $"Phát hiện {count} hồ sơ chênh lệch dữ liệu với tổng mức thất thoát {totalLoss:N0} ₫ cần kiểm tra.";
 }
 
 public class RevenueReportViewModel
@@ -183,12 +183,12 @@ public class BeveragePerformanceRow
     public int TotalQuantitySold { get; set; }
     public decimal TotalRevenue { get; set; }
     public decimal ShareOfFnbPercent { get; set; }
-    public decimal PeakSummerRevenue { get; set; } // Doanh thu riêng trong T4-T5-T6
+    public decimal PeakSummerRevenue { get; set; }
     public string ProblemSolvedNote { get; set; } = string.Empty;
 }
 
 /// <summary>
-/// Tổng hợp theo 4 nhóm chi phí vận hành mất tiền (BR-FIN-03).
+/// Tổng hợp theo 4 nhóm chi phí vận hành mất tiền.
 /// </summary>
 public class ExpenseCategorySummaryRow
 {
@@ -232,7 +232,7 @@ public class OperatingExpenseItemRow
 public record TableSelectOption(int Id, string DisplayName);
 
 /// <summary>
-/// Form nhập bút toán chi phí vận hành mới (UC-FIN-02 / UC-FIN-03).
+/// Form nhập bút toán chi phí vận hành mới.
 /// </summary>
 public class CreateExpenseInputModel
 {
@@ -268,7 +268,7 @@ public class CreateExpenseInputModel
 }
 
 /// <summary>
-/// Form chỉnh sửa bút toán chi phí vận hành trên Màn hình 4 (UC-FIN-04).
+/// Form chỉnh sửa bút toán chi phí vận hành.
 /// </summary>
 public class UpdateExpenseInputModel
 {
@@ -303,41 +303,37 @@ public class UpdateExpenseInputModel
 }
 
 /// <summary>
-/// Bản ghi phát hiện sai lệch dữ liệu / thất thoát doanh thu (UC-FIN-03 &amp; UC-FIN-05/06).
+/// Bản ghi phát hiện sai lệch dữ liệu / thất thoát doanh thu.
 /// </summary>
 public class LeakageAuditRow
 {
     public int? AuditCaseId { get; set; }
     public string CaseCode { get; set; } = string.Empty;
-    public string RuleCode { get; set; } = string.Empty;       // LEAK-01 .. LEAK-05
+    public string RuleCode { get; set; } = string.Empty;
     public string Severity { get; set; } = "Critical";
-    public DateTime OccurredAtVn { get; set; }                 // Thời điểm phát sinh (UTC+7)
+    public DateTime OccurredAtVn { get; set; }
     public string PeriodMonth => OccurredAtVn.ToString("yyyy-MM");
-    public string LeakageType { get; set; } = string.Empty;    // Tên loại thất thoát
-    public string LocationOrRef { get; set; } = string.Empty;  // Bàn / Phiên / Hóa đơn / Ca
-    public string ResponsibleStaff { get; set; } = string.Empty; // Nhân viên liên quan
-    public decimal ExpectedAmount { get; set; }                // Số tiền đúng theo hệ thống
-    public decimal RecordedAmount { get; set; }                // Số tiền thực tế đã ghi nhận
-    public decimal LeakageAmount { get; set; }                 // Số tiền thất thoát (Expected - Recorded)
-    public decimal RecoveredAmount { get; set; }               // Số tiền đã thu hồi / khấu trừ
-    public string Status { get; set; } = "Open";               // Open, Investigating, Resolved
+    public string LeakageType { get; set; } = string.Empty;
+    public string LocationOrRef { get; set; } = string.Empty;
+    public string ResponsibleStaff { get; set; } = string.Empty;
+    public decimal ExpectedAmount { get; set; }
+    public decimal RecordedAmount { get; set; }
+    public decimal LeakageAmount { get; set; }
+    public decimal RecoveredAmount { get; set; }
+    public string Status { get; set; } = "Open";
     public string StatusDisplayName { get; set; } = "Mới phát hiện";
-    public string? ResolutionType { get; set; }                // RecoveredCash, DeductedPayroll, Waived
+    public string? ResolutionType { get; set; }
     public string ResolutionDisplayName { get; set; } = string.Empty;
-    public string EvidenceDetail { get; set; } = string.Empty; // Bằng chứng đối chiếu dữ liệu
-    public string ProblemSolvedAction { get; set; } = string.Empty; // Nhằm giải quyết vấn đề gì & cần làm gì
+    public string EvidenceDetail { get; set; } = string.Empty;
+    public string ProblemSolvedAction { get; set; } = string.Empty;
     public string? InvestigationNote { get; set; }
     public string? ResolvedByName { get; set; }
     public DateTime? ResolvedAtUtc { get; set; }
     public int? RelatedShiftId { get; set; }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// VIEWMODELS CHO 6 MÀN HÌNH MỞ RỘNG END-TO-END (SCREENS 2, 3, 4, 5, 6, 7)
-// ══════════════════════════════════════════════════════════════════════════════
-
 /// <summary>
-/// Màn hình 2 (/Revenue/Expenses): Sổ cái Chi phí Vận hành &amp; Lọc Đa Chiều (UC-FIN-02).
+/// Sổ cái Chi phí Vận hành &amp; Lọc Đa Chiều.
 /// </summary>
 public class ExpenseListViewModel
 {
@@ -364,7 +360,7 @@ public class ExpenseListViewModel
 }
 
 /// <summary>
-/// Màn hình 3 (/Revenue/CreateExpense): Lập Phiếu Chi Vận Hành Mới &amp; Kiểm Tra Trần Ngân Sách (UC-FIN-03).
+/// Lập Phiếu Chi Vận Hành Mới &amp; Kiểm Tra Trần Ngân Sách.
 /// </summary>
 public class CreateExpenseScreenViewModel
 {
@@ -385,7 +381,7 @@ public class BudgetCategoryUsageRow
 }
 
 /// <summary>
-/// Màn hình 4 (/Revenue/ExpenseDetail/{id}): Chi Tiết, Chỉnh Sửa &amp; Phê Duyệt Phiếu Chi (UC-FIN-04).
+/// Chi Tiết, Chỉnh Sửa &amp; Phê Duyệt Phiếu Chi.
 /// </summary>
 public class ExpenseDetailViewModel
 {
@@ -400,7 +396,7 @@ public class ExpenseDetailViewModel
 }
 
 /// <summary>
-/// Màn hình 5 (/Revenue/AuditCases): Danh Sách Hồ Sơ Kiểm Toán Thất Thoát &amp; Quét Đối Soát (UC-FIN-05).
+/// Danh Sách Hồ Sơ Kiểm Toán Thất Thoát &amp; Quét Đối Soát.
 /// </summary>
 public class AuditCaseListViewModel
 {
@@ -420,7 +416,7 @@ public class AuditCaseListViewModel
 }
 
 /// <summary>
-/// Màn hình 6 (/Revenue/AuditDetail/{id}): Điều Tra &amp; Ra Quyết Định Xử Lý Thất Thoát (UC-FIN-06).
+/// Điều Tra &amp; Ra Quyết Định Xử Lý Thất Thoát.
 /// </summary>
 public class AuditCaseDetailViewModel
 {
@@ -434,10 +430,10 @@ public class ResolveAuditCaseInputModel
 
     [Required]
     [StringLength(24)]
-    public string TargetStatus { get; set; } = "Resolved"; // Investigating, Resolved
+    public string TargetStatus { get; set; } = "Resolved";
 
     [StringLength(32)]
-    public string? ResolutionType { get; set; } = "RecoveredCash"; // RecoveredCash, DeductedPayroll, Waived
+    public string? ResolutionType { get; set; } = "RecoveredCash";
 
     [Range(typeof(decimal), "0", "1000000000")]
     public decimal RecoveredAmount { get; set; }
@@ -448,7 +444,7 @@ public class ResolveAuditCaseInputModel
 }
 
 /// <summary>
-/// Màn hình 7 (/Revenue/Budgets): Quản Lý Định Mức Ngân Sách 4 Luồng &amp; Kế Hoạch Mùa Vụ 12 Tháng (UC-FIN-07).
+/// Quản Lý Định Mức Ngân Sách 4 Luồng &amp; Kế Hoạch Mùa Vụ 12 Tháng.
 /// </summary>
 public class BudgetManagementViewModel
 {

@@ -162,25 +162,6 @@
     </div>
 </div>
 
-<!-- Tóm tắt Quản trị Tài chính (P&L 12 tháng) & Kiểm toán Thất thoát -->
-<div class="data-card p-3 mb-4 border-start border-4 border-danger">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-            <div class="fw-bold" style="font-size:0.95rem">
-                <i class="bi bi-shield-check text-danger me-1"></i>Trung tâm Quản trị Tài chính (P&amp;L 12 Tháng) &amp; Kiểm toán Thất thoát
-            </div>
-            <div class="text-muted mt-1" style="font-size:0.82rem">
-                Thực thu năm 2026: <strong class="text-success">@Model.YearRevenue2026.ToString("N0") ₫</strong> ·
-                Tổng chi phí vận hành (Bảo trì, Nước, Điện, Lương): <strong class="text-warning">@Model.YearExpense2026.ToString("N0") ₫</strong> ·
-                Lợi nhuận ròng: <strong class="@(Model.YearNetProfit2026 >= 0 ? "text-primary" : "text-danger")">@(Model.YearNetProfit2026 >= 0 ? "+" : "")@Model.YearNetProfit2026.ToString("N0") ₫</strong>
-            </div>
-        </div>
-        <a asp-controller="Revenue" asp-action="Index" class="btn-primary-bms" style="font-size:0.82rem">
-            <i class="bi bi-radar"></i> Mở Báo cáo P&amp;L &amp; Truy vết Thất thoát
-        </a>
-    </div>
-</div>
-
 <!-- Lối tắt quản trị nhanh -->
 <div class="data-card p-3">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">

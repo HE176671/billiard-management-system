@@ -33,13 +33,6 @@ public class DashboardViewModel
     public int ActiveShiftCount { get; set; }
     /// <summary>Ca đã đóng hôm nay có tiền thực tế khác kỳ vọng.</summary>
     public int TodayShiftsWithDifference { get; set; }
-
-    // --- Tóm tắt Tài chính P&L 12 tháng & Kiểm toán thất thoát ---
-    public decimal YearRevenue2026 { get; set; }
-    public decimal YearExpense2026 { get; set; }
-    public decimal YearNetProfit2026 => YearRevenue2026 - YearExpense2026;
-    public int YearLeakageCount { get; set; }
-    public decimal YearLeakageAmount { get; set; }
 }
 
 public class DailyRevenuePoint
