@@ -6,6 +6,8 @@
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
 
+@await Html.PartialAsync("_FinancialNav", "Index")
+
 <!-- Thông báo trạng thái (MSG-FIN) -->
 @if (TempData["Success"] is string okMsg)
 {
@@ -28,10 +30,19 @@
         <div>
             <i class="bi bi-shield-exclamation me-2 fs-5"></i>
             <strong>@FinancialMessages.FormatMsgFin09AuditAlert(Model.TotalLeakageCases, Model.TotalLeakageAmount)</strong>
+            @if (Model.TotalRecoveredAmount > 0)
+            {
+                <span class="badge bg-success ms-2">Đã thu hồi: +@Model.TotalRecoveredAmount.ToString("N0") ₫</span>
+            }
         </div>
-        <a href="#leakage-audit-section" class="btn btn-sm btn-danger fw-semibold">
-            <i class="bi bi-search me-1"></i>Xem vị trí thất thoát
-        </a>
+        <div class="d-flex gap-2">
+            <a asp-action="AuditCases" class="btn btn-sm btn-danger fw-semibold">
+                🔎 Mở Hồ Sơ Điều Tra &amp; Thu Hồi (Màn hình 5 &amp; 6)
+            </a>
+            <a href="#leakage-audit-section" class="btn btn-sm btn-outline-danger fw-semibold">
+                <i class="bi bi-search me-1"></i>Xem bảng tóm tắt
+            </a>
+        </div>
     </div>
 }
 else if (Model.PaymentCount > 0)
@@ -47,12 +58,20 @@ else if (Model.PaymentCount > 0)
         <span class="text-muted" style="font-size:0.82rem">
             <i class="bi bi-clock-history me-1"></i>@FinancialMessages.MsgFin12TimezoneInfo
         </span>
-        <form asp-action="SeedYearData" method="post" class="d-inline">
-            @Html.AntiForgeryToken()
-            <button type="submit" class="btn btn-sm btn-outline-success fw-semibold" title="Nạp bộ dữ liệu chuẩn 12 tháng (Lãi/Lỗ/Chi phí/Sai lệch)">
-                <i class="bi bi-database-fill-Add me-1"></i>↻ Đồng bộ dữ liệu mẫu 12 tháng (2026)
-            </button>
-        </form>
+        <div class="d-flex gap-2 flex-wrap">
+            <a asp-action="Budgets" class="btn btn-sm btn-outline-primary fw-semibold">
+                🎯 Quản lý Định mức Ngân sách 12 Tháng
+            </a>
+            <a asp-action="Expenses" class="btn btn-sm btn-outline-warning fw-semibold">
+                🧾 Sổ cái &amp; Duyệt Chi phí (@Model.PendingExpenseCount chờ duyệt)
+            </a>
+            <form asp-action="SeedYearData" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-outline-success fw-semibold" title="Nạp bộ dữ liệu chuẩn 12 tháng (Lãi/Lỗ/Chi phí/Sai lệch)">
+                    <i class="bi bi-database-fill-Add me-1"></i>↻ Đồng bộ dữ liệu mẫu 12 tháng (2026)
+                </button>
+            </form>
+        </div>
     </div>
 
     <form method="get" class="row g-3 align-items-end">
@@ -97,7 +116,7 @@ else if (Model.PaymentCount > 0)
     </div>
 }
 
-<!-- HÀNG 1: 5 THẺ CHỈ SỐ TÀI CHÍNH CỐT LÕI (MỖI THẺ TRẢ LỜI: NHẰM GIẢI QUYẾT VẤN ĐỀ GÌ?) -->
+<!-- HÀNG 1: 4 THẺ CHỈ SỐ TÀI CHÍNH CỐT LÕI (MỖI THẺ TRẢ LỜI: NHẰM GIẢI QUYẾT VẤN ĐỀ GÌ?) -->
 <div class="row g-3 mb-4">
     <!-- 1. Tổng Doanh thu thực thu -->
     <div class="col-sm-6 col-xl-3">
@@ -123,11 +142,11 @@ else if (Model.PaymentCount > 0)
                 <div class="stat-icon amber"><i class="bi bi-tools"></i></div>
                 <div>
                     <div class="stat-value text-warning">@Model.TotalOperatingCost.ToString("N0") ₫</div>
-                    <div class="stat-label">Tổng Chi phí Vận hành (@Model.ExpenseItems.Count bút toán)</div>
+                    <div class="stat-label">Chi phí Đã duyệt (@Model.PendingExpenseCount phiếu chờ duyệt)</div>
                 </div>
             </div>
             <div class="w-100 pt-2 mt-2 border-top" style="font-size:0.76rem;color:#475569">
-                <div>Gồm: Bảo trì bàn/gậy, Giá vốn bia/nước, Điện nước &amp; Lương ca.</div>
+                <div>Trần ngân sách kỳ: <strong>@Model.TotalBudgetCap.ToString("N0") ₫</strong> · <a asp-action="Expenses">Mở Sổ cái</a></div>
                 <div class="text-warning fw-semibold mt-1">🎯 Giải quyết: Nhận diện 4 luồng làm mất tiền ăn mòn lợi nhuận quán.</div>
             </div>
         </div>
@@ -148,7 +167,7 @@ else if (Model.PaymentCount > 0)
                 </div>
             </div>
             <div class="w-100 pt-2 mt-2 border-top" style="font-size:0.76rem;color:#475569">
-                <div>Kết quả kỳ: <strong class="text-success">@Model.ProfitablePeriodsCount kỳ Lãi</strong> · <strong class="text-danger">@Model.LossPeriodsCount kỳ Lỗ</strong></div>
+                <div>Kết quả kỳ: <strong class="text-success">@Model.ProfitablePeriodsCount kỳ Lãi</strong> · <strong class="text-danger">@Model.LossPeriodsCount kỳ Lỗ</strong> (Thu hồi: +@Model.TotalRecoveredAmount.ToString("N0") ₫)</div>
                 <div class="text-primary fw-semibold mt-1">🎯 Giải quyết: Chấm dứt ảo tưởng "doanh thu cao = lãi cao", biết tháng nào lỗ thật.</div>
             </div>
         </div>
@@ -161,11 +180,11 @@ else if (Model.PaymentCount > 0)
                 <div class="stat-icon red"><i class="bi bi-shield-fill-exclamation"></i></div>
                 <div>
                     <div class="stat-value text-danger">-@Model.TotalLeakageAmount.ToString("N0") ₫</div>
-                    <div class="stat-label">Thất thoát Doanh thu phát hiện (@Model.TotalLeakageCases vụ)</div>
+                    <div class="stat-label">Thất thoát (@Model.OpenAuditCaseCount mở · @Model.ResolvedAuditCaseCount đã xử lý)</div>
                 </div>
             </div>
             <div class="w-100 pt-2 mt-2 border-top" style="font-size:0.76rem;color:#475569">
-                <div>Quét 5 lỗ hổng: Phiên bỏ HĐ, Unpaid, sửa giảm bill, lệch két, KM khống.</div>
+                <div>Đã thu hồi/khấu trừ: <strong class="text-success">+@Model.TotalRecoveredAmount.ToString("N0") ₫</strong> · <a asp-action="AuditCases">Điều tra ngay</a></div>
                 <div class="text-danger fw-semibold mt-1">🎯 Giải quyết: Chỉ đích danh mất tiền ở đâu, bàn nào, ca nào, do ai.</div>
             </div>
         </div>
@@ -176,24 +195,33 @@ else if (Model.PaymentCount > 0)
 <div class="row g-3 mb-4">
     <div class="col-md-4">
         <div class="data-card p-3 h-100 border-start border-4 border-success">
-            <div class="fw-bold text-success mb-1" style="font-size:0.88rem">
-                <i class="bi bi-fire me-1"></i>1. Quy luật Đỉnh Doanh Thu (Tháng 3, 4, 5)
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold text-success" style="font-size:0.88rem">
+                    <i class="bi bi-fire me-1"></i>1. Quy luật Đỉnh Doanh Thu (Tháng 3, 4, 5)
+                </span>
+                <a asp-action="Budgets" asp-route-selectedPeriod="2026-03" class="badge bg-success text-decoration-none">Chốt Ngân Sách T3-5 →</a>
             </div>
             <p class="mb-0 text-muted" style="font-size:0.8rem">@Model.PeakRevenueMonthsSummary</p>
         </div>
     </div>
     <div class="col-md-4">
         <div class="data-card p-3 h-100 border-start border-4 border-info">
-            <div class="fw-bold text-info mb-1" style="font-size:0.88rem">
-                <i class="bi bi-cup-straw me-1"></i>2. Quy luật Đỉnh Bán Nước &amp; Bia (Tháng 4, 5, 6)
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold text-info" style="font-size:0.88rem">
+                    <i class="bi bi-cup-straw me-1"></i>2. Quy luật Đỉnh Bán Nước &amp; Bia (Tháng 4, 5, 6)
+                </span>
+                <a asp-action="Budgets" asp-route-selectedPeriod="2026-05" class="badge bg-info text-dark text-decoration-none">Tăng Trần Nhập Bia →</a>
             </div>
             <p class="mb-0 text-muted" style="font-size:0.8rem">@Model.PeakBeverageMonthsSummary</p>
         </div>
     </div>
     <div class="col-md-4">
         <div class="data-card p-3 h-100 border-start border-4 border-warning">
-            <div class="fw-bold text-warning mb-1" style="font-size:0.88rem">
-                <i class="bi bi-moon-stars-fill me-1"></i>3. Tỷ lệ Chơi Đêm (@Model.DayNight.NightRevenueSharePercent%) vs Ngày (@Model.DayNight.DayRevenueSharePercent%)
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold text-warning" style="font-size:0.88rem">
+                    <i class="bi bi-moon-stars-fill me-1"></i>3. Tỷ lệ Chơi Đêm (@Model.DayNight.NightRevenueSharePercent%) vs Ngày (@Model.DayNight.DayRevenueSharePercent%)
+                </span>
+                <a asp-action="Budgets" asp-route-selectedPeriod="2026-07" class="badge bg-warning text-dark text-decoration-none">Tối Ưu Lương Ca Ngày →</a>
             </div>
             <p class="mb-0 text-muted" style="font-size:0.8rem">@Model.DayNight.ProblemSolvedExplanation</p>
         </div>
@@ -277,7 +305,9 @@ else if (Model.PaymentCount > 0)
                     var isLoss = row.TotalExpense > 0 && row.NetProfit < 0;
                     <tr class="@(isLoss ? "table-danger" : (row.IsPeakRevenue ? "table-success" : ""))">
                         <td class="fw-bold">
-                            @row.Period
+                            <a asp-action="Budgets" asp-route-selectedPeriod="@row.Period" class="text-decoration-none text-dark">
+                                @row.Period
+                            </a>
                             @if (row.IsPeakRevenue)
                             {
                                 <span class="badge bg-success ms-1" title="Tháng cao điểm doanh thu">🔥 Đỉnh Thu</span>
@@ -285,6 +315,10 @@ else if (Model.PaymentCount > 0)
                             @if (row.IsPeakBeverage)
                             {
                                 <span class="badge bg-info text-dark ms-1" title="Tháng cao điểm bán nước">🥤 Đỉnh Nước</span>
+                            }
+                            @if (row.IsOverBudget)
+                            {
+                                <span class="badge bg-warning text-dark ms-1" title="Vượt định mức ngân sách tháng">⚠️ Vượt Trần</span>
                             }
                         </td>
                         <td>
@@ -301,7 +335,13 @@ else if (Model.PaymentCount > 0)
                                 <small class="@(row.IsPeakBeverage ? "text-primary fw-bold" : "text-muted")">(@row.FnbSharePercent%)</small>
                             }
                         </td>
-                        <td class="fw-bold">@row.CollectedRevenue.ToString("N0") ₫</td>
+                        <td class="fw-bold">
+                            @row.CollectedRevenue.ToString("N0") ₫
+                            @if (row.RecoveredAmount > 0)
+                            {
+                                <div class="small text-success">+@row.RecoveredAmount.ToString("N0") ₫ thu hồi</div>
+                            }
+                        </td>
                         <td>@row.MaintenanceCost.ToString("N0") ₫</td>
                         <td>@row.InventoryCogsCost.ToString("N0") ₫</td>
                         <td>@row.UtilitiesCost.ToString("N0") ₫</td>
@@ -396,11 +436,14 @@ else if (Model.PaymentCount > 0)
     <!-- Cột trái: Form thêm bút toán chi phí vận hành -->
     <div class="col-lg-4">
         <div class="data-card p-3 h-100">
-            <h6 class="fw-bold mb-2">
-                <i class="bi bi-plus-circle-fill text-danger me-1"></i>Ghi nhận Chi phí Vận hành mới (UC-FIN-02)
-            </h6>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0">
+                    <i class="bi bi-plus-circle-fill text-danger me-1"></i>Ghi nhận Chi phí Nhanh
+                </h6>
+                <a asp-action="CreateExpense" class="btn btn-sm btn-outline-primary">Mở Màn hình 3 →</a>
+            </div>
             <p class="text-muted mb-3" style="font-size:0.78rem">
-                Ghi nhận các khoản mất tiền thực tế (bảo trì bàn/vải nỉ/gậy/bi, nhập bia/nước, tiền điện nước, lương ca) để tính đúng Lãi/Lỗ ròng.
+                Ghi nhận nhanh hoặc bấm <strong>Mở Màn hình 3</strong> để kiểm tra trực tiếp hạn mức ngân sách tháng trước khi xuất tiền.
             </p>
             <form asp-action="AddExpense" method="post">
                 @Html.AntiForgeryToken()
@@ -463,10 +506,11 @@ else if (Model.PaymentCount > 0)
     <!-- Cột phải: Bảng tổng hợp 4 nhóm chi phí & Danh sách bút toán -->
     <div class="col-lg-8">
         <div class="data-card h-100">
-            <div class="data-card-header">
+            <div class="data-card-header d-flex justify-content-between align-items-center">
                 <span class="data-card-title">
                     <i class="bi bi-journal-minus me-2 text-warning"></i>BÀI TOÁN 2B: Sổ cái 4 Luồng Chi phí Mất tiền (@Model.ExpenseItems.Count bút toán)
                 </span>
+                <a asp-action="Expenses" class="btn btn-sm btn-outline-primary">Mở Sổ Cái &amp; Lọc Đa Chiều (Màn hình 2) →</a>
             </div>
             <div class="p-3 border-bottom bg-light">
                 <div class="row g-2">
@@ -491,7 +535,7 @@ else if (Model.PaymentCount > 0)
                             <th>Ngày</th>
                             <th>Nhóm chi phí</th>
                             <th>Nội dung khoản chi</th>
-                            <th>Ca / Bàn</th>
+                            <th>Trạng thái</th>
                             <th>Số tiền</th>
                             <th></th>
                         </tr>
@@ -499,18 +543,27 @@ else if (Model.PaymentCount > 0)
                     <tbody>
                         @foreach (var item in Model.ExpenseItems.Take(30))
                         {
+                            var stBadge = item.Status switch
+                            {
+                                "Pending" => "bg-warning text-dark",
+                                "Rejected" => "bg-danger",
+                                _ => "bg-success"
+                            };
                             <tr>
                                 <td>@item.ExpenseDate.ToString("dd/MM/yyyy")</td>
                                 <td><span class="badge bg-secondary">@item.CategoryName</span></td>
                                 <td>
-                                    <div class="fw-semibold">@item.Title</div>
-                                    <small class="text-muted">@item.ExpenseCode @(string.IsNullOrEmpty(item.Notes) ? "" : "· " + item.Notes)</small>
+                                    <div class="fw-semibold">
+                                        <a asp-action="ExpenseDetail" asp-route-id="@item.Id" class="text-decoration-none">@item.Title</a>
+                                    </div>
+                                    <small class="text-muted">@item.ExpenseCode · @(item.VendorName ?? "Nội bộ")</small>
                                 </td>
-                                <td>
-                                    <small>@(item.TableCode != null ? $"Bàn {item.TableCode} · " : "")@item.ShiftDisplayName</small>
-                                </td>
+                                <td><span class="badge @stBadge">@item.Status</span></td>
                                 <td class="fw-bold text-danger">-@item.Amount.ToString("N0") ₫</td>
                                 <td class="text-end">
+                                    <a asp-action="ExpenseDetail" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary py-0 px-2" title="Chi tiết / Sửa / Duyệt">
+                                        ✏️
+                                    </a>
                                     <form asp-action="DeleteExpense" method="post" class="d-inline" onsubmit="return confirm('Xóa bút toán chi phí này?');">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="id" value="@item.Id" />
@@ -531,9 +584,9 @@ else if (Model.PaymentCount > 0)
     </div>
 </div>
 
-<!-- HÀNG 6 (BÀI TOÁN 3): RADAR KIỂM TOÁN & TRUY VẾT THẤT THOÁT DOANH THU (UC-FIN-03) -->
+<!-- HÀNG 6 (BÀI TOÁN 3): RADAR KIỂM TOÁN & TRUY VẾT THẤT THOÁT DOANH THU (UC-FIN-03 & 05/06) -->
 <div id="leakage-audit-section" class="data-card border-danger">
-    <div class="data-card-header bg-danger bg-opacity-10">
+    <div class="data-card-header bg-danger bg-opacity-10 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <span class="data-card-title text-danger">
                 <i class="bi bi-radar me-2"></i>BÀI TOÁN 3: Bảng Kiểm toán &amp; Truy vết Thất thoát Doanh thu (Revenue Leakage Audit)
@@ -542,9 +595,14 @@ else if (Model.PaymentCount > 0)
                 Đối chiếu chéo tự động giữa <code>PlaySessions</code> ↔ <code>Orders</code> ↔ <code>Invoices</code> ↔ <code>PaymentTransactions</code> ↔ <code>WorkShifts</code> để tìm ra thất thoát ở đâu, do ai.
             </div>
         </div>
-        <span class="badge bg-danger fs-6">
-            @Model.TotalLeakageCases vụ vi phạm · Tổng thất thoát: -@Model.TotalLeakageAmount.ToString("N0") ₫
-        </span>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-danger fs-6">
+                @Model.TotalLeakageCases vụ · Phát hiện: -@Model.TotalLeakageAmount.ToString("N0") ₫
+            </span>
+            <a asp-action="AuditCases" class="btn btn-sm btn-danger fw-bold">
+                🛡️ Quản Lý &amp; Xử Lý Hồ Sơ Thất Thoát (Màn hình 5) →
+            </a>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle">
@@ -555,17 +613,16 @@ else if (Model.PaymentCount > 0)
                     <th>Loại Thất thoát</th>
                     <th>Vị trí (Bàn / Ca / HĐ)</th>
                     <th>Nhân viên Liên quan</th>
-                    <th>Số tiền Đúng</th>
-                    <th>Đã Ghi nhận</th>
                     <th>Thất thoát</th>
-                    <th>Bằng chứng Dữ liệu &amp; Vấn đề Giải quyết</th>
+                    <th>Trạng thái &amp; Thu hồi</th>
+                    <th>Bằng chứng &amp; Thao tác End-to-End</th>
                 </tr>
             </thead>
             <tbody>
                 @if (Model.LeakageItems.Count == 0)
                 {
                     <tr>
-                        <td colspan="9" class="text-center text-success py-4 fw-semibold">
+                        <td colspan="8" class="text-center text-success py-4 fw-semibold">
                             <i class="bi bi-check2-circle me-1"></i>@FinancialMessages.MsgFin08AuditClean
                         </td>
                     </tr>
@@ -574,6 +631,12 @@ else if (Model.PaymentCount > 0)
                 {
                     @foreach (var leak in Model.LeakageItems)
                     {
+                        var stClass = leak.Status switch
+                        {
+                            "Resolved" => "bg-success",
+                            "Investigating" => "bg-warning text-dark",
+                            _ => "bg-danger"
+                        };
                         <tr>
                             <td><span class="badge bg-danger">@leak.RuleCode</span></td>
                             <td>@leak.OccurredAtVn.ToString("dd/MM/yyyy HH:mm")</td>
@@ -591,12 +654,31 @@ else if (Model.PaymentCount > 0)
                                 }
                             </td>
                             <td>@leak.ResponsibleStaff</td>
-                            <td>@leak.ExpectedAmount.ToString("N0") ₫</td>
-                            <td>@leak.RecordedAmount.ToString("N0") ₫</td>
                             <td class="fw-bold text-danger">-@leak.LeakageAmount.ToString("N0") ₫</td>
+                            <td>
+                                <span class="badge @stClass">@leak.StatusDisplayName</span>
+                                @if (leak.RecoveredAmount > 0)
+                                {
+                                    <div class="small text-success fw-bold mt-1">+@leak.RecoveredAmount.ToString("N0") ₫</div>
+                                }
+                            </td>
                             <td style="max-width:340px;font-size:0.78rem">
                                 <div><strong>Bằng chứng:</strong> @leak.EvidenceDetail</div>
-                                <div class="text-danger fw-semibold mt-1">🎯 @leak.ProblemSolvedAction</div>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <span class="text-danger fw-semibold">🎯 @leak.ProblemSolvedAction</span>
+                                    @if (leak.AuditCaseId.HasValue)
+                                    {
+                                        <a asp-action="AuditDetail" asp-route-id="@leak.AuditCaseId.Value" class="btn btn-sm btn-outline-danger ms-2 text-nowrap">
+                                            🔎 Điều tra &amp; Thu hồi
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <a asp-action="AuditCases" class="btn btn-sm btn-outline-danger ms-2 text-nowrap">
+                                            🔎 Mở Hồ sơ
+                                        </a>
+                                    }
+                                </div>
                             </td>
                         </tr>
                     }

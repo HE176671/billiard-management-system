@@ -1,0 +1,148 @@
+@model Bms.Web.Models.ExpenseDetailViewModel
+@{
+    ViewData["Title"] = $"Chi tiết & Phê duyệt Phiếu chi {Model.Expense.ExpenseCode} (UC-FIN-04)";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+    var badgeClass = Model.Expense.Status switch
+    {
+        "Pending" => "bg-warning text-dark",
+        "Rejected" => "bg-danger",
+        _ => "bg-success"
+    };
+}
+
+@await Html.PartialAsync("_FinancialNav", "Expenses")
+@await Html.PartialAsync("_Alerts")
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="fw-bold mb-1">
+            ✏️ Màn Hình 4: Chi Tiết, Chỉnh Sửa &amp; Phê Duyệt Phiếu Chi <code>@Model.Expense.ExpenseCode</code>
+            <span class="badge @badgeClass ms-2">@Model.Expense.StatusDisplayName</span>
+        </h4>
+        <p class="text-muted small mb-0">
+            <strong>Giải quyết vấn đề gì?</strong> Đảm bảo tính toàn vẹn CRUD và phê duyệt nội bộ (<code>BR-FIN-14</code>): cho phép chỉnh sửa sai sót nhập liệu, đối chiếu hạn mức ngân sách tháng <code>@Model.PeriodMonth</code> và quyết định <strong>Duyệt trừ vào P&amp;L</strong> hay <strong>Từ chối thanh toán</strong>.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Expenses" class="btn btn-outline-secondary">⬅ Quay lại Sổ Cái Chi Phí</a>
+        <a asp-action="Index" asp-route-from="2026-01-01" asp-route-to="2026-12-31" asp-route-groupBy="month" class="btn btn-outline-primary">📊 Xem Tác Động Trên Bảng P&amp;L</a>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Cột trái: Form Chỉnh Sửa Thông Tin Phiếu Chi (Update - U) -->
+    <div class="col-lg-7">
+        <div class="data-card p-4">
+            <h6 class="fw-bold mb-3 border-bottom pb-2">1. Chỉnh Sửa Thông Tin Chứng Từ (Update — <code>UC-FIN-04</code>)</h6>
+            <form asp-action="UpdateExpense" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="EditInput.Id" />
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Ngày phát sinh chi phí <span class="text-danger">*</span></label>
+                        <input asp-for="EditInput.ExpenseDate" type="date" class="form-control" required />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Nhóm chi phí vận hành (4 luồng) <span class="text-danger">*</span></label>
+                        <select asp-for="EditInput.Category" class="form-select" required>
+                            <option value="Maintenance">Bảo trì bàn, vải nỉ, gậy, đầu cơ &amp; bi</option>
+                            <option value="InventoryCOGS">Giá vốn nhập bia, nước giải khát &amp; F&amp;B</option>
+                            <option value="Utilities">Tiền điện điều hòa 3 pha, đèn bàn &amp; nước</option>
+                            <option value="Payroll">Lương nhân sự theo ca Ngày / Đêm</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold">Tên nội dung khoản chi <span class="text-danger">*</span></label>
+                        <input asp-for="EditInput.Title" class="form-control" required maxlength="150" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Số tiền chi (VND) <span class="text-danger">*</span></label>
+                        <input asp-for="EditInput.Amount" type="number" min="1000" max="1000000000" step="1000" class="form-control fw-bold text-danger" required />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Nhà cung cấp / Đơn vị thụ hưởng</label>
+                        <input asp-for="EditInput.VendorName" class="form-control" maxlength="150" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Ca làm việc phân bổ</label>
+                        <select asp-for="EditInput.ShiftPeriod" class="form-select">
+                            <option value="All">Toàn thời gian (Cả ngày &amp; đêm)</option>
+                            <option value="Day">Ca Ban Ngày (08:00–18:00)</option>
+                            <option value="Night">Ca Ban Đêm (18:00–02:00)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Bàn Bida liên quan</label>
+                        <select asp-for="EditInput.TableId" class="form-select">
+                            <option value="">-- Chi phí chung toàn quán --</option>
+                            @foreach (var t in Model.TableOptions)
+                            {
+                                <option value="@t.Id">@t.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold">Ghi chú chứng từ / Lý do chi</label>
+                        <textarea asp-for="EditInput.Notes" class="form-control" rows="3" maxlength="500"></textarea>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
+                    <button type="submit" class="btn btn-primary-bms px-4">💾 Lưu Thay Đổi Phiếu Chi (Update)</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cột phải: Phê duyệt Workflow (Pending -> Approved / Rejected) + Xóa -->
+    <div class="col-lg-5">
+        <div class="data-card p-4 mb-3">
+            <h6 class="fw-bold mb-2 border-bottom pb-2">2. Quyết Định Phê Duyệt Của CFO (State Transition)</h6>
+            <div class="p-3 rounded bg-light mb-3 small">
+                <div><strong>Mã chứng từ:</strong> <code>@Model.Expense.ExpenseCode</code></div>
+                <div><strong>Người lập phiếu:</strong> @Model.Expense.CreatedByName (@Model.Expense.CreatedAtUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm"))</div>
+                <div><strong>Đã chi trong danh mục kỳ @Model.PeriodMonth:</strong> @Model.CategoryApprovedActual.ToString("N0") ₫ / Trần: @Model.CategoryBudgetCap.ToString("N0") ₫</div>
+                @if (Model.WouldExceedBudget)
+                {
+                    <div class="text-danger fw-bold mt-1">⚠️ Cảnh báo: Khoản chi này vượt trần ngân sách tháng của danh mục!</div>
+                }
+                @if (!string.IsNullOrEmpty(Model.Expense.ReviewNote))
+                {
+                    <div class="mt-1"><strong>Ghi chú duyệt gần nhất:</strong> @Model.Expense.ReviewNote</div>
+                }
+            </div>
+
+            <form asp-action="ReviewExpense" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Expense.Id" />
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Trạng thái phê duyệt mới</label>
+                    <select name="targetStatus" class="form-select">
+                        <option value="Approved" selected="@(Model.Expense.Status == "Approved")">✅ Phê duyệt — Ghi nhận vào Chi phí P&amp;L (Approved)</option>
+                        <option value="Pending" selected="@(Model.Expense.Status == "Pending")">⏳ Tạm giữ chờ kiểm tra lại chứng từ (Pending)</option>
+                        <option value="Rejected" selected="@(Model.Expense.Status == "Rejected")">❌ Từ chối thanh toán — Không tính vào P&amp;L (Rejected)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Ý kiến phê duyệt / Lý do từ chối của CFO</label>
+                    <input type="text" name="reviewNote" value="@Model.Expense.ReviewNote" class="form-control" placeholder="Nhập ghi chú kiểm soát chi phí..." maxlength="500" />
+                </div>
+                <button type="submit" class="btn btn-success w-100 fw-bold">✔ Xác Nhận Quyết Định Phê Duyệt</button>
+            </form>
+        </div>
+
+        <div class="data-card p-3 border-danger">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="fw-bold text-danger small">3. Xóa Chứng Từ Nhập Nhầm (Delete)</div>
+                    <small class="text-muted">Xóa vĩnh viễn bút toán này khỏi sổ cái và tính lại P&amp;L.</small>
+                </div>
+                <form asp-action="DeleteExpense" method="post" onsubmit="return confirm('Bạn chắc chắn muốn xóa phiếu chi @Model.Expense.ExpenseCode?');">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Expense.Id" />
+                    <input type="hidden" name="returnTo" value="Expenses" />
+                    <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Xóa Phiếu Chi</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
