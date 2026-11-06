@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Bms.Web.Data;
 
 /// <summary>
-/// Tự áp dụng các nâng cấp schema cộng thêm khi web khởi động (tương đương script 08 và script 09),
+/// Tự áp dụng các nâng cấp schema cộng thêm khi web khởi động (tương đương script 08, 09, 11, 12),
 /// để máy nào quên chạy script tay vẫn không bị lỗi "Invalid column name" / "Invalid object name".
 /// Chỉ thêm bảng/cột/ràng buộc/index nếu chưa có, không xóa dữ liệu.
 /// </summary>
@@ -395,6 +395,81 @@ public static class SchemaUpgrader
                 END;
                 """);
             logger.LogInformation("Đã tạo bảng dbo.OperatingExpenses thành công.");
+        }
+
+        // 4. Nâng cấp Luồng Tài chính & Kiểm toán End-to-End 7 màn hình (Script 12)
+        var missingFinE2E = await db.Database.SqlQueryRaw<int>("""
+            SELECT CASE WHEN COL_LENGTH('dbo.OperatingExpenses', 'Status') IS NULL
+                          OR COL_LENGTH('dbo.OperatingExpenses', 'VendorName') IS NULL
+                          OR OBJECT_ID('dbo.FinancialAuditCases', 'U') IS NULL
+                          OR OBJECT_ID('dbo.MonthlyBudgets', 'U') IS NULL
+                        THEN 1 ELSE 0 END AS Value
+            """).SingleAsync();
+        if (missingFinE2E != 0)
+        {
+            logger.LogWarning("Database thiếu bảng/cột Tài chính End-to-End (script 12). Đang tự nâng cấp schema...");
+            await db.Database.ExecuteSqlRawAsync("""
+                SET ANSI_NULLS ON;
+                SET QUOTED_IDENTIFIER ON;
+                IF COL_LENGTH('dbo.OperatingExpenses', 'VendorName') IS NULL
+                    ALTER TABLE dbo.OperatingExpenses ADD VendorName nvarchar(150) NULL;
+                IF COL_LENGTH('dbo.OperatingExpenses', 'Status') IS NULL
+                    ALTER TABLE dbo.OperatingExpenses ADD Status varchar(20) NOT NULL CONSTRAINT DF_OperatingExpenses_Status DEFAULT 'Approved';
+                IF COL_LENGTH('dbo.OperatingExpenses', 'ReviewedById') IS NULL
+                    ALTER TABLE dbo.OperatingExpenses ADD ReviewedById nvarchar(450) NULL;
+                IF COL_LENGTH('dbo.OperatingExpenses', 'ReviewedAtUtc') IS NULL
+                    ALTER TABLE dbo.OperatingExpenses ADD ReviewedAtUtc datetime2(0) NULL;
+                IF COL_LENGTH('dbo.OperatingExpenses', 'ReviewNote') IS NULL
+                    ALTER TABLE dbo.OperatingExpenses ADD ReviewNote nvarchar(500) NULL;
+                IF COL_LENGTH('dbo.OperatingExpenses', 'UpdatedAtUtc') IS NULL
+                    ALTER TABLE dbo.OperatingExpenses ADD UpdatedAtUtc datetime2(0) NULL;
+
+                IF OBJECT_ID('dbo.FinancialAuditCases', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.FinancialAuditCases (
+                        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_FinancialAuditCases PRIMARY KEY,
+                        CaseCode varchar(64) NOT NULL CONSTRAINT UQ_FinancialAuditCases_Code UNIQUE,
+                        LeakageCode varchar(20) NOT NULL,
+                        RuleName nvarchar(150) NOT NULL,
+                        Severity varchar(20) NOT NULL,
+                        OccurredAtUtc datetime2(0) NOT NULL,
+                        TableOrShiftLabel nvarchar(150) NOT NULL,
+                        StaffName nvarchar(120) NOT NULL,
+                        ExpectedAmount decimal(18,2) NOT NULL,
+                        ActualAmount decimal(18,2) NOT NULL,
+                        LeakageAmount decimal(18,2) NOT NULL,
+                        RecoveredAmount decimal(18,2) NOT NULL CONSTRAINT DF_FinancialAuditCases_Recovered DEFAULT 0,
+                        Status varchar(24) NOT NULL CONSTRAINT DF_FinancialAuditCases_Status DEFAULT 'Open',
+                        ResolutionType varchar(32) NULL,
+                        EvidenceDetail nvarchar(1000) NOT NULL,
+                        RecommendedAction nvarchar(600) NOT NULL,
+                        ProblemSolved nvarchar(600) NOT NULL,
+                        InvestigationNote nvarchar(1000) NULL,
+                        ResolvedById nvarchar(450) NULL,
+                        ResolvedAtUtc datetime2(0) NULL,
+                        CreatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_FinancialAuditCases_Created DEFAULT SYSUTCDATETIME()
+                    );
+                END;
+
+                IF OBJECT_ID('dbo.MonthlyBudgets', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.MonthlyBudgets (
+                        Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_MonthlyBudgets PRIMARY KEY,
+                        PeriodMonth varchar(7) NOT NULL CONSTRAINT UQ_MonthlyBudgets_Period UNIQUE,
+                        RevenueTarget decimal(18,2) NOT NULL,
+                        MaintenanceCap decimal(18,2) NOT NULL,
+                        InventoryCogsCap decimal(18,2) NOT NULL,
+                        UtilitiesCap decimal(18,2) NOT NULL,
+                        PayrollCap decimal(18,2) NOT NULL,
+                        StrategicFocus nvarchar(150) NOT NULL,
+                        ActionPlanSummary nvarchar(1000) NOT NULL,
+                        Status varchar(20) NOT NULL CONSTRAINT DF_MonthlyBudgets_Status DEFAULT 'Active',
+                        UpdatedById nvarchar(450) NULL,
+                        UpdatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_MonthlyBudgets_Updated DEFAULT SYSUTCDATETIME()
+                    );
+                END;
+                """);
+            logger.LogInformation("Đã nâng cấp schema Tài chính End-to-End (FinancialAuditCases & MonthlyBudgets) thành công.");
         }
     }
 }
