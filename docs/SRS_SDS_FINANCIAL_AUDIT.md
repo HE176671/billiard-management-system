@@ -567,3 +567,71 @@ sequenceDiagram
 * **Trợ lý AI CFO Tự động Đề xuất Chiến lược (`AI CFO Advisor Agent`):**
   * *Mô tả:* Sử dụng mô hình ngôn ngữ lớn (LLM) hoặc tập luật nâng cao để tự động sinh kịch bản tối ưu giá động (Dynamic Pricing), tự động đề xuất cắt giảm ca làm việc trực tiếp sang phân hệ Nhân sự, và tự động tạo gói Combo khuyến mãi sang phân hệ F&B.
   * *Trạng thái:* **Out of Scope** trong phiên bản hiện tại (chỉ tập trung giải quyết triệt để 3 bài toán nền tảng: Dữ liệu 12 tháng, Báo cáo Lãi/Lỗ & Chi phí mất tiền, và Kiểm toán truy vết thất thoát doanh thu).
+
+
+---
+
+### 15. Đặc Tả Mở Rộng Luồng End-to-End 7 Màn Hình (Chuẩn Đánh Giá SWP391)
+
+Nhằm đảm bảo phân hệ Tài chính & Kiểm toán Nội bộ đạt chuẩn **100% End-to-End Workflow** và tối ưu hóa bảng chấm điểm độ phức tạp (`CRUD Matrix`, `Screen/Function Count`, `Complexity LOC`), hệ thống mở rộng thành **7 Màn hình + 1 Chức năng Xuất Báo cáo** khép kín từ khâu **Lập ngân sách mùa vụ $\rightarrow$ Ghi nhận & Phê duyệt chi phí $\rightarrow$ Quét kiểm toán thất thoát $\rightarrow$ Điều tra & Thu hồi/Khấu trừ $\rightarrow$ Cập nhật ngược lại Lãi/Lỗ P&L**.
+
+#### 15.1. Ma Trận CRUD Mở Rộng (`Use Case vs Entities`)
+
+| Use Case | `OperatingExpenses` | `FinancialAuditCases` | `MonthlyBudgets` | `PaymentTransactions` | `Invoices` | `WorkShifts` | Primary Actor |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **UC-FIN-01:** Analyze 12-Month P&L & Seasonality (`/Revenue/Index`) | R | R | R | R | R | R | Admin (CFO) |
+| **UC-FIN-02:** Filter & Track Operating Expense Ledger (`/Revenue/Expenses`) | R | - | R | - | - | - | Admin, Staff |
+| **UC-FIN-03:** Create Operating Expense Voucher (`/Revenue/CreateExpense`) | **C** | - | R | - | - | - | Admin, Staff |
+| **UC-FIN-04:** View, Update & Approve Expense Detail (`/Revenue/ExpenseDetail/{id}`) | **R, U, D** | - | R | - | - | - | Admin (CFO) |
+| **UC-FIN-05:** Scan & Sync Leakage Audit Cases (`/Revenue/AuditCases`) | - | **C, R** | - | R | R | R | Admin (CFO) |
+| **UC-FIN-06:** Investigate & Resolve Leakage Case (`/Revenue/AuditDetail/{id}`) | **C** | **R, U** | - | R | R | R | Admin (CFO) |
+| **UC-FIN-07:** Manage Monthly Budget & Seasonal Action Plan (`/Revenue/Budgets`) | R | - | **C, R, U, D** | R | - | - | Admin (CFO) |
+| **UC-FIN-08:** Export Financial P&L & Audit Report CSV (`/Revenue/Export`) | R | R | R | R | R | R | Admin (CFO) |
+
+#### 15.2. Sơ Đồ Luồng Chuyển Trang 7 Màn Hình (`Screen Navigation Diagram`)
+
+```mermaid
+flowchart TD
+    S1["Màn hình 1: Trung tâm P&L 12 Tháng & Chẩn đoán Mùa vụ\n(/Revenue/Index - Level 7: 240 LOC)"]
+    S2["Màn hình 2: Sổ cái 4 Luồng Chi phí Vận hành\n(/Revenue/Expenses - Level 5: 180 LOC)"]
+    S3["Màn hình 3: Lập Phiếu Chi Vận Hành Mới\n(/Revenue/CreateExpense - Level 4: 150 LOC)"]
+    S4["Màn hình 4: Chi tiết, Chỉnh sửa & Phê duyệt Phiếu Chi\n(/Revenue/ExpenseDetail/{id} - Level 5: 180 LOC)"]
+    S5["Màn hình 5: Danh sách Hồ sơ Kiểm toán Thất thoát\n(/Revenue/AuditCases - Level 6: 210 LOC)"]
+    S6["Màn hình 6: Điều tra & Xử lý Thu hồi / Khấu trừ Thất thoát\n(/Revenue/AuditDetail/{id} - Level 7: 240 LOC)"]
+    S7["Màn hình 7: Quản lý Định mức Ngân sách & Kế hoạch Mùa vụ\n(/Revenue/Budgets - Level 5: 180 LOC)"]
+    F8["Chức năng 8: Xuất CSV Tổng hợp P&L + Ngân sách + Kiểm toán\n(/Revenue/Export - Level 3: 120 LOC)"]
+
+    S1 -->|"Quản lý Sổ cái Chi phí"| S2
+    S2 -->|"➕ Lập phiếu chi mới"| S3
+    S3 -->|"Lưu phiếu chi"| S4
+    S2 -->|"Xem / Sửa / Duyệt"| S4
+    S4 -->|"Approved -> Trừ vào P&L"| S1
+
+    S1 -->|"Kiểm toán Thất thoát"| S5
+    S5 -->|"🔎 Điều tra & Xử lý"| S6
+    S6 -->|"Truy thu tiền mặt / Khấu trừ lương\n-> Tăng Lợi nhuận ròng P&L"| S1
+
+    S1 -->|"Định mức Ngân sách Mùa vụ"| S7
+    S7 -->|"Cập nhật Trần chi 4 luồng"| S2
+    S1 -->|"📥 Xuất CSV"| F8
+```
+
+#### 15.3. Bổ Sung Quy Tắc Nghiệp Vụ (`BR-FIN-14` $\rightarrow$ `BR-FIN-18`) & Mã Thông Báo (`MSG-FIN-13` $\rightarrow$ `MSG-FIN-19`)
+
+| Mã BR | Tên Quy tắc | Mô tả Logic Nghiệp vụ | Giải quyết vấn đề gì? |
+| :--- | :--- | :--- | :--- |
+| **`BR-FIN-14`** | Quy tắc Phê duyệt Phiếu chi (`Pending` $\rightarrow$ `Approved` / `Rejected`) | Chỉ những phiếu chi có `Status = 'Approved'` mới được cộng vào Tổng Chi Phí Vận Hành khi tính Lợi Nhuận Ròng (P&L). Phiếu `Pending` hoặc `Rejected` được giữ trên sổ cái để kiểm soát nhưng không làm lệch P&L. | Chặn tình trạng nhân viên tự ý kê khai khống chi phí sửa bàn/mua nước làm giảm lợi nhuận của quán. |
+| **`BR-FIN-15`** | Kiểm tra Cảnh báo Vượt Trần Ngân sách Tháng (`Budget Cap Check`) | Khi tạo hoặc duyệt phiếu chi trong tháng `yyyy-MM`, hệ thống đối chiếu tổng chi của danh mục đó với hạn mức (`MaintenanceCap`, `InventoryCogsCap`, `UtilitiesCap`, `PayrollCap`) trong `dbo.MonthlyBudgets`. | Giúp CFO phát hiện ngay tháng nào đang tiêu lố định mức điện 3 pha, nhập bia vượt kế hoạch hoặc phình quỹ lương. |
+| **`BR-FIN-16`** | Đồng bộ Hồ sơ Kiểm toán Thất thoát (`Audit Case Sync`) | Khi chạy quét 5 quy tắc `LEAK-01..05`, mỗi phát hiện được định danh bằng `CaseCode` duy nhất và lưu vào `dbo.FinancialAuditCases` (giữ nguyên trạng thái `Investigating`/`Resolved` nếu hồ sơ đã được CFO xử lý trước đó). | Biến cảnh báo tĩnh thành hồ sơ vụ việc có thể theo dõi tiến độ điều tra và quy trách nhiệm cá nhân. |
+| **`BR-FIN-17`** | Chế tài Xử lý Thất thoát & Tác động Ngược vào P&L (`Resolution Loop`) | Khi CFO chốt hồ sơ thất thoát sang `Resolved`:<br/>• Chọn `RecoveredCash` (Truy thu tiền mặt) hoặc `DeductedPayroll` (Khấu trừ lương): bắt buộc `0 < RecoveredAmount <= LeakageAmount`. Khoản tiền thu hồi/khấu trừ này được cộng bù trực tiếp vào **Lợi Nhuận Ròng sau Kiểm toán** trên bảng P&L!<br/>• Chọn `Waived` (Miễn trừ): bắt buộc nhập `InvestigationNote` giải trình lý do. | Khép kín vòng lặp End-to-End: Kiểm toán không chỉ "chỉ ra lỗi" mà thực sự thu hồi lại tiền bị mất về cho quỹ của quán. |
+| **`BR-FIN-18`** | Quản lý Định mức Ngân sách & Kế hoạch Hành động Mùa vụ (`MonthlyBudgets`) | Mỗi tháng (`yyyy-MM`) có định mức mục tiêu doanh thu và 4 trần chi phí kèm Kế hoạch hành động mùa vụ (`Draft` $\rightarrow$ `Active` $\rightarrow$ `Locked`). Kỳ ngân sách `Locked` không cho phép xóa. | Chuyển hóa phân tích mùa vụ (T3-5 giờ chơi, T4-6 bia/nước, Ca đêm 74%) thành kỷ luật ngân sách thực tế. |
+
+| Mã MSG | Ngữ cảnh | Nội dung Tiếng Việt hiển thị trên UI |
+| :--- | :--- | :--- |
+| **`MSG-FIN-13`** | Cập nhật phiếu chi thành công | `"Đã cập nhật thông tin phiếu chi vận hành thành công."` |
+| **`MSG-FIN-14`** | Phê duyệt / Từ chối phiếu chi | `"Đã cập nhật trạng thái phê duyệt phiếu chi và đồng bộ lại Báo cáo Lãi/Lỗ (P&L)."` |
+| **`MSG-FIN-15`** | Cảnh báo vượt trần ngân sách | `"Lưu ý: Khoản chi này làm tổng chi danh mục vượt định mức ngân sách tháng đã thiết lập!"` |
+| **`MSG-FIN-16`** | Đồng bộ hồ sơ kiểm toán | `"Đã quét 5 quy tắc đối soát và đồng bộ danh sách Hồ sơ Kiểm toán Thất thoát thành công."` |
+| **`MSG-FIN-17`** | Xử lý & Đóng hồ sơ thất thoát | `"Đã lưu quyết định xử lý vụ việc thất thoát và cập nhật khoản tiền thu hồi vào Báo cáo P&L."` |
+| **`MSG-FIN-18`** | Lỗi dữ liệu xử lý thất thoát | `"Số tiền thu hồi/khấu trừ phải lớn hơn 0 và không vượt quá số tiền thất thoát phát hiện (hoặc phải nhập lý do giải trình)."` |
+| **`MSG-FIN-19`** | Lưu định mức ngân sách tháng | `"Đã lưu định mức ngân sách tháng và kế hoạch hành động tối ưu mùa vụ thành công."` |
