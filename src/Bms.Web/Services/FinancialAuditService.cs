@@ -23,13 +23,20 @@ public class FinancialAuditService : IFinancialAuditService
         OperatingExpense.ShiftAll
     };
 
+    private static readonly HashSet<string> AllowedExpenseStatuses = new(StringComparer.Ordinal)
+    {
+        OperatingExpense.StatusPending,
+        OperatingExpense.StatusApproved,
+        OperatingExpense.StatusRejected
+    };
+
     public FinancialAuditService(ApplicationDbContext db)
     {
         _db = db;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // 1. TỔNG HỢP BÁO CÁO P&L, MÙA VỤ, CHI PHÍ & KIỂM TOÁN THẤT THOÁT (UC-FIN-01 & 03)
+    // 1. MÀN HÌNH 1 (/Revenue/Index): TỔNG HỢP BÁO CÁO P&L, MÙA VỤ, CHI PHÍ & KIỂM TOÁN
     // ══════════════════════════════════════════════════════════════════════════
     public async Task PopulateReportAsync(RevenueReportViewModel model, CancellationToken ct = default)
     {
@@ -93,34 +100,40 @@ public class FinancialAuditService : IFinancialAuditService
             ? Math.Round(model.TotalFnbRevenue / grossInvoiced * 100m, 1)
             : 0m;
 
-        // ── Bước 3: Truy vấn Sổ cái Chi phí vận hành (OperatingExpenses) ──
-        var expenses = await _db.OperatingExpenses.AsNoTracking()
+        // ── Bước 3: Truy vấn Sổ cái Chi phí vận hành (OperatingExpenses) & Định mức Ngân sách (MonthlyBudgets) ──
+        var allExpenses = await _db.OperatingExpenses.AsNoTracking()
             .Include(e => e.Table)
             .Include(e => e.CreatedBy)
+            .Include(e => e.ReviewedBy)
             .Where(e => e.ExpenseDate >= model.From && e.ExpenseDate <= model.To)
             .OrderByDescending(e => e.ExpenseDate)
             .ThenByDescending(e => e.Id)
             .ToListAsync(ct);
 
-        model.TotalOperatingCost = expenses.Sum(e => e.Amount);
+        // BR-FIN-14: Chỉ tính các khoản chi đã Approved vào P&L chính thức
+        var approvedExpenses = allExpenses
+            .Where(e => string.IsNullOrEmpty(e.Status) || e.Status == OperatingExpense.StatusApproved)
+            .ToList();
 
-        model.ExpenseItems = expenses.Select(e => new OperatingExpenseItemRow
-        {
-            Id = e.Id,
-            ExpenseCode = e.ExpenseCode,
-            ExpenseDate = e.ExpenseDate,
-            CategoryCode = e.Category,
-            CategoryName = OperatingExpense.GetCategoryDisplayName(e.Category),
-            Title = e.Title,
-            Amount = e.Amount,
-            TableCode = e.Table?.TableCode,
-            ShiftPeriod = e.ShiftPeriod,
-            ShiftDisplayName = OperatingExpense.GetShiftDisplayName(e.ShiftPeriod),
-            Notes = e.Notes,
-            CreatedByName = e.CreatedBy?.FullName ?? "Admin"
-        }).ToList();
+        var pendingExpenses = allExpenses
+            .Where(e => e.Status == OperatingExpense.StatusPending)
+            .ToList();
 
-        model.ExpenseCategories = BuildExpenseCategories(expenses, model.TotalRevenue);
+        model.TotalOperatingCost = approvedExpenses.Sum(e => e.Amount);
+        model.PendingOperatingCost = pendingExpenses.Sum(e => e.Amount);
+        model.PendingExpenseCount = pendingExpenses.Count;
+
+        model.ExpenseItems = allExpenses.Select(MapExpenseItemRow).ToList();
+
+        var fromMonthKey = model.From.ToString("yyyy-MM");
+        var toMonthKey = model.To.ToString("yyyy-MM");
+        var budgets = await _db.MonthlyBudgets.AsNoTracking()
+            .Where(b => string.Compare(b.PeriodMonth, fromMonthKey) >= 0 && string.Compare(b.PeriodMonth, toMonthKey) <= 0)
+            .ToListAsync(ct);
+        var budgetByMonth = budgets.ToDictionary(b => b.PeriodMonth, b => b);
+        model.TotalBudgetCap = budgets.Sum(b => b.TotalExpenseCap);
+
+        model.ExpenseCategories = BuildExpenseCategories(approvedExpenses, budgets, model.TotalRevenue);
 
         model.TableOptions = await _db.BilliardTables.AsNoTracking()
             .OrderBy(t => t.TableCode)
@@ -131,10 +144,10 @@ public class FinancialAuditService : IFinancialAuditService
         var dayInvoices = invoiceRows.Where(x => IsDayShiftHour(x.SessionStartAtUtc.AddHours(7).Hour)).ToList();
         var nightInvoices = invoiceRows.Where(x => !IsDayShiftHour(x.SessionStartAtUtc.AddHours(7).Hour)).ToList();
 
-        var dayPayroll = expenses
+        var dayPayroll = approvedExpenses
             .Where(e => e.Category == OperatingExpense.CatPayroll && e.ShiftPeriod == OperatingExpense.ShiftDay)
             .Sum(e => e.Amount);
-        var nightPayroll = expenses
+        var nightPayroll = approvedExpenses
             .Where(e => e.Category == OperatingExpense.CatPayroll && e.ShiftPeriod == OperatingExpense.ShiftNight)
             .Sum(e => e.Amount);
 
@@ -152,22 +165,32 @@ public class FinancialAuditService : IFinancialAuditService
             ? $"Khung giờ Đêm (18:00–02:00) tạo ra {model.DayNight.NightRevenueSharePercent}% tổng doanh thu (chi phí lương chỉ chiếm {model.DayNight.NightPayrollToRevenuePercent}% doanh thu ca đêm), trong khi Ca Ban Ngày (08:00–18:00) chỉ đóng góp {model.DayNight.DayRevenueSharePercent}% doanh thu nhưng ngốn tới {model.DayNight.DayPayrollToRevenuePercent}% doanh thu để trả lương. Chỉ số này giải quyết bài toán định biên nhân sự: cần rút gọn nhân viên ca sáng/chiều ngày thường để cắt lỗ."
             : "Chưa có dữ liệu phiên chơi để phân tách hiệu suất Ca Ngày và Ca Đêm.";
 
-        // ── Bước 5: Chạy 5 Quy tắc Kiểm toán & Truy vết Thất thoát Doanh thu (BR-FIN-08 -> BR-FIN-12) ──
-        model.LeakageItems = await AuditRevenueLeakageAsync(startUtc, endUtc, ct);
+        // ── Bước 5: Chạy 5 Quy tắc Kiểm toán & Đồng bộ trạng thái xử lý từ FinancialAuditCases (BR-FIN-08 -> BR-FIN-17) ──
+        var rawLeakages = await AuditRevenueLeakageAsync(startUtc, endUtc, ct);
+        await EnrichLeakagesWithAuditCasesAsync(rawLeakages, ct);
+
+        model.LeakageItems = rawLeakages;
         model.TotalLeakageAmount = model.LeakageItems.Sum(x => x.LeakageAmount);
+        model.TotalRecoveredAmount = model.LeakageItems.Sum(x => x.RecoveredAmount);
+        model.OpenAuditCaseCount = model.LeakageItems.Count(x => x.Status != FinancialAuditCase.StatusResolved);
+        model.ResolvedAuditCaseCount = model.LeakageItems.Count(x => x.Status == FinancialAuditCase.StatusResolved);
 
         // ── Bước 6: Xây dựng Bảng P&L chi tiết từng kỳ & Phát hiện Mùa vụ (T3–T5, T4–T6) ──
         var invByPeriod = invoiceRows
             .GroupBy(x => x.InvoiceCreatedAtUtc.AddHours(7).ToString(format))
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var expByPeriod = expenses
+        var expByPeriod = approvedExpenses
             .GroupBy(e => e.ExpenseDate.ToString(format))
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var leakByPeriod = model.LeakageItems
             .GroupBy(l => l.OccurredAtVn.ToString(format))
             .ToDictionary(g => g.Key, g => g.Sum(x => x.LeakageAmount));
+
+        var recovByPeriod = model.LeakageItems
+            .GroupBy(l => l.OccurredAtVn.ToString(format))
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.RecoveredAmount));
 
         var avgPeriodRev = model.Periods.Where(p => p.Revenue > 0).Select(p => p.Revenue).DefaultIfEmpty(0m).Average();
 
@@ -176,6 +199,8 @@ public class FinancialAuditService : IFinancialAuditService
             invByPeriod.TryGetValue(p.Period, out var pInvs);
             expByPeriod.TryGetValue(p.Period, out var pExps);
             leakByPeriod.TryGetValue(p.Period, out var pLeak);
+            recovByPeriod.TryGetValue(p.Period, out var pRecov);
+            budgetByMonth.TryGetValue(p.Period, out var pBudget);
 
             pInvs ??= new List<InvoiceSessionRow>();
             pExps ??= new List<OperatingExpense>();
@@ -200,11 +225,13 @@ public class FinancialAuditService : IFinancialAuditService
                 FnbRevenue = fnbRev,
                 DiscountAmount = discAmt,
                 CollectedRevenue = p.Revenue,
+                RecoveredAmount = pRecov,
                 PaymentCount = p.PaymentCount,
                 MaintenanceCost = maint,
                 InventoryCogsCost = cogs,
                 UtilitiesCost = util,
                 PayrollCost = pay,
+                BudgetExpenseCap = pBudget?.TotalExpenseCap ?? 0m,
                 LeakageAmount = pLeak,
                 IsPeakRevenue = avgPeriodRev > 0 && p.Revenue >= avgPeriodRev * 1.18m,
                 IsPeakBeverage = (playRev + fnbRev) > 0 && (fnbRev / (playRev + fnbRev) * 100m) >= 33.0m
@@ -232,8 +259,123 @@ public class FinancialAuditService : IFinancialAuditService
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // 2. QUẢN LÝ SỔ CÁI CHI PHÍ VẬN HÀNH (UC-FIN-02: AddExpense & DeleteExpense)
+    // 2. MÀN HÌNH 2, 3, 4: SỔ CÁI CHI PHÍ VẬN HÀNH (LIST, CREATE, DETAIL, UPDATE, REVIEW, DELETE)
     // ══════════════════════════════════════════════════════════════════════════
+    public async Task<ExpenseListViewModel> BuildExpenseListAsync(
+        DateOnly? from, DateOnly? to, string? category, string? shiftPeriod, string? status, string? keyword,
+        CancellationToken ct = default)
+    {
+        var defaultTo = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        var defaultFrom = new DateOnly(defaultTo.Year, 1, 1);
+        var f = from ?? defaultFrom;
+        var t = to ?? new DateOnly(defaultTo.Year, 12, 31);
+        if (f > t) (f, t) = (t, f);
+
+        var query = _db.OperatingExpenses.AsNoTracking()
+            .Include(e => e.Table)
+            .Include(e => e.CreatedBy)
+            .Include(e => e.ReviewedBy)
+            .Where(e => e.ExpenseDate >= f && e.ExpenseDate <= t);
+
+        if (!string.IsNullOrWhiteSpace(category) && AllowedCategories.Contains(category))
+            query = query.Where(e => e.Category == category);
+
+        if (!string.IsNullOrWhiteSpace(shiftPeriod) && AllowedShifts.Contains(shiftPeriod))
+            query = query.Where(e => e.ShiftPeriod == shiftPeriod);
+
+        if (!string.IsNullOrWhiteSpace(status) && AllowedExpenseStatuses.Contains(status))
+            query = query.Where(e => e.Status == status);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            query = query.Where(e => e.Title.Contains(kw)
+                                  || e.ExpenseCode.Contains(kw)
+                                  || (e.VendorName != null && e.VendorName.Contains(kw))
+                                  || (e.Notes != null && e.Notes.Contains(kw)));
+        }
+
+        var items = await query
+            .OrderByDescending(e => e.Status == OperatingExpense.StatusPending)
+            .ThenByDescending(e => e.ExpenseDate)
+            .ThenByDescending(e => e.Id)
+            .ToListAsync(ct);
+
+        var fromMonthKey = f.ToString("yyyy-MM");
+        var toMonthKey = t.ToString("yyyy-MM");
+        var budgets = await _db.MonthlyBudgets.AsNoTracking()
+            .Where(b => string.Compare(b.PeriodMonth, fromMonthKey) >= 0 && string.Compare(b.PeriodMonth, toMonthKey) <= 0)
+            .ToListAsync(ct);
+
+        var approvedItems = items.Where(e => string.IsNullOrEmpty(e.Status) || e.Status == OperatingExpense.StatusApproved).ToList();
+        var pendingItems = items.Where(e => e.Status == OperatingExpense.StatusPending).ToList();
+        var rejectedItems = items.Where(e => e.Status == OperatingExpense.StatusRejected).ToList();
+
+        return new ExpenseListViewModel
+        {
+            From = f,
+            To = t,
+            Category = category,
+            ShiftPeriod = shiftPeriod,
+            Status = status,
+            Keyword = keyword,
+            TotalApprovedAmount = approvedItems.Sum(e => e.Amount),
+            TotalPendingAmount = pendingItems.Sum(e => e.Amount),
+            TotalRejectedAmount = rejectedItems.Sum(e => e.Amount),
+            ApprovedCount = approvedItems.Count,
+            PendingCount = pendingItems.Count,
+            RejectedCount = rejectedItems.Count,
+            PeriodBudgetCap = budgets.Sum(b => b.TotalExpenseCap),
+            CategorySummaries = BuildExpenseCategories(approvedItems, budgets, 0m),
+            Items = items.Select(MapExpenseItemRow).ToList()
+        };
+    }
+
+    public async Task<CreateExpenseScreenViewModel> BuildCreateExpenseScreenAsync(
+        DateOnly? expenseDate = null, CancellationToken ct = default)
+    {
+        var date = expenseDate ?? DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        var periodMonth = date.ToString("yyyy-MM");
+        var monthStart = new DateOnly(date.Year, date.Month, 1);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+        var budget = await _db.MonthlyBudgets.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.PeriodMonth == periodMonth, ct);
+
+        var monthExpenses = await _db.OperatingExpenses.AsNoTracking()
+            .Where(e => e.ExpenseDate >= monthStart
+                     && e.ExpenseDate <= monthEnd
+                     && (e.Status == null || e.Status == OperatingExpense.StatusApproved))
+            .ToListAsync(ct);
+
+        var tables = await _db.BilliardTables.AsNoTracking()
+            .OrderBy(t => t.TableCode)
+            .Select(t => new TableSelectOption(t.Id, $"Bàn {t.TableCode} ({t.Status})"))
+            .ToListAsync(ct);
+
+        var cats = new[]
+        {
+            (Code: OperatingExpense.CatMaintenance, Cap: budget?.MaintenanceCap ?? 4_000_000m),
+            (Code: OperatingExpense.CatInventoryCogs, Cap: budget?.InventoryCogsCap ?? 12_000_000m),
+            (Code: OperatingExpense.CatUtilities, Cap: budget?.UtilitiesCap ?? 6_500_000m),
+            (Code: OperatingExpense.CatPayroll, Cap: budget?.PayrollCap ?? 15_500_000m)
+        };
+
+        return new CreateExpenseScreenViewModel
+        {
+            Input = new CreateExpenseInputModel { ExpenseDate = date, InitialStatus = OperatingExpense.StatusApproved },
+            TableOptions = tables,
+            CurrentPeriodMonth = periodMonth,
+            CategoryBudgets = cats.Select(c => new BudgetCategoryUsageRow
+            {
+                CategoryCode = c.Code,
+                CategoryName = OperatingExpense.GetCategoryDisplayName(c.Code),
+                BudgetCap = c.Cap,
+                ActualApproved = monthExpenses.Where(e => e.Category == c.Code).Sum(e => e.Amount)
+            }).ToList()
+        };
+    }
+
     public async Task<(bool Success, string Message, OperatingExpense? Expense)> AddExpenseAsync(
         CreateExpenseInputModel input, string? actorId, CancellationToken ct = default)
     {
@@ -249,6 +391,9 @@ public class FinancialAuditService : IFinancialAuditService
         }
 
         var shift = AllowedShifts.Contains(input.ShiftPeriod) ? input.ShiftPeriod : OperatingExpense.ShiftAll;
+        var status = AllowedExpenseStatuses.Contains(input.InitialStatus ?? "")
+            ? input.InitialStatus!
+            : OperatingExpense.StatusApproved;
 
         if (input.TableId.HasValue)
         {
@@ -266,15 +411,156 @@ public class FinancialAuditService : IFinancialAuditService
             Amount = decimal.Round(input.Amount, 2),
             TableId = input.TableId,
             ShiftPeriod = shift,
+            VendorName = string.IsNullOrWhiteSpace(input.VendorName) ? null : input.VendorName.Trim(),
+            Status = status,
             Notes = string.IsNullOrWhiteSpace(input.Notes) ? null : input.Notes.Trim(),
             CreatedById = actorId,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            ReviewedById = status == OperatingExpense.StatusApproved ? actorId : null,
+            ReviewedAtUtc = status == OperatingExpense.StatusApproved ? DateTime.UtcNow : null
         };
 
         _db.OperatingExpenses.Add(entity);
         await _db.SaveChangesAsync(ct);
 
-        return (true, FinancialMessages.FormatMsgFin05Created(code, entity.Amount), entity);
+        var msg = FinancialMessages.FormatMsgFin05Created(code, entity.Amount);
+        if (await IsCategoryOverMonthlyBudgetAsync(entity.ExpenseDate, entity.Category, ct))
+        {
+            msg += " " + FinancialMessages.MsgFin15BudgetCapWarning;
+        }
+
+        return (true, msg, entity);
+    }
+
+    public async Task<ExpenseDetailViewModel?> GetExpenseDetailAsync(int id, CancellationToken ct = default)
+    {
+        var exp = await _db.OperatingExpenses.AsNoTracking()
+            .Include(e => e.Table)
+            .Include(e => e.CreatedBy)
+            .Include(e => e.ReviewedBy)
+            .FirstOrDefaultAsync(e => e.Id == id, ct);
+
+        if (exp == null) return null;
+
+        var periodMonth = exp.ExpenseDate.ToString("yyyy-MM");
+        var monthStart = new DateOnly(exp.ExpenseDate.Year, exp.ExpenseDate.Month, 1);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+        var budget = await _db.MonthlyBudgets.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.PeriodMonth == periodMonth, ct);
+
+        var approvedActual = await _db.OperatingExpenses.AsNoTracking()
+            .Where(e => e.ExpenseDate >= monthStart
+                     && e.ExpenseDate <= monthEnd
+                     && e.Category == exp.Category
+                     && (e.Status == null || e.Status == OperatingExpense.StatusApproved))
+            .SumAsync(e => (decimal?)e.Amount, ct) ?? 0m;
+
+        var cap = exp.Category switch
+        {
+            OperatingExpense.CatMaintenance => budget?.MaintenanceCap ?? 4_000_000m,
+            OperatingExpense.CatInventoryCogs => budget?.InventoryCogsCap ?? 12_000_000m,
+            OperatingExpense.CatUtilities => budget?.UtilitiesCap ?? 6_500_000m,
+            OperatingExpense.CatPayroll => budget?.PayrollCap ?? 15_500_000m,
+            _ => 0m
+        };
+
+        var tables = await _db.BilliardTables.AsNoTracking()
+            .OrderBy(t => t.TableCode)
+            .Select(t => new TableSelectOption(t.Id, $"Bàn {t.TableCode} ({t.Status})"))
+            .ToListAsync(ct);
+
+        return new ExpenseDetailViewModel
+        {
+            Expense = MapExpenseItemRow(exp),
+            EditInput = new UpdateExpenseInputModel
+            {
+                Id = exp.Id,
+                ExpenseDate = exp.ExpenseDate,
+                Category = exp.Category,
+                Title = exp.Title,
+                Amount = exp.Amount,
+                TableId = exp.TableId,
+                ShiftPeriod = exp.ShiftPeriod,
+                VendorName = exp.VendorName,
+                Notes = exp.Notes
+            },
+            TableOptions = tables,
+            PeriodMonth = periodMonth,
+            CategoryBudgetCap = cap,
+            CategoryApprovedActual = approvedActual
+        };
+    }
+
+    public async Task<(bool Success, string Message)> UpdateExpenseAsync(
+        UpdateExpenseInputModel input, string? actorId, CancellationToken ct = default)
+    {
+        if (input == null || string.IsNullOrWhiteSpace(input.Title) || input.Title.Trim().Length > 150
+            || !AllowedCategories.Contains(input.Category))
+        {
+            return (false, FinancialMessages.MsgFin03InvalidTitleOrCategory);
+        }
+
+        if (input.Amount <= 0m || input.Amount > 1_000_000_000m)
+        {
+            return (false, FinancialMessages.MsgFin04InvalidAmount);
+        }
+
+        var exp = await _db.OperatingExpenses.FirstOrDefaultAsync(x => x.Id == input.Id, ct);
+        if (exp == null) return (false, FinancialMessages.MsgFin11NotFound);
+
+        if (input.TableId.HasValue)
+        {
+            var tableExists = await _db.BilliardTables.AnyAsync(t => t.Id == input.TableId.Value, ct);
+            if (!tableExists) input.TableId = null;
+        }
+
+        exp.ExpenseDate = input.ExpenseDate;
+        exp.Category = input.Category;
+        exp.Title = input.Title.Trim();
+        exp.Amount = decimal.Round(input.Amount, 2);
+        exp.TableId = input.TableId;
+        exp.ShiftPeriod = AllowedShifts.Contains(input.ShiftPeriod) ? input.ShiftPeriod : OperatingExpense.ShiftAll;
+        exp.VendorName = string.IsNullOrWhiteSpace(input.VendorName) ? null : input.VendorName.Trim();
+        exp.Notes = string.IsNullOrWhiteSpace(input.Notes) ? null : input.Notes.Trim();
+        exp.UpdatedAtUtc = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+
+        var msg = FinancialMessages.MsgFin13ExpenseUpdated;
+        if (await IsCategoryOverMonthlyBudgetAsync(exp.ExpenseDate, exp.Category, ct))
+        {
+            msg += " " + FinancialMessages.MsgFin15BudgetCapWarning;
+        }
+
+        return (true, msg);
+    }
+
+    public async Task<(bool Success, string Message)> ReviewExpenseAsync(
+        int id, string targetStatus, string? reviewNote, string? reviewerId, CancellationToken ct = default)
+    {
+        if (!AllowedExpenseStatuses.Contains(targetStatus))
+            return (false, FinancialMessages.MsgFin03InvalidTitleOrCategory);
+
+        var exp = await _db.OperatingExpenses.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (exp == null) return (false, FinancialMessages.MsgFin11NotFound);
+
+        exp.Status = targetStatus;
+        exp.ReviewedById = reviewerId;
+        exp.ReviewedAtUtc = DateTime.UtcNow;
+        exp.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? null : reviewNote.Trim();
+        exp.UpdatedAtUtc = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+
+        var msg = FinancialMessages.MsgFin14ExpenseReviewed;
+        if (targetStatus == OperatingExpense.StatusApproved
+            && await IsCategoryOverMonthlyBudgetAsync(exp.ExpenseDate, exp.Category, ct))
+        {
+            msg += " " + FinancialMessages.MsgFin15BudgetCapWarning;
+        }
+
+        return (true, msg);
     }
 
     public async Task<(bool Success, string Message)> DeleteExpenseAsync(int id, CancellationToken ct = default)
@@ -291,7 +577,332 @@ public class FinancialAuditService : IFinancialAuditService
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // 3. BỘ MÁY KIỂM TOÁN 5 QUY TẮC TRUY VẾT THẤT THOÁT DOANH THU (UC-FIN-03)
+    // 3. MÀN HÌNH 5 & 6: HỒ SƠ KIỂM TOÁN THẤT THOÁT & QUYẾT ĐỊNH THU HỒI (UC-FIN-05 & 06)
+    // ══════════════════════════════════════════════════════════════════════════
+    public async Task<int> SyncAuditCasesAsync(DateOnly? from = null, DateOnly? to = null, CancellationToken ct = default)
+    {
+        var f = from ?? new DateOnly(2026, 1, 1);
+        var t = to ?? new DateOnly(2026, 12, 31);
+        var startUtc = f.ToDateTime(TimeOnly.MinValue).AddHours(-7);
+        var endUtc = t.AddDays(1).ToDateTime(TimeOnly.MinValue).AddHours(-7);
+
+        var detected = await AuditRevenueLeakageAsync(startUtc, endUtc, ct);
+        var existingCases = await _db.FinancialAuditCases
+            .ToDictionaryAsync(c => c.CaseCode, c => c, ct);
+
+        foreach (var row in detected)
+        {
+            if (!existingCases.TryGetValue(row.CaseCode, out var entity))
+            {
+                entity = new FinancialAuditCase
+                {
+                    CaseCode = row.CaseCode,
+                    LeakageCode = row.RuleCode,
+                    RuleName = row.LeakageType,
+                    Severity = row.Severity,
+                    OccurredAtUtc = row.OccurredAtVn.AddHours(-7),
+                    TableOrShiftLabel = row.LocationOrRef,
+                    StaffName = row.ResponsibleStaff,
+                    ExpectedAmount = row.ExpectedAmount,
+                    ActualAmount = row.RecordedAmount,
+                    LeakageAmount = row.LeakageAmount,
+                    RecoveredAmount = 0m,
+                    Status = FinancialAuditCase.StatusOpen,
+                    EvidenceDetail = row.EvidenceDetail,
+                    RecommendedAction = row.ProblemSolvedAction,
+                    ProblemSolved = row.ProblemSolvedAction,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                _db.FinancialAuditCases.Add(entity);
+            }
+            else
+            {
+                entity.ExpectedAmount = row.ExpectedAmount;
+                entity.ActualAmount = row.RecordedAmount;
+                entity.LeakageAmount = row.LeakageAmount;
+                entity.EvidenceDetail = row.EvidenceDetail;
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return detected.Count;
+    }
+
+    public async Task<AuditCaseListViewModel> BuildAuditCaseListAsync(
+        string? ruleCode, string? severity, string? status, string? keyword, CancellationToken ct = default)
+    {
+        // Đảm bảo dữ liệu quét mới nhất luôn được đồng bộ vào dbo.FinancialAuditCases
+        await SyncAuditCasesAsync(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), ct);
+
+        var query = _db.FinancialAuditCases.AsNoTracking()
+            .Include(c => c.ResolvedBy)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(ruleCode))
+            query = query.Where(c => c.LeakageCode == ruleCode);
+
+        if (!string.IsNullOrWhiteSpace(severity))
+            query = query.Where(c => c.Severity == severity);
+
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(c => c.Status == status);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            query = query.Where(c => c.CaseCode.Contains(kw)
+                                  || c.TableOrShiftLabel.Contains(kw)
+                                  || c.StaffName.Contains(kw)
+                                  || c.EvidenceDetail.Contains(kw));
+        }
+
+        var entities = await query
+            .OrderBy(c => c.Status == FinancialAuditCase.StatusResolved ? 1 : 0)
+            .ThenByDescending(c => c.OccurredAtUtc)
+            .ToListAsync(ct);
+
+        var allCases = await _db.FinancialAuditCases.AsNoTracking().ToListAsync(ct);
+
+        return new AuditCaseListViewModel
+        {
+            RuleCode = ruleCode,
+            Severity = severity,
+            Status = status,
+            Keyword = keyword,
+            TotalDetectedLeakage = allCases.Sum(c => c.LeakageAmount),
+            TotalRecoveredAmount = allCases.Sum(c => c.RecoveredAmount),
+            OpenCount = allCases.Count(c => c.Status == FinancialAuditCase.StatusOpen),
+            InvestigatingCount = allCases.Count(c => c.Status == FinancialAuditCase.StatusInvestigating),
+            ResolvedCount = allCases.Count(c => c.Status == FinancialAuditCase.StatusResolved),
+            Cases = entities.Select(MapAuditCaseRow).ToList()
+        };
+    }
+
+    public async Task<AuditCaseDetailViewModel?> GetAuditCaseDetailAsync(int id, CancellationToken ct = default)
+    {
+        var entity = await _db.FinancialAuditCases.AsNoTracking()
+            .Include(c => c.ResolvedBy)
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (entity == null) return null;
+
+        var row = MapAuditCaseRow(entity);
+        return new AuditCaseDetailViewModel
+        {
+            Case = row,
+            ResolutionInput = new ResolveAuditCaseInputModel
+            {
+                CaseId = entity.Id,
+                TargetStatus = entity.Status == FinancialAuditCase.StatusResolved
+                    ? FinancialAuditCase.StatusResolved
+                    : FinancialAuditCase.StatusResolved,
+                ResolutionType = entity.ResolutionType ?? FinancialAuditCase.ResRecoveredCash,
+                RecoveredAmount = entity.RecoveredAmount > 0 ? entity.RecoveredAmount : entity.LeakageAmount,
+                InvestigationNote = entity.InvestigationNote ?? string.Empty
+            }
+        };
+    }
+
+    public async Task<(bool Success, string Message)> ResolveAuditCaseAsync(
+        ResolveAuditCaseInputModel input, string? actorId, CancellationToken ct = default)
+    {
+        if (input == null || string.IsNullOrWhiteSpace(input.InvestigationNote) || input.InvestigationNote.Trim().Length < 5)
+        {
+            return (false, FinancialMessages.MsgFin18AuditInvalidResolution);
+        }
+
+        var entity = await _db.FinancialAuditCases.FirstOrDefaultAsync(c => c.Id == input.CaseId, ct);
+        if (entity == null)
+        {
+            return (false, FinancialMessages.MsgFin11NotFound);
+        }
+
+        if (input.TargetStatus == FinancialAuditCase.StatusInvestigating)
+        {
+            entity.Status = FinancialAuditCase.StatusInvestigating;
+            entity.InvestigationNote = input.InvestigationNote.Trim();
+            await _db.SaveChangesAsync(ct);
+            return (true, FinancialMessages.MsgFin17AuditResolved);
+        }
+
+        // Xử lý đóng hồ sơ (Resolved) — BR-FIN-17
+        var resType = input.ResolutionType ?? FinancialAuditCase.ResRecoveredCash;
+        if (resType is FinancialAuditCase.ResRecoveredCash or FinancialAuditCase.ResDeductedPayroll)
+        {
+            if (input.RecoveredAmount <= 0m || input.RecoveredAmount > entity.LeakageAmount)
+            {
+                return (false, FinancialMessages.MsgFin18AuditInvalidResolution);
+            }
+            entity.RecoveredAmount = decimal.Round(input.RecoveredAmount, 2);
+        }
+        else
+        {
+            resType = FinancialAuditCase.ResWaived;
+            entity.RecoveredAmount = 0m;
+        }
+
+        entity.Status = FinancialAuditCase.StatusResolved;
+        entity.ResolutionType = resType;
+        entity.InvestigationNote = input.InvestigationNote.Trim();
+        entity.ResolvedById = actorId;
+        entity.ResolvedAtUtc = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        return (true, FinancialMessages.MsgFin17AuditResolved);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 4. MÀN HÌNH 7 (/Revenue/Budgets): QUẢN LÝ ĐỊNH MỨC NGÂN SÁCH & KẾ HOẠCH MÙA VỤ
+    // ══════════════════════════════════════════════════════════════════════════
+    public async Task<BudgetManagementViewModel> BuildBudgetManagementAsync(
+        int year = 2026, string? selectedPeriod = null, CancellationToken ct = default)
+    {
+        var startDate = new DateOnly(year, 1, 1);
+        var endDate = new DateOnly(year, 12, 31);
+        var startUtc = startDate.ToDateTime(TimeOnly.MinValue).AddHours(-7);
+        var endUtc = endDate.AddDays(1).ToDateTime(TimeOnly.MinValue).AddHours(-7);
+
+        var prefix = $"{year:D4}-";
+        var budgets = await _db.MonthlyBudgets.AsNoTracking()
+            .Where(b => b.PeriodMonth.StartsWith(prefix))
+            .OrderBy(b => b.PeriodMonth)
+            .ToListAsync(ct);
+
+        var payments = await _db.PaymentTransactions.AsNoTracking()
+            .Where(p => p.TransactionTimeUtc >= startUtc && p.TransactionTimeUtc < endUtc)
+            .ToListAsync(ct);
+
+        var revByMonth = payments
+            .GroupBy(p => p.TransactionTimeUtc.AddHours(7).ToString("yyyy-MM"))
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.AmountPaid));
+
+        var expenses = await _db.OperatingExpenses.AsNoTracking()
+            .Where(e => e.ExpenseDate >= startDate
+                     && e.ExpenseDate <= endDate
+                     && (e.Status == null || e.Status == OperatingExpense.StatusApproved))
+            .ToListAsync(ct);
+
+        var expByMonth = expenses
+            .GroupBy(e => e.ExpenseDate.ToString("yyyy-MM"))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var rows = new List<MonthlyBudgetRow>();
+        for (int m = 1; m <= 12; m++)
+        {
+            var period = $"{year:D4}-{m:D2}";
+            var b = budgets.FirstOrDefault(x => x.PeriodMonth == period);
+            revByMonth.TryGetValue(period, out var actualRev);
+            expByMonth.TryGetValue(period, out var mExps);
+            mExps ??= new List<OperatingExpense>();
+
+            var row = new MonthlyBudgetRow
+            {
+                Id = b?.Id ?? 0,
+                PeriodMonth = period,
+                RevenueTarget = b?.RevenueTarget ?? 40_000_000m,
+                ActualRevenue = actualRev,
+                MaintenanceCap = b?.MaintenanceCap ?? 4_000_000m,
+                ActualMaintenance = mExps.Where(x => x.Category == OperatingExpense.CatMaintenance).Sum(x => x.Amount),
+                InventoryCogsCap = b?.InventoryCogsCap ?? 10_000_000m,
+                ActualInventoryCogs = mExps.Where(x => x.Category == OperatingExpense.CatInventoryCogs).Sum(x => x.Amount),
+                UtilitiesCap = b?.UtilitiesCap ?? 6_500_000m,
+                ActualUtilities = mExps.Where(x => x.Category == OperatingExpense.CatUtilities).Sum(x => x.Amount),
+                PayrollCap = b?.PayrollCap ?? 15_500_000m,
+                ActualPayroll = mExps.Where(x => x.Category == OperatingExpense.CatPayroll).Sum(x => x.Amount),
+                StrategicFocus = b?.StrategicFocus ?? "Định mức vận hành tiêu chuẩn",
+                ActionPlanSummary = b?.ActionPlanSummary ?? "Duy trì kiểm soát 4 luồng chi phí theo định mức chuẩn.",
+                Status = b?.Status ?? MonthlyBudget.StatusDraft,
+                StatusDisplayName = MonthlyBudget.GetStatusDisplayName(b?.Status ?? MonthlyBudget.StatusDraft)
+            };
+            rows.Add(row);
+        }
+
+        var sel = !string.IsNullOrWhiteSpace(selectedPeriod)
+            ? selectedPeriod
+            : (rows.FirstOrDefault(r => r.PeriodMonth == "2026-04")?.PeriodMonth ?? rows.First().PeriodMonth);
+
+        var selectedRow = rows.FirstOrDefault(r => r.PeriodMonth == sel) ?? rows.First();
+
+        return new BudgetManagementViewModel
+        {
+            Year = year,
+            SelectedPeriod = selectedRow.PeriodMonth,
+            TotalAnnualTargetRevenue = rows.Sum(r => r.RevenueTarget),
+            TotalAnnualActualRevenue = rows.Sum(r => r.ActualRevenue),
+            TotalAnnualExpenseCap = rows.Sum(r => r.TotalExpenseCap),
+            TotalAnnualActualExpense = rows.Sum(r => r.ActualTotalExpense),
+            OverBudgetMonthsCount = rows.Count(r => r.IsOverBudget),
+            Budgets = rows,
+            EditInput = new SaveBudgetInputModel
+            {
+                PeriodMonth = selectedRow.PeriodMonth,
+                RevenueTarget = selectedRow.RevenueTarget,
+                MaintenanceCap = selectedRow.MaintenanceCap,
+                InventoryCogsCap = selectedRow.InventoryCogsCap,
+                UtilitiesCap = selectedRow.UtilitiesCap,
+                PayrollCap = selectedRow.PayrollCap,
+                StrategicFocus = selectedRow.StrategicFocus,
+                ActionPlanSummary = selectedRow.ActionPlanSummary,
+                Status = selectedRow.Status
+            }
+        };
+    }
+
+    public async Task<(bool Success, string Message)> SaveMonthlyBudgetAsync(
+        SaveBudgetInputModel input, string? actorId, CancellationToken ct = default)
+    {
+        if (input == null || string.IsNullOrWhiteSpace(input.PeriodMonth)
+            || string.IsNullOrWhiteSpace(input.StrategicFocus)
+            || string.IsNullOrWhiteSpace(input.ActionPlanSummary)
+            || input.RevenueTarget <= 0m)
+        {
+            return (false, FinancialMessages.MsgFin03InvalidTitleOrCategory);
+        }
+
+        var entity = await _db.MonthlyBudgets
+            .FirstOrDefaultAsync(b => b.PeriodMonth == input.PeriodMonth, ct);
+
+        if (entity == null)
+        {
+            entity = new MonthlyBudget
+            {
+                PeriodMonth = input.PeriodMonth.Trim()
+            };
+            _db.MonthlyBudgets.Add(entity);
+        }
+
+        entity.RevenueTarget = decimal.Round(input.RevenueTarget, 2);
+        entity.MaintenanceCap = decimal.Round(input.MaintenanceCap, 2);
+        entity.InventoryCogsCap = decimal.Round(input.InventoryCogsCap, 2);
+        entity.UtilitiesCap = decimal.Round(input.UtilitiesCap, 2);
+        entity.PayrollCap = decimal.Round(input.PayrollCap, 2);
+        entity.StrategicFocus = input.StrategicFocus.Trim();
+        entity.ActionPlanSummary = input.ActionPlanSummary.Trim();
+        entity.Status = input.Status is MonthlyBudget.StatusDraft or MonthlyBudget.StatusActive or MonthlyBudget.StatusLocked
+            ? input.Status
+            : MonthlyBudget.StatusActive;
+        entity.UpdatedById = actorId;
+        entity.UpdatedAtUtc = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        return (true, FinancialMessages.MsgFin19BudgetSaved);
+    }
+
+    public async Task<(bool Success, string Message)> DeleteMonthlyBudgetAsync(int id, CancellationToken ct = default)
+    {
+        var entity = await _db.MonthlyBudgets.FirstOrDefaultAsync(b => b.Id == id, ct);
+        if (entity == null) return (false, FinancialMessages.MsgFin11NotFound);
+
+        if (entity.Status == MonthlyBudget.StatusLocked)
+            return (false, "Kỳ ngân sách đã khóa sổ (Locked) không thể xóa.");
+
+        _db.MonthlyBudgets.Remove(entity);
+        await _db.SaveChangesAsync(ct);
+        return (true, "Đã xóa định mức ngân sách tháng thành công.");
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 5. BỘ MÁY KIỂM TOÁN 5 QUY TẮC TRUY VẾT THẤT THOÁT DOANH THU (UC-FIN-03 & 05)
     // ══════════════════════════════════════════════════════════════════════════
     private async Task<List<LeakageAuditRow>> AuditRevenueLeakageAsync(
         DateTime startUtc, DateTime endUtc, CancellationToken ct)
@@ -321,7 +932,9 @@ public class FinancialAuditService : IFinancialAuditService
         {
             results.Add(new LeakageAuditRow
             {
+                CaseCode = $"AUDIT-LEAK01-S{row.SessionId}",
                 RuleCode = "LEAK-01",
+                Severity = "Critical",
                 OccurredAtVn = row.ClosedAtUtc.AddHours(7),
                 LeakageType = "Phiên đã đóng nhưng không lập Hóa đơn",
                 LocationOrRef = $"Bàn {row.TableCode} · Phiên #{row.SessionId}",
@@ -358,7 +971,9 @@ public class FinancialAuditService : IFinancialAuditService
             var diff = row.FinalAmount - row.PaidAmount;
             results.Add(new LeakageAuditRow
             {
+                CaseCode = $"AUDIT-LEAK02-I{row.InvoiceId}",
                 RuleCode = "LEAK-02",
+                Severity = "Critical",
                 OccurredAtVn = row.CreatedAtUtc.AddHours(7),
                 LeakageType = "Hóa đơn treo Unpaid / Chưa thu đủ tiền",
                 LocationOrRef = $"Bàn {row.TableCode} · HĐ #{row.InvoiceId} (Phiên #{row.SessionId})",
@@ -414,7 +1029,9 @@ public class FinancialAuditService : IFinancialAuditService
 
             results.Add(new LeakageAuditRow
             {
+                CaseCode = $"AUDIT-LEAK03-I{row.InvoiceId}",
                 RuleCode = "LEAK-03",
+                Severity = "High",
                 OccurredAtVn = row.CreatedAtUtc.AddHours(7),
                 LeakageType = "Sửa giảm tiền giờ / Bỏ sót đồ uống đã phục vụ",
                 LocationOrRef = $"Bàn {row.TableCode} · HĐ #{row.InvoiceId} (Phiên #{row.SessionId})",
@@ -451,7 +1068,9 @@ public class FinancialAuditService : IFinancialAuditService
 
             results.Add(new LeakageAuditRow
             {
+                CaseCode = $"AUDIT-LEAK04-W{shift.Id}",
                 RuleCode = "LEAK-04",
+                Severity = "Critical",
                 OccurredAtVn = (shift.EndTimeUtc ?? shift.StartTimeUtc).AddHours(7),
                 LeakageType = "Thụt két tiền mặt khi đóng ca",
                 LocationOrRef = $"Ca làm việc #{shift.Id}",
@@ -490,7 +1109,9 @@ public class FinancialAuditService : IFinancialAuditService
         {
             results.Add(new LeakageAuditRow
             {
+                CaseCode = $"AUDIT-LEAK05-I{row.InvoiceId}",
                 RuleCode = "LEAK-05",
+                Severity = "Warning",
                 OccurredAtVn = row.CreatedAtUtc.AddHours(7),
                 LeakageType = "Áp giảm giá khống không có thẻ / Voucher",
                 LocationOrRef = $"Bàn {row.TableCode} · HĐ #{row.InvoiceId} (Phiên #{row.SessionId})",
@@ -506,63 +1127,178 @@ public class FinancialAuditService : IFinancialAuditService
         return results.OrderByDescending(x => x.OccurredAtVn).ToList();
     }
 
+    private async Task EnrichLeakagesWithAuditCasesAsync(List<LeakageAuditRow> rows, CancellationToken ct)
+    {
+        if (rows.Count == 0) return;
+
+        var codes = rows.Select(r => r.CaseCode).ToList();
+        var persisted = await _db.FinancialAuditCases.AsNoTracking()
+            .Include(c => c.ResolvedBy)
+            .Where(c => codes.Contains(c.CaseCode))
+            .ToDictionaryAsync(c => c.CaseCode, c => c, ct);
+
+        foreach (var row in rows)
+        {
+            if (persisted.TryGetValue(row.CaseCode, out var c))
+            {
+                row.AuditCaseId = c.Id;
+                row.Status = c.Status;
+                row.StatusDisplayName = FinancialAuditCase.GetStatusDisplayName(c.Status);
+                row.ResolutionType = c.ResolutionType;
+                row.ResolutionDisplayName = FinancialAuditCase.GetResolutionDisplayName(c.ResolutionType);
+                row.RecoveredAmount = c.RecoveredAmount;
+                row.InvestigationNote = c.InvestigationNote;
+                row.ResolvedByName = c.ResolvedBy?.FullName;
+                row.ResolvedAtUtc = c.ResolvedAtUtc;
+            }
+            else
+            {
+                row.Status = FinancialAuditCase.StatusOpen;
+                row.StatusDisplayName = FinancialAuditCase.GetStatusDisplayName(FinancialAuditCase.StatusOpen);
+            }
+        }
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
-    // 4. SEED DỮ LIỆU TÀI CHÍNH 12 THÁNG IDEMPOTENT (UC-FIN-05, BR-FIN-13)
+    // 6. SEED DỮ LIỆU TÀI CHÍNH 12 THÁNG IDEMPOTENT (UC-FIN-05, BR-FIN-13)
     // ══════════════════════════════════════════════════════════════════════════
     public async Task<int> EnsureYearFinancialDataSeededAsync(string? actorId = null, CancellationToken ct = default)
     {
-        var scriptPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "BMS_Database_Starter", "11_Financial_12Months_Seed.sql");
-        if (!File.Exists(scriptPath))
+        var scripts = new[] { "11_Financial_12Months_Seed.sql", "12_Financial_EndToEnd_Upgrade.sql" };
+        foreach (var fileName in scripts)
         {
-            scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "BMS_Database_Starter", "11_Financial_12Months_Seed.sql");
-        }
-        if (!File.Exists(scriptPath))
-        {
-            scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "BMS_Database_Starter", "11_Financial_12Months_Seed.sql");
-        }
+            var scriptPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "BMS_Database_Starter", fileName);
+            if (!File.Exists(scriptPath))
+                scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "BMS_Database_Starter", fileName);
+            if (!File.Exists(scriptPath))
+                scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "BMS_Database_Starter", fileName);
 
-        if (File.Exists(scriptPath))
-        {
-            var rawSql = await File.ReadAllTextAsync(scriptPath, ct);
-            var batches = System.Text.RegularExpressions.Regex.Split(
-                rawSql,
-                @"^\s*GO\s*$",
-                System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            foreach (var batch in batches)
+            if (File.Exists(scriptPath))
             {
-                var trimmed = batch.Trim();
-                if (string.IsNullOrWhiteSpace(trimmed)) continue;
-                if (trimmed.StartsWith("USE ", StringComparison.OrdinalIgnoreCase)) continue;
-                await _db.Database.ExecuteSqlRawAsync(trimmed, ct);
+                var rawSql = await File.ReadAllTextAsync(scriptPath, ct);
+                var batches = System.Text.RegularExpressions.Regex.Split(
+                    rawSql,
+                    @"^\s*GO\s*$",
+                    System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                foreach (var batch in batches)
+                {
+                    var trimmed = batch.Trim();
+                    if (string.IsNullOrWhiteSpace(trimmed)) continue;
+                    if (trimmed.StartsWith("USE ", StringComparison.OrdinalIgnoreCase)) continue;
+                    await _db.Database.ExecuteSqlRawAsync(trimmed, ct);
+                }
             }
         }
 
+        await SyncAuditCasesAsync(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), ct);
         return await _db.OperatingExpenses.CountAsync(ct);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // 5. CÁC HÀM PHỤ TRỢ PHÂN TÍCH CHI PHÍ, ĐỒ UỐNG & CHẨN ĐOÁN P&L
+    // 7. CÁC HÀM PHỤ TRỢ MAP DỮ LIỆU & CHẨN ĐOÁN P&L
     // ══════════════════════════════════════════════════════════════════════════
     private static bool IsDayShiftHour(int vnHour) => vnHour >= 8 && vnHour < 18;
 
+    private async Task<bool> IsCategoryOverMonthlyBudgetAsync(DateOnly date, string category, CancellationToken ct)
+    {
+        var period = date.ToString("yyyy-MM");
+        var budget = await _db.MonthlyBudgets.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.PeriodMonth == period, ct);
+        if (budget == null) return false;
+
+        var cap = category switch
+        {
+            OperatingExpense.CatMaintenance => budget.MaintenanceCap,
+            OperatingExpense.CatInventoryCogs => budget.InventoryCogsCap,
+            OperatingExpense.CatUtilities => budget.UtilitiesCap,
+            OperatingExpense.CatPayroll => budget.PayrollCap,
+            _ => 0m
+        };
+        if (cap <= 0m) return false;
+
+        var mStart = new DateOnly(date.Year, date.Month, 1);
+        var mEnd = mStart.AddMonths(1).AddDays(-1);
+        var actual = await _db.OperatingExpenses.AsNoTracking()
+            .Where(e => e.ExpenseDate >= mStart
+                     && e.ExpenseDate <= mEnd
+                     && e.Category == category
+                     && (e.Status == null || e.Status == OperatingExpense.StatusApproved))
+            .SumAsync(e => (decimal?)e.Amount, ct) ?? 0m;
+
+        return actual > cap;
+    }
+
+    private static OperatingExpenseItemRow MapExpenseItemRow(OperatingExpense e) => new()
+    {
+        Id = e.Id,
+        ExpenseCode = e.ExpenseCode,
+        ExpenseDate = e.ExpenseDate,
+        CategoryCode = e.Category,
+        CategoryName = OperatingExpense.GetCategoryDisplayName(e.Category),
+        Title = e.Title,
+        Amount = e.Amount,
+        TableId = e.TableId,
+        TableCode = e.Table?.TableCode,
+        ShiftPeriod = e.ShiftPeriod,
+        ShiftDisplayName = OperatingExpense.GetShiftDisplayName(e.ShiftPeriod),
+        VendorName = e.VendorName,
+        Status = string.IsNullOrEmpty(e.Status) ? OperatingExpense.StatusApproved : e.Status,
+        StatusDisplayName = OperatingExpense.GetStatusDisplayName(string.IsNullOrEmpty(e.Status) ? OperatingExpense.StatusApproved : e.Status),
+        Notes = e.Notes,
+        CreatedByName = e.CreatedBy?.FullName ?? "Admin",
+        CreatedAtUtc = e.CreatedAtUtc,
+        ReviewedByName = e.ReviewedBy?.FullName,
+        ReviewedAtUtc = e.ReviewedAtUtc,
+        ReviewNote = e.ReviewNote
+    };
+
+    private static LeakageAuditRow MapAuditCaseRow(FinancialAuditCase c) => new()
+    {
+        AuditCaseId = c.Id,
+        CaseCode = c.CaseCode,
+        RuleCode = c.LeakageCode,
+        Severity = c.Severity,
+        OccurredAtVn = c.OccurredAtUtc.AddHours(7),
+        LeakageType = c.RuleName,
+        LocationOrRef = c.TableOrShiftLabel,
+        ResponsibleStaff = c.StaffName,
+        ExpectedAmount = c.ExpectedAmount,
+        RecordedAmount = c.ActualAmount,
+        LeakageAmount = c.LeakageAmount,
+        RecoveredAmount = c.RecoveredAmount,
+        Status = c.Status,
+        StatusDisplayName = FinancialAuditCase.GetStatusDisplayName(c.Status),
+        ResolutionType = c.ResolutionType,
+        ResolutionDisplayName = FinancialAuditCase.GetResolutionDisplayName(c.ResolutionType),
+        EvidenceDetail = c.EvidenceDetail,
+        ProblemSolvedAction = c.RecommendedAction,
+        InvestigationNote = c.InvestigationNote,
+        ResolvedByName = c.ResolvedBy?.FullName ?? "CFO Admin",
+        ResolvedAtUtc = c.ResolvedAtUtc
+    };
+
     private static List<ExpenseCategorySummaryRow> BuildExpenseCategories(
-        List<OperatingExpense> expenses, decimal totalRevenue)
+        List<OperatingExpense> expenses, List<MonthlyBudget> budgets, decimal totalRevenue)
     {
         var totalExp = expenses.Sum(x => x.Amount);
-        var definitions = new (string Code, string Name, string Purpose)[]
+        var definitions = new (string Code, string Name, decimal Cap, string Purpose)[]
         {
             (OperatingExpense.CatPayroll,
              OperatingExpense.GetCategoryDisplayName(OperatingExpense.CatPayroll),
+             budgets.Sum(b => b.PayrollCap),
              "Giải quyết bài toán định biên nhân sự: Đối chiếu chi phí lương Ca Ngày vs Ca Đêm với doanh thu thực mang về để cắt giảm ca dư thừa."),
             (OperatingExpense.CatUtilities,
              OperatingExpense.GetCategoryDisplayName(OperatingExpense.CatUtilities),
+             budgets.Sum(b => b.UtilitiesCap),
              "Giải quyết bài toán kiểm soát điện năng: Theo dõi mức tăng đột biến tiền điện máy lạnh & đèn bàn vào mùa nóng (T4–T7) để tắt bớt khu vực bàn trống."),
             (OperatingExpense.CatInventoryCogs,
              OperatingExpense.GetCategoryDisplayName(OperatingExpense.CatInventoryCogs),
+             budgets.Sum(b => b.InventoryCogsCap),
              "Giải quyết bài toán biên lợi nhuận F&B: Kiểm soát giá vốn nhập thùng Bia Tiger, Bò Húc, Trà Đào và phát hiện hao hụt kho nước."),
             (OperatingExpense.CatMaintenance,
              OperatingExpense.GetCategoryDisplayName(OperatingExpense.CatMaintenance),
+             budgets.Sum(b => b.MaintenanceCap),
              "Giải quyết bài toán khấu hao thiết bị: Theo dõi chi phí thay vải nỉ bàn, lơ, đầu cơ, gậy bida, bóng Aramith để tránh dồn đại tu gây lỗ sốc.")
         };
 
@@ -575,6 +1311,7 @@ public class FinancialAuditService : IFinancialAuditService
                 CategoryCode = d.Code,
                 CategoryName = d.Name,
                 TotalAmount = sum,
+                BudgetCap = d.Cap,
                 EntryCount = catItems.Count,
                 ShareOfTotalExpensePercent = totalExp > 0 ? Math.Round(sum / totalExp * 100m, 1) : 0m,
                 RatioToRevenuePercent = totalRevenue > 0 ? Math.Round(sum / totalRevenue * 100m, 1) : 0m,
