@@ -108,10 +108,18 @@ WHEN NOT MATCHED THEN
     VALUES (src.PeriodMonth, src.RevenueTarget, src.MaintenanceCap, src.InventoryCogsCap, src.UtilitiesCap, src.PayrollCap, src.StrategicFocus, src.ActionPlanSummary, src.Status);
 GO
 
--- Đặt một vài phiếu chi mẫu sang trạng thái Pending để CFO có thể demo duyệt trực tiếp trên UI
-UPDATE TOP (2) dbo.OperatingExpenses
-SET Status = 'Pending', VendorName = N'Nhà phân phối Thiết bị Bida Hoàng Gia'
-WHERE ExpenseCode LIKE 'EXP-2026-12%' AND Status = 'Approved';
+-- Giữ nguyên 60 bút toán gốc ở trạng thái Approved và thêm 2 phiếu chi Pending mẫu để demo duyệt trực tiếp trên UI
+UPDATE dbo.OperatingExpenses
+SET Status = 'Approved'
+WHERE ExpenseCode LIKE 'EXP-2026-%';
+
+IF NOT EXISTS (SELECT 1 FROM dbo.OperatingExpenses WHERE ExpenseCode = 'EXP-E2E-PEND-01')
+    INSERT INTO dbo.OperatingExpenses (ExpenseCode, ExpenseDate, Category, Title, Amount, ShiftPeriod, VendorName, Status, Notes)
+    VALUES ('EXP-E2E-PEND-01', '2026-12-28', 'Maintenance', N'Đề xuất thay mới 4 cây cơ Carbon cao cấp bàn VIP', 3200000, 'Night', N'Nhà phân phối Thiết bị Bida Hoàng Gia', 'Pending', N'Phiếu chi chờ CFO phê duyệt trước khi xuất quỹ');
+
+IF NOT EXISTS (SELECT 1 FROM dbo.OperatingExpenses WHERE ExpenseCode = 'EXP-E2E-PEND-02')
+    INSERT INTO dbo.OperatingExpenses (ExpenseCode, ExpenseDate, Category, Title, Amount, ShiftPeriod, VendorName, Status, Notes)
+    VALUES ('EXP-E2E-PEND-02', '2026-12-29', 'InventoryCOGS', N'Đề xuất nhập bổ sung 15 thùng Bia Heineken Silver phục vụ Tết Dương Lịch', 6450000, 'Night', N'Đại lý Bia & Nước Giải Khát Minh Phát', 'Pending', N'Nhập dự phòng cao điểm lễ cuối năm — Chờ CFO duyệt');
 
 UPDATE dbo.OperatingExpenses
 SET VendorName = CASE Category
