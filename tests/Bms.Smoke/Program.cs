@@ -47,6 +47,7 @@ services.AddScoped<IVoucherService, VoucherService>();
 services.AddScoped<ILoyaltyService, LoyaltyService>();
 services.AddScoped<ICustomerSegmentService, CustomerSegmentService>();
 services.AddScoped<ICampaignService, CampaignService>();
+services.AddScoped<IFinancialAuditService, FinancialAuditService>();
 await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -447,6 +448,71 @@ try
         && pendingAuth?.Roles == "Admin"
         && rewardAuth?.Roles == "Admin",
         "T16: CrmDashboard, Campaign, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Admin)]");
+
+    // =========================================================================
+    // Financial P&L (12 Months), Operating Expenses & Revenue Leakage Audit (T17 - T20)
+    // =========================================================================
+    var finService = scope.ServiceProvider.GetRequiredService<IFinancialAuditService>();
+    await finService.EnsureYearFinancialDataSeededAsync(adminUser.Id);
+    var finController = Prepare(new RevenueController(db, finService));
+
+    // T17: Báo cáo P&L 12 tháng năm 2026 (cả Lãi, Lỗ, đỉnh T3-T5, đỉnh nước T4-T6, Ca Đêm > Ca Ngày)
+    var yearReport = (RevenueReportViewModel)((ViewResult)await finController.Index(new(2026, 1, 1), new(2026, 12, 31), "month")).Model!;
+    var marPnl = yearReport.PnlPeriods.Single(p => p.Period == "2026-03");
+    var aprPnl = yearReport.PnlPeriods.Single(p => p.Period == "2026-04");
+    var mayPnl = yearReport.PnlPeriods.Single(p => p.Period == "2026-05");
+    var junPnl = yearReport.PnlPeriods.Single(p => p.Period == "2026-06");
+    var augPnl = yearReport.PnlPeriods.Single(p => p.Period == "2026-08");
+    Check(yearReport.PnlPeriods.Count == 12
+        && yearReport.ProfitablePeriodsCount >= 8
+        && yearReport.LossPeriodsCount >= 3
+        && marPnl.IsPeakRevenue && aprPnl.IsPeakRevenue && mayPnl.IsPeakRevenue
+        && aprPnl.IsPeakBeverage && mayPnl.IsPeakBeverage && junPnl.IsPeakBeverage
+        && augPnl.NetProfit < 0
+        && yearReport.DayNight.NightRevenue > yearReport.DayNight.DayRevenue,
+        "T17: 12-Month P&L accurately computes profit/loss months, Mar-May revenue peaks, Apr-Jun beverage peaks, and Night > Day shift revenue");
+
+    // T18: Quản lý Sổ cái 4 luồng chi phí mất tiền (UC-FIN-02: Validate, AddExpense, DeleteExpense)
+    var invalidExp = await finService.AddExpenseAsync(new CreateExpenseInputModel
+    {
+        ExpenseDate = new DateOnly(2026, 11, 1),
+        Category = OperatingExpense.CatMaintenance,
+        Title = "Chi phí âm không hợp lệ",
+        Amount = -50000m
+    }, adminUser.Id);
+    var validExp = await finService.AddExpenseAsync(new CreateExpenseInputModel
+    {
+        ExpenseDate = new DateOnly(2026, 11, 5),
+        Category = OperatingExpense.CatMaintenance,
+        Title = "Thay vải nỉ bàn VIP Smoke Test",
+        Amount = 3500000m,
+        ShiftPeriod = OperatingExpense.ShiftAll
+    }, adminUser.Id);
+    var delExp = await finService.DeleteExpenseAsync(validExp.Expense!.Id);
+    Check(!invalidExp.Success
+        && invalidExp.Message == FinancialMessages.MsgFin04InvalidAmount
+        && validExp.Success
+        && delExp.Success,
+        "T18: OperatingExpenses validates amount/category (BR-FIN-05), records new maintenance cost, and deletes cleanly");
+
+    // T19: Kiểm toán & Truy vết 5 kịch bản thất thoát doanh thu (UC-FIN-03: LEAK-01 -> LEAK-05)
+    var leakRules = yearReport.LeakageItems.Select(x => x.RuleCode).Distinct().ToHashSet();
+    Check(leakRules.Contains("LEAK-01")
+        && leakRules.Contains("LEAK-02")
+        && leakRules.Contains("LEAK-03")
+        && leakRules.Contains("LEAK-04")
+        && leakRules.Contains("LEAK-05")
+        && yearReport.TotalLeakageAmount > 0,
+        "T19: Revenue Leakage Audit Engine detects all 5 anomaly categories (LEAK-01..LEAK-05) with exact loss amounts");
+
+    // T20: Xuất CSV Báo cáo P&L 12 tháng & Biên bản Kiểm toán thất thoát (UC-FIN-04)
+    var finCsvResult = await finController.Export(new(2026, 1, 1), new(2026, 12, 31), "month") as FileContentResult;
+    var finCsvText = finCsvResult != null ? System.Text.Encoding.UTF8.GetString(finCsvResult.FileContents) : "";
+    Check(finCsvResult != null
+        && finCsvText.Contains("Loi nhuan rong P&L VND")
+        && finCsvText.Contains("LEAK-01")
+        && finCsvText.Contains("LEAK-03"),
+        "T20: Financial P&L and Leakage Audit CSV export includes P&L summary, expense breakdown, and audit findings");
 
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }
