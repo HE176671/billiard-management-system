@@ -1,0 +1,185 @@
+@model Bms.Web.Models.BudgetManagementViewModel
+@{
+    ViewData["Title"] = "Quản lý Định mức Ngân sách 4 Luồng & Kế hoạch Mùa vụ 12 Tháng (UC-FIN-07)";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+@await Html.PartialAsync("_FinancialNav", "Budgets")
+@await Html.PartialAsync("_Alerts")
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="fw-bold mb-1">🎯 Màn Hình 7: Định Mức Ngân Sách 4 Luồng Chi Phí &amp; Kế Hoạch Tối Ưu Mùa Vụ (@Model.Year)</h4>
+        <p class="text-muted small mb-0">
+            <strong>Giải quyết vấn đề gì?</strong> Chuyển hóa các phát hiện mùa vụ (<strong>T3–T5 cao điểm giờ chơi</strong>, <strong>T4–T6 cao điểm bia/nước</strong>, <strong>Ca Đêm 74% vs Ca Ngày 26%</strong>) thành định mức trần ngân sách 4 luồng chi phí và kế hoạch hành động cụ thể cho từng tháng (<code>BR-FIN-18</code>).
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Expenses" class="btn btn-outline-primary">🧾 Đối Chiếu Với Sổ Cái Chi Phí</a>
+        <a asp-action="Index" asp-route-from="2026-01-01" asp-route-to="2026-12-31" asp-route-groupBy="month" class="btn btn-outline-secondary">📊 Về Bảng P&amp;L 12 Tháng</a>
+    </div>
+</div>
+
+<!-- 4 KPI Cards -->
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-primary">
+            <div class="text-muted small fw-semibold">MỤC TIÊU DOANH THU CẢ NĂM</div>
+            <div class="fs-4 fw-bold text-primary mt-1">@Model.TotalAnnualTargetRevenue.ToString("N0") ₫</div>
+            <div class="small text-muted mt-1">Thực đạt: @Model.TotalAnnualActualRevenue.ToString("N0") ₫</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-dark">
+            <div class="text-muted small fw-semibold">TỔNG TRẦN CHI PHÍ 12 THÁNG</div>
+            <div class="fs-4 fw-bold text-dark mt-1">@Model.TotalAnnualExpenseCap.ToString("N0") ₫</div>
+            <div class="small text-muted mt-1">Thực chi Approved: @Model.TotalAnnualActualExpense.ToString("N0") ₫</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-success">
+            <div class="text-muted small fw-semibold">CHÊNH LỆCH CHI PHÍ SO VỚI TRẦN</div>
+            @{
+                var diffCap = Model.TotalAnnualExpenseCap - Model.TotalAnnualActualExpense;
+            }
+            <div class="fs-4 fw-bold @(diffCap >= 0 ? "text-success" : "text-danger") mt-1">
+                @(diffCap >= 0 ? $"Tiết kiệm {diffCap:N0} ₫" : $"Vượt {Math.Abs(diffCap):N0} ₫")
+            </div>
+            <div class="small text-muted mt-1">Kiểm soát kỷ luật ngân sách 4 luồng</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-danger">
+            <div class="text-muted small fw-semibold">SỐ THÁNG VƯỢT TRẦN NGÂN SÁCH</div>
+            <div class="fs-4 fw-bold text-danger mt-1">@Model.OverBudgetMonthsCount / 12 tháng</div>
+            <div class="small text-muted mt-1">Cần siết lại trần bảo trì &amp; lương ca ngày</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Cột trái: Bảng 12 Tháng Định mức Ngân sách & Kế hoạch Mùa vụ -->
+    <div class="col-lg-8">
+        <div class="data-card">
+            <div class="data-card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Bảng Định Mức Ngân Sách &amp; Kế Hoạch Hành Động 12 Tháng (@Model.Year)</h6>
+                <span class="small text-muted">Bấm <strong>Sửa định mức</strong> trên bất kỳ tháng nào để nạp vào Form bên phải</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Kỳ</th>
+                            <th class="text-end">Mục tiêu Thu<br/><small class="text-muted">Thực đạt</small></th>
+                            <th class="text-end">Trần Chi 4 Luồng<br/><small class="text-muted">Thực chi</small></th>
+                            <th>Trọng tâm Mùa vụ &amp; Hành động CFO</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in Model.Budgets)
+                        {
+                            var isSelected = b.PeriodMonth == Model.SelectedPeriod;
+                            var stBadge = b.Status switch
+                            {
+                                "Locked" => "bg-secondary",
+                                "Draft" => "bg-warning text-dark",
+                                _ => "bg-success"
+                            };
+                            <tr class="@(isSelected ? "table-primary" : "")">
+                                <td class="fw-bold">@b.PeriodMonth</td>
+                                <td class="text-end">
+                                    <div class="fw-semibold">@b.RevenueTarget.ToString("N0") ₫</div>
+                                    <small class="text-muted">@b.ActualRevenue.ToString("N0") ₫</small>
+                                </td>
+                                <td class="text-end">
+                                    <div class="fw-bold @(b.IsOverBudget ? "text-danger" : "text-dark")">@b.TotalExpenseCap.ToString("N0") ₫</div>
+                                    <small class="@(b.IsOverBudget ? "text-danger fw-bold" : "text-muted")">
+                                        Thực: @b.ActualTotalExpense.ToString("N0") ₫ @(b.IsOverBudget ? "⚠️" : "")
+                                    </small>
+                                </td>
+                                <td style="max-width: 290px;">
+                                    <div class="fw-bold text-dark">@b.StrategicFocus</div>
+                                    <div class="text-muted" style="font-size: 0.78rem;">@b.ActionPlanSummary</div>
+                                </td>
+                                <td><span class="badge @stBadge">@b.Status</span></td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end gap-1">
+                                        <a asp-action="Budgets" asp-route-year="@Model.Year" asp-route-selectedPeriod="@b.PeriodMonth"
+                                           class="btn btn-sm btn-outline-primary">✏️ Sửa</a>
+                                        @if (b.Id > 0 && b.Status != "Locked")
+                                        {
+                                            <form asp-action="DeleteBudget" method="post" class="d-inline" onsubmit="return confirm('Xóa định mức tháng @b.PeriodMonth?');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@b.Id" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">🗑️</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Form Thiết lập / Cập nhật Định mức Ngân sách & Kế hoạch Mùa vụ (Create/Update) -->
+    <div class="col-lg-4">
+        <div class="data-card p-4">
+            <h6 class="fw-bold mb-3 border-bottom pb-2">
+                ⚙️ Thiết Lập Định Mức &amp; Kế Hoạch Kỳ <code>@Model.EditInput.PeriodMonth</code>
+            </h6>
+            <form asp-action="SaveBudget" method="post">
+                @Html.AntiForgeryToken()
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">1. Kỳ ngân sách (yyyy-MM) <span class="text-danger">*</span></label>
+                    <input asp-for="EditInput.PeriodMonth" class="form-control form-control-sm fw-bold" required />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">2. Mục tiêu Doanh thu tháng (VND) <span class="text-danger">*</span></label>
+                    <input asp-for="EditInput.RevenueTarget" type="number" step="500000" class="form-control form-control-sm fw-bold text-primary" required />
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">3. Trần Bảo trì bàn/cơ</label>
+                        <input asp-for="EditInput.MaintenanceCap" type="number" step="100000" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">4. Trần Giá vốn Bia/Nước</label>
+                        <input asp-for="EditInput.InventoryCogsCap" type="number" step="100000" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">5. Trần Điện 3 pha/Nước</label>
+                        <input asp-for="EditInput.UtilitiesCap" type="number" step="100000" class="form-control form-control-sm" required />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">6. Trần Lương Nhân sự</label>
+                        <input asp-for="EditInput.PayrollCap" type="number" step="100000" class="form-control form-control-sm" required />
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">7. Trọng tâm chiến lược mùa vụ <span class="text-danger">*</span></label>
+                    <input asp-for="EditInput.StrategicFocus" class="form-control form-control-sm" required maxlength="150" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">8. Kế hoạch hành động cụ thể của CFO <span class="text-danger">*</span></label>
+                    <textarea asp-for="EditInput.ActionPlanSummary" class="form-control form-control-sm" rows="3" required maxlength="1000"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">9. Trạng thái kỳ ngân sách</label>
+                    <select asp-for="EditInput.Status" class="form-select form-select-sm">
+                        <option value="Draft">📝 Bản nháp (Draft)</option>
+                        <option value="Active">✅ Đang áp dụng kiểm soát trần (Active)</option>
+                        <option value="Locked">🔒 Đã khóa sổ kỳ ngân sách (Locked)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary-bms w-100 fw-bold">
+                    💾 Lưu Định Mức &amp; Kế Hoạch Hành Động
+                </button>
+            </form>
+        </div>
+    </div>
+</div>

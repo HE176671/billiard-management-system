@@ -1,0 +1,34 @@
+@model string
+@{
+    var activeTab = Model ?? "Index";
+}
+<div class="data-card mb-3 p-2" style="background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%); border-radius: 12px;">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 px-2 py-1">
+        <div class="d-flex align-items-center gap-2 text-white">
+            <span class="badge bg-danger px-2 py-1">CFO WORKFLOW E2E</span>
+            <small class="text-white-50 d-none d-lg-inline">Luồng Quản Trị Tài Chính Khép Kín (7 Màn Hình): Ngân sách → Chi phí &amp; Phê duyệt → Kiểm toán → Thu hồi thất thoát → P&amp;L</small>
+        </div>
+        <div class="d-flex flex-wrap gap-1">
+            <a asp-controller="Revenue" asp-action="Index"
+               class="btn btn-sm @(activeTab == "Index" ? "btn-danger fw-bold" : "btn-outline-light")">
+                1. 📊 Trung Tâm P&amp;L 12 Tháng
+            </a>
+            <a asp-controller="Revenue" asp-action="Budgets"
+               class="btn btn-sm @(activeTab == "Budgets" ? "btn-danger fw-bold" : "btn-outline-light")">
+                2. 🎯 Định Mức Ngân Sách Mùa Vụ
+            </a>
+            <a asp-controller="Revenue" asp-action="Expenses"
+               class="btn btn-sm @(activeTab == "Expenses" ? "btn-danger fw-bold" : "btn-outline-light")">
+                3. 🧾 Sổ Cái Chi Phí (4 Luồng)
+            </a>
+            <a asp-controller="Revenue" asp-action="CreateExpense"
+               class="btn btn-sm @(activeTab == "CreateExpense" ? "btn-danger fw-bold" : "btn-outline-light")">
+                4. ➕ Lập Phiếu Chi Mới
+            </a>
+            <a asp-controller="Revenue" asp-action="AuditCases"
+               class="btn btn-sm @(activeTab == "AuditCases" || activeTab == "AuditDetail" ? "btn-danger fw-bold" : "btn-outline-light")">
+                5. 🛡️ Hồ Sơ Kiểm Toán &amp; Thu Hồi
+            </a>
+        </div>
+    </div>
+</div>

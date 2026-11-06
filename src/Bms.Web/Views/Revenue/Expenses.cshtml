@@ -1,0 +1,214 @@
+@using Bms.Web.Data
+@model Bms.Web.Models.ExpenseListViewModel
+@{
+    ViewData["Title"] = "Sổ cái 4 Luồng Chi phí Vận hành & Phê duyệt (UC-FIN-02)";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+@await Html.PartialAsync("_FinancialNav", "Expenses")
+@await Html.PartialAsync("_Alerts")
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="fw-bold mb-1">🧾 Màn Hình 2: Sổ Cái 4 Luồng Chi Phí Vận Hành &amp; Kiểm Soát Phê Duyệt</h4>
+        <p class="text-muted small mb-0">
+            <strong>Giải quyết vấn đề gì?</strong> Kiểm soát chặt 4 luồng tiền chảy ra (Bảo trì bàn/nỉ/cơ, Giá vốn bia/nước, Điện 3 pha/nước, Lương ca ngày/đêm). Chỉ những phiếu chi được CFO <strong>Phê duyệt (Approved)</strong> mới được trừ vào Lợi nhuận ròng P&amp;L.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="CreateExpense" class="btn btn-primary-bms">➕ Lập Phiếu Chi Vận Hành Mới</a>
+        <a asp-action="Budgets" class="btn btn-outline-secondary">🎯 Xem Trần Ngân Sách Tháng</a>
+    </div>
+</div>
+
+<!-- 4 KPI Cards -->
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-success">
+            <div class="text-muted small fw-semibold">TỔNG CHI ĐÃ DUYỆT (TRỪ VÀO P&amp;L)</div>
+            <div class="fs-4 fw-bold text-success mt-1">@Model.TotalApprovedAmount.ToString("N0") ₫</div>
+            <div class="small text-muted mt-1">@Model.ApprovedCount phiếu chi hợp lệ đã xác nhận</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-warning">
+            <div class="text-muted small fw-semibold">ĐANG CHỜ CFO PHÊ DUYỆT (PENDING)</div>
+            <div class="fs-4 fw-bold text-warning mt-1">@Model.TotalPendingAmount.ToString("N0") ₫</div>
+            <div class="small text-muted mt-1">@Model.PendingCount phiếu đề xuất đang chờ duyệt</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-danger">
+            <div class="text-muted small fw-semibold">ĐÃ TỪ CHỐI THANH TOÁN (REJECTED)</div>
+            <div class="fs-4 fw-bold text-danger mt-1">@Model.TotalRejectedAmount.ToString("N0") ₫</div>
+            <div class="small text-muted mt-1">@Model.RejectedCount phiếu chi bị chặn xuất quỹ</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card h-100 border-start border-4 border-primary">
+            <div class="text-muted small fw-semibold">TỶ LỆ SỬ DỤNG NGÂN SÁCH KỲ</div>
+            <div class="fs-4 fw-bold @(Model.BudgetUtilizationPercent > 100 ? "text-danger" : "text-primary") mt-1">
+                @Model.BudgetUtilizationPercent%
+            </div>
+            <div class="small text-muted mt-1">Trần ngân sách kỳ: @Model.PeriodBudgetCap.ToString("N0") ₫</div>
+        </div>
+    </div>
+</div>
+
+<!-- Bộ lọc đa chiều (12 Fields / Components) -->
+<div class="data-card mb-3 p-3">
+    <form asp-action="Expenses" method="get" class="row g-2 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold">Từ ngày</label>
+            <input type="date" name="from" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold">Đến ngày</label>
+            <input type="date" name="to" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold">Luồng chi phí (4 nhóm)</label>
+            <select name="category" class="form-select form-select-sm">
+                <option value="">-- Tất cả 4 luồng --</option>
+                <option value="Maintenance" selected="@(Model.Category == "Maintenance")">Bảo trì bàn, nỉ, cơ &amp; bi</option>
+                <option value="InventoryCOGS" selected="@(Model.Category == "InventoryCOGS")">Giá vốn bia, nước &amp; F&amp;B</option>
+                <option value="Utilities" selected="@(Model.Category == "Utilities")">Tiền điện 3 pha &amp; nước</option>
+                <option value="Payroll" selected="@(Model.Category == "Payroll")">Lương nhân sự (Ngày/Đêm)</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold">Ca làm việc</label>
+            <select name="shiftPeriod" class="form-select form-select-sm">
+                <option value="">-- Tất cả ca --</option>
+                <option value="Day" selected="@(Model.ShiftPeriod == "Day")">Ca Ban Ngày (08h–18h)</option>
+                <option value="Night" selected="@(Model.ShiftPeriod == "Night")">Ca Ban Đêm (18h–02h)</option>
+                <option value="All" selected="@(Model.ShiftPeriod == "All")">Toàn thời gian</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold">Trạng thái duyệt</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="">-- Tất cả trạng thái --</option>
+                <option value="Pending" selected="@(Model.Status == "Pending")">⏳ Chờ duyệt (Pending)</option>
+                <option value="Approved" selected="@(Model.Status == "Approved")">✅ Đã duyệt (Approved)</option>
+                <option value="Rejected" selected="@(Model.Status == "Rejected")">❌ Từ chối (Rejected)</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold">Từ khóa / Mã phiếu / NCC</label>
+            <div class="input-group input-group-sm">
+                <input type="text" name="keyword" value="@Model.Keyword" class="form-control" placeholder="Mã EXP, tên, NCC..." />
+                <button type="submit" class="btn btn-primary-bms">Lọc</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Tổng hợp 4 nhóm chi phí so với Định mức ngân sách -->
+<div class="row g-3 mb-3">
+    @foreach (var cat in Model.CategorySummaries)
+    {
+        var overCap = cat.BudgetCap > 0 && cat.TotalAmount > cat.BudgetCap;
+        <div class="col-md-3">
+            <div class="data-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="badge bg-secondary">@cat.CategoryCode</span>
+                    <span class="small fw-bold @(overCap ? "text-danger" : "text-success")">
+                        @(overCap ? "⚠️ Vượt trần" : "Trong hạn mức")
+                    </span>
+                </div>
+                <div class="fw-bold small">@cat.CategoryName</div>
+                <div class="fs-5 fw-bold mt-1">@cat.TotalAmount.ToString("N0") ₫</div>
+                <div class="small text-muted">Định mức kỳ: @cat.BudgetCap.ToString("N0") ₫ (@cat.EntryCount phiếu)</div>
+                <hr class="my-2" />
+                <div class="small text-muted" style="font-size:0.78rem;">@cat.ProblemSolvedPurpose</div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Bảng Sổ Cái Chi Phí -->
+<div class="data-card">
+    <div class="data-card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold">Danh Sách Phiếu Chi Vận Hành (@Model.Items.Count bút toán)</h6>
+        <span class="small text-muted">Bấm vào <strong>Chi tiết / Sửa / Duyệt</strong> để mở Màn hình 4</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Mã phiếu</th>
+                    <th>Ngày chi</th>
+                    <th>Luồng chi phí</th>
+                    <th>Nội dung &amp; Nhà cung cấp</th>
+                    <th>Bàn / Ca</th>
+                    <th class="text-end">Số tiền (VND)</th>
+                    <th>Trạng thái duyệt</th>
+                    <th class="text-end">Thao tác End-to-End</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">Không có phiếu chi nào khớp bộ lọc.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var item in Model.Items)
+                    {
+                        var badgeClass = item.Status switch
+                        {
+                            "Pending" => "bg-warning text-dark",
+                            "Rejected" => "bg-danger",
+                            _ => "bg-success"
+                        };
+                        <tr>
+                            <td class="fw-semibold">
+                                <a asp-action="ExpenseDetail" asp-route-id="@item.Id" class="text-decoration-none">
+                                    @item.ExpenseCode
+                                </a>
+                            </td>
+                            <td>@item.ExpenseDate.ToString("dd/MM/yyyy")</td>
+                            <td><span class="badge bg-dark">@item.CategoryName</span></td>
+                            <td>
+                                <div class="fw-semibold">@item.Title</div>
+                                <small class="text-muted">NCC: @(item.VendorName ?? "Nội bộ") @(string.IsNullOrEmpty(item.Notes) ? "" : $"· {item.Notes}")</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border">@item.ShiftDisplayName</span>
+                                @if (!string.IsNullOrEmpty(item.TableCode))
+                                {
+                                    <span class="badge bg-info text-dark">Bàn @item.TableCode</span>
+                                }
+                            </td>
+                            <td class="text-end fw-bold text-danger">@item.Amount.ToString("N0") ₫</td>
+                            <td>
+                                <span class="badge @badgeClass">@item.StatusDisplayName</span>
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end gap-1">
+                                    <a asp-action="ExpenseDetail" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">
+                                        ✏️ Chi tiết / Sửa
+                                    </a>
+                                    @if (item.Status == "Pending")
+                                    {
+                                        <form asp-action="ReviewExpense" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@item.Id" />
+                                            <input type="hidden" name="targetStatus" value="Approved" />
+                                            <input type="hidden" name="reviewNote" value="CFO duyệt nhanh từ Sổ cái" />
+                                            <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                            <button type="submit" class="btn btn-sm btn-success">✔ Duyệt</button>
+                                        </form>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

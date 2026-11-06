@@ -1,0 +1,123 @@
+@model Bms.Web.Models.CreateExpenseScreenViewModel
+@{
+    ViewData["Title"] = "Lập Phiếu Chi Vận Hành Mới & Kiểm Tra Trần Ngân Sách (UC-FIN-03)";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+@await Html.PartialAsync("_FinancialNav", "CreateExpense")
+@await Html.PartialAsync("_Alerts")
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h4 class="fw-bold mb-1">➕ Màn Hình 3: Lập Phiếu Chi Vận Hành Mới &amp; Đối Chiếu Hạn Mức Tháng (@Model.CurrentPeriodMonth)</h4>
+        <p class="text-muted small mb-0">
+            <strong>Giải quyết vấn đề gì?</strong> Ngăn chặn việc chi tiêu mù quáng: trước khi xuất tiền bảo trì bàn, nhập bia hay trả điện/lương, người lập phiếu nhìn thấy ngay <strong>Hạn mức ngân sách còn lại của tháng</strong>.
+        </p>
+    </div>
+    <a asp-action="Expenses" class="btn btn-outline-secondary">⬅ Quay lại Sổ Cái Chi Phí</a>
+</div>
+
+<div class="row g-3">
+    <!-- Cột trái: Form Lập Phiếu Chi (10 Actionable Fields) -->
+    <div class="col-lg-7">
+        <div class="data-card p-4">
+            <h6 class="fw-bold mb-3 border-bottom pb-2">Thông Tin Chứng Từ Chi Phí Vận Hành</h6>
+            <form asp-action="CreateExpense" method="post">
+                @Html.AntiForgeryToken()
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">1. Ngày phát sinh chi phí <span class="text-danger">*</span></label>
+                        <input asp-for="Input.ExpenseDate" type="date" class="form-control" required />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">2. Nhóm chi phí vận hành (4 luồng) <span class="text-danger">*</span></label>
+                        <select asp-for="Input.Category" class="form-select" required>
+                            <option value="Maintenance">Bảo trì bàn, vải nỉ, gậy, đầu cơ &amp; bi (Maintenance)</option>
+                            <option value="InventoryCOGS">Giá vốn nhập bia, nước giải khát &amp; F&amp;B (InventoryCOGS)</option>
+                            <option value="Utilities">Tiền điện điều hòa 3 pha, đèn bàn &amp; nước (Utilities)</option>
+                            <option value="Payroll">Lương nhân sự theo ca Ngày / Đêm (Payroll)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold">3. Tên nội dung khoản chi <span class="text-danger">*</span></label>
+                        <input asp-for="Input.Title" class="form-control" placeholder="VD: Thay nỉ bàn VIP01, Nhập 20 thùng bia Tiger, Lương ca đêm..." required maxlength="150" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">4. Số tiền chi (VND) <span class="text-danger">*</span></label>
+                        <input asp-for="Input.Amount" type="number" min="1000" max="1000000000" step="1000" class="form-control fw-bold text-danger" required />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">5. Nhà cung cấp / Đơn vị thụ hưởng</label>
+                        <input asp-for="Input.VendorName" class="form-control" placeholder="VD: Đại lý Bia Minh Phát, Xưởng ProCue..." maxlength="150" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">6. Ca làm việc phân bổ</label>
+                        <select asp-for="Input.ShiftPeriod" class="form-select">
+                            <option value="All">Toàn thời gian (Cả ngày &amp; đêm)</option>
+                            <option value="Day">Ca Ban Ngày (08:00–18:00)</option>
+                            <option value="Night">Ca Ban Đêm (18:00–02:00)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">7. Bàn Bida liên quan (Nếu có)</label>
+                        <select asp-for="Input.TableId" class="form-select">
+                            <option value="">-- Chi phí chung toàn quán --</option>
+                            @foreach (var t in Model.TableOptions)
+                            {
+                                <option value="@t.Id">@t.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">8. Trạng thái khởi tạo (Workflow)</label>
+                        <select asp-for="Input.InitialStatus" class="form-select">
+                            <option value="Pending">⏳ Chờ CFO phê duyệt (Pending)</option>
+                            <option value="Approved">✅ Duyệt &amp; Ghi sổ P&amp;L ngay (Approved)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold">9. Ghi chú chứng từ / Hóa đơn đỏ / Lý do chi</label>
+                        <textarea asp-for="Input.Notes" class="form-control" rows="3" maxlength="500" placeholder="Ghi rõ số hóa đơn nhà cung cấp, tình trạng hư hỏng bàn/cơ hoặc định mức tiêu thụ..."></textarea>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a asp-action="Expenses" class="btn btn-outline-secondary">Hủy bỏ</a>
+                    <button type="submit" class="btn btn-primary-bms px-4">💾 Lưu Phiếu Chi &amp; Chuyển Sang Chi Tiết</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cột phải: Kiểm tra Hạn mức Ngân sách Tháng trực tiếp -->
+    <div class="col-lg-5">
+        <div class="data-card p-4 h-100">
+            <h6 class="fw-bold mb-2">🎯 Kiểm Tra Trần Ngân Sách Kỳ @Model.CurrentPeriodMonth (BR-FIN-15)</h6>
+            <p class="small text-muted mb-3">
+                Nếu khoản chi mới làm tổng chi đã duyệt vượt 100% hạn mức bên dưới, hệ thống sẽ phát cảnh báo <code>MSG-FIN-15</code> ngay khi lưu.
+            </p>
+            @foreach (var b in Model.CategoryBudgets)
+            {
+                var pct = Math.Min(100m, b.UsagePercent);
+                var barColor = b.UsagePercent > 100 ? "bg-danger" : (b.UsagePercent >= 80 ? "bg-warning" : "bg-success");
+                <div class="border rounded p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold small">@b.CategoryName</span>
+                        <span class="badge @(b.UsagePercent > 100 ? "bg-danger" : "bg-secondary")">@b.UsagePercent%</span>
+                    </div>
+                    <div class="progress mb-2" style="height: 8px;">
+                        <div class="progress-bar @barColor" role="progressbar" style="width: @pct.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                    </div>
+                    <div class="d-flex justify-content-between small text-muted">
+                        <span>Đã chi: <strong>@b.ActualApproved.ToString("N0") ₫</strong></span>
+                        <span>Định mức: <strong>@b.BudgetCap.ToString("N0") ₫</strong></span>
+                    </div>
+                    <div class="small mt-1 @(b.RemainingCap < 0 ? "text-danger fw-bold" : "text-success")">
+                        @(b.RemainingCap >= 0
+                            ? $"Còn lại được phép chi: {b.RemainingCap:N0} ₫"
+                            : $"Đã vượt định mức tháng: {Math.Abs(b.RemainingCap):N0} ₫")
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>

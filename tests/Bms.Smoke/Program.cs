@@ -450,7 +450,7 @@ try
         "T16: CrmDashboard, Campaign, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Admin)]");
 
     // =========================================================================
-    // Financial P&L (12 Months), Operating Expenses & Revenue Leakage Audit (T17 - T20)
+    // Financial P&L (12 Months), Operating Expenses & Revenue Leakage Audit (T17 - T23)
     // =========================================================================
     var finService = scope.ServiceProvider.GetRequiredService<IFinancialAuditService>();
     await finService.EnsureYearFinancialDataSeededAsync(adminUser.Id);
@@ -505,7 +505,7 @@ try
         && yearReport.TotalLeakageAmount > 0,
         "T19: Revenue Leakage Audit Engine detects all 5 anomaly categories (LEAK-01..LEAK-05) with exact loss amounts");
 
-    // T20: Xuất CSV Báo cáo P&L 12 tháng & Biên bản Kiểm toán thất thoát (UC-FIN-04)
+    // T20: Xuất CSV Báo cáo P&L 12 tháng & Biên bản Kiểm toán thất thoát (UC-FIN-08)
     var finCsvResult = await finController.Export(new(2026, 1, 1), new(2026, 12, 31), "month") as FileContentResult;
     var finCsvText = finCsvResult != null ? System.Text.Encoding.UTF8.GetString(finCsvResult.FileContents) : "";
     Check(finCsvResult != null
@@ -513,6 +513,84 @@ try
         && finCsvText.Contains("LEAK-01")
         && finCsvText.Contains("LEAK-03"),
         "T20: Financial P&L and Leakage Audit CSV export includes P&L summary, expense breakdown, and audit findings");
+
+    // T21: Luồng End-to-End Sổ cái Chi phí (Screens 2, 3, 4: Pending -> Update -> Approve -> Tăng OperatingCost -> Delete)
+    var createScreenVm = (CreateExpenseScreenViewModel)((ViewResult)await finController.CreateExpense(new DateOnly(2026, 11, 18))).Model!;
+    var baselineNovReport = (RevenueReportViewModel)((ViewResult)await finController.Index(new(2026, 11, 1), new(2026, 11, 30), "month")).Model!;
+    var pendCreate = await finService.AddExpenseAsync(new CreateExpenseInputModel
+    {
+        ExpenseDate = new DateOnly(2026, 11, 18),
+        Category = OperatingExpense.CatMaintenance,
+        Title = "Phiếu chờ duyệt E2E T21",
+        Amount = 2500000m,
+        ShiftPeriod = OperatingExpense.ShiftAll,
+        VendorName = "NCC Bida T21",
+        InitialStatus = OperatingExpense.StatusPending
+    }, adminUser.Id);
+    var expListVm = (ExpenseListViewModel)((ViewResult)await finController.Expenses(new(2026, 11, 1), new(2026, 11, 30), null, null, OperatingExpense.StatusPending, "E2E T21")).Model!;
+    var expDetailVm = (ExpenseDetailViewModel)((ViewResult)await finController.ExpenseDetail(pendCreate.Expense!.Id)).Model!;
+    var updRes = await finService.UpdateExpenseAsync(new UpdateExpenseInputModel
+    {
+        Id = pendCreate.Expense.Id,
+        ExpenseDate = new DateOnly(2026, 11, 18),
+        Category = OperatingExpense.CatMaintenance,
+        Title = "Phiếu đã cập nhật E2E T21",
+        Amount = 4200000m,
+        ShiftPeriod = OperatingExpense.ShiftAll,
+        VendorName = "NCC Bida T21"
+    }, adminUser.Id);
+    var revRes = await finService.ReviewExpenseAsync(pendCreate.Expense.Id, OperatingExpense.StatusApproved, "CFO duyệt T21", adminUser.Id);
+    var afterApproveNovReport = (RevenueReportViewModel)((ViewResult)await finController.Index(new(2026, 11, 1), new(2026, 11, 30), "month")).Model!;
+    await finService.DeleteExpenseAsync(pendCreate.Expense.Id);
+    Check(createScreenVm.CategoryBudgets.Count == 4
+        && expListVm.Items.Any(e => e.Id == pendCreate.Expense.Id)
+        && expDetailVm.Expense.Status == OperatingExpense.StatusPending
+        && updRes.Success
+        && revRes.Success
+        && afterApproveNovReport.TotalOperatingCost == baselineNovReport.TotalOperatingCost + 4200000m,
+        "T21: E2E Operating Expense workflow (Screens 2, 3, 4) transitions Pending -> Updated -> Approved and updates P&L OperatingCost");
+
+    // T22: Luồng End-to-End Hồ sơ Kiểm toán Thất thoát (Screens 5 & 6: Sync -> Investigate -> Resolve -> Cộng hoàn vào P&L NetProfit)
+    var auditListVm = (AuditCaseListViewModel)((ViewResult)await finController.AuditCases(null, null, FinancialAuditCase.StatusOpen, null)).Model!;
+    var targetCase = auditListVm.Cases.First(c => c.Status == FinancialAuditCase.StatusOpen && c.AuditCaseId.HasValue && c.LeakageAmount > 0);
+    var recAmount = targetCase.LeakageAmount;
+    var auditDetailVm = (AuditCaseDetailViewModel)((ViewResult)await finController.AuditDetail(targetCase.AuditCaseId!.Value)).Model!;
+    var resolveRes = await finService.ResolveAuditCaseAsync(new ResolveAuditCaseInputModel
+    {
+        CaseId = targetCase.AuditCaseId.Value,
+        TargetStatus = FinancialAuditCase.StatusResolved,
+        ResolutionType = FinancialAuditCase.ResRecoveredCash,
+        RecoveredAmount = recAmount,
+        InvestigationNote = "Thu ngân bồi hoàn tiền mặt kiểm thử E2E T22"
+    }, adminUser.Id);
+    var afterResolveYearReport = (RevenueReportViewModel)((ViewResult)await finController.Index(new(2026, 1, 1), new(2026, 12, 31), "month")).Model!;
+    Check(auditListVm.Cases.Count >= 5
+        && auditDetailVm.Case.AuditCaseId == targetCase.AuditCaseId
+        && resolveRes.Success
+        && afterResolveYearReport.TotalRecoveredAmount == yearReport.TotalRecoveredAmount + recAmount
+        && afterResolveYearReport.NetProfit == yearReport.NetProfit + recAmount,
+        "T22: E2E Leakage Audit Case workflow (Screens 5 & 6) resolves Open -> Resolved and adds RecoveredAmount back to P&L NetProfit");
+
+    // T23: Luồng End-to-End Quản trị Ngân sách định mức & Kế hoạch Mùa vụ 12 tháng (Screen 7: Budgets CRUD)
+    var budgetVmBefore = (BudgetManagementViewModel)((ViewResult)await finController.Budgets(2026, "2026-04")).Model!;
+    var saveBudgetRes = await finService.SaveMonthlyBudgetAsync(new SaveBudgetInputModel
+    {
+        PeriodMonth = "2026-04",
+        MaintenanceCap = 9500000m,
+        InventoryCogsCap = 14000000m,
+        UtilitiesCap = 9800000m,
+        PayrollCap = 24000000m,
+        RevenueTarget = 82000000m,
+        StrategicFocus = "Cao điểm Mùa Nước T4 (Cập nhật T23)",
+        ActionPlanSummary = "Bổ sung 200 thùng RedBull + Mở gói Combo Đêm Sinh Viên",
+        Status = "Active"
+    }, adminUser.Id);
+    var budgetVmAfter = (BudgetManagementViewModel)((ViewResult)await finController.Budgets(2026, "2026-04")).Model!;
+    Check(budgetVmBefore.Budgets.Count == 12
+        && saveBudgetRes.Success
+        && budgetVmAfter.EditInput.MaintenanceCap == 9500000m
+        && budgetVmAfter.EditInput.StrategicFocus.Contains("T23"),
+        "T23: Monthly Budget & Seasonal Action Plan management (Screen 7) supports full 12-month CRUD and variance tracking");
 
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }
