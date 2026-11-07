@@ -127,10 +127,11 @@ public class LoyaltyService : ILoyaltyService
         int pointsToEarn = (int)Math.Floor(finalAmount / 20000m) * multiplier;
 
         decimal spend12MonthsAfter = currentSpend12M + finalAmount;
-        var resolvedTierAfter = TierHelper.Resolve(tiers, spend12MonthsAfter);
+        int pointsAfter = Math.Max(0, user.RewardPoints - req.PointsToRedeem) + pointsToEarn;
+        var resolvedTierAfter = TierHelper.Resolve(tiers, spend12MonthsAfter, pointsAfter);
         bool willUpgrade = resolvedTierAfter != null && resolvedTierAfter.SpendThreshold > (currentTier?.SpendThreshold ?? 0m);
 
-        var nextTier = tiers.FirstOrDefault(t => t.SpendThreshold > spend12MonthsAfter);
+        var nextTier = tiers.FirstOrDefault(t => t.SpendThreshold > (resolvedTierAfter?.SpendThreshold ?? currentTier?.SpendThreshold ?? 0m));
         string? nextTierName = willUpgrade ? resolvedTierAfter!.TierName : nextTier?.TierName;
         decimal amountNeededForNext = nextTier != null ? Math.Max(0m, nextTier.SpendThreshold - spend12MonthsAfter) : 0m;
 
@@ -440,7 +441,7 @@ public class LoyaltyService : ILoyaltyService
 
     public async Task<int> ProcessPointExpirationsAsync(CancellationToken ct = default)
     {
-        var threshold = DateTime.UtcNow.AddDays(-180);
+        var threshold = DateTime.UtcNow.AddDays(-100);
 
         var expiredUsers = await _db.Users
             .AsNoTracking()
@@ -461,7 +462,7 @@ public class LoyaltyService : ILoyaltyService
                 type: PointTransaction.Expire,
                 referenceCode: $"EXP-{now:yyyyMMdd}-{u.Id}"[..Math.Min(50, $"EXP-{now:yyyyMMdd}-{u.Id}".Length)],
                 invoiceId: null,
-                reason: "Hết hạn điểm thưởng do >180 ngày không phát sinh giao dịch",
+                reason: "Thu hồi điểm thưởng do không giao dịch trên 100 ngày",
                 actorId: null,
                 spendAmount: null,
                 ct: ct);
@@ -471,8 +472,8 @@ public class LoyaltyService : ILoyaltyService
                 _db.Notifications.Add(new Notification
                 {
                     UserId = u.Id,
-                    Title = "Điểm thưởng đã hết hạn",
-                    Content = $"Số điểm thưởng ({u.RewardPoints} điểm) của bạn đã hết hạn do tài khoản không phát sinh thanh toán trong vòng 180 ngày (tính từ lần cuối ngày {u.LastPaidDate?.ToVn():dd/MM/yyyy}).",
+                    Title = "Thu hồi điểm thưởng (>100 ngày không giao dịch)",
+                    Content = $"Số điểm thưởng ({u.RewardPoints} điểm) của bạn đã bị thu hồi do hồ sơ không phát sinh giao dịch trên 100 ngày (tính từ lần cuối ngày {u.LastPaidDate?.ToVn():dd/MM/yyyy}).",
                     Type = "Expire",
                     IsRead = false,
                     CreatedAt = now

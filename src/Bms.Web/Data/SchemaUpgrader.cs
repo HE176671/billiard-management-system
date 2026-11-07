@@ -174,7 +174,7 @@ public static class SchemaUpgrader
                 PointCost int NOT NULL CONSTRAINT CK_RewardItems_Cost CHECK (PointCost > 0),
                 RewardType varchar(20) NOT NULL CONSTRAINT CK_RewardItems_Type CHECK (RewardType IN ('Gift', 'FreeHour', 'BillDiscount')),
                 DiscountValue decimal(18,2) NULL,
-                ValidDays int NOT NULL CONSTRAINT DF_RewardItems_ValidDays DEFAULT 30,
+                ValidDays int NOT NULL CONSTRAINT DF_RewardItems_ValidDays DEFAULT 7,
                 MinTierId int NULL,
                 IsActive bit NOT NULL CONSTRAINT DF_RewardItems_IsActive DEFAULT 1,
                 CONSTRAINT FK_RewardItems_MinTier FOREIGN KEY (MinTierId) REFERENCES dbo.MembershipTiers(Id) ON DELETE NO ACTION
@@ -184,16 +184,16 @@ public static class SchemaUpgrader
         DECLARE @GoldTierId int = (SELECT TOP 1 Id FROM dbo.MembershipTiers WHERE TierName IN (N'Gold', N'Vàng') ORDER BY SpendThreshold DESC, Id DESC);
         IF NOT EXISTS (SELECT 1 FROM dbo.RewardItems WHERE Code = 'DRINK')
             INSERT INTO dbo.RewardItems (Code, Name, Description, PointCost, RewardType, DiscountValue, ValidDays, MinTierId, IsActive)
-            VALUES ('DRINK', N'Nước uống miễn phí', N'1 lon nước ngọt / nước suối / Bò húc tự chọn tại quầy', 20, 'Gift', 20000, 30, NULL, 1);
+            VALUES ('DRINK', N'Nước uống miễn phí', N'1 lon nước ngọt / nước suối / Bò húc tự chọn tại quầy', 20, 'Gift', 20000, 7, NULL, 1);
         IF NOT EXISTS (SELECT 1 FROM dbo.RewardItems WHERE Code = 'SNACK')
             INSERT INTO dbo.RewardItems (Code, Name, Description, PointCost, RewardType, DiscountValue, ValidDays, MinTierId, IsActive)
-            VALUES ('SNACK', N'Đồ ăn nhẹ', N'1 đĩa trái cây / hướng dương / khô gà', 50, 'Gift', 50000, 30, NULL, 1);
+            VALUES ('SNACK', N'Đồ ăn nhẹ', N'1 đĩa trái cây / hướng dương / khô gà', 50, 'Gift', 50000, 7, NULL, 1);
         IF NOT EXISTS (SELECT 1 FROM dbo.RewardItems WHERE Code = 'FREEHOUR')
             INSERT INTO dbo.RewardItems (Code, Name, Description, PointCost, RewardType, DiscountValue, ValidDays, MinTierId, IsActive)
-            VALUES ('FREEHOUR', N'1 giờ chơi miễn phí', N'Giảm tối đa 1 giờ chơi (tối đa 80.000đ) trực tiếp trên hóa đơn', 80, 'FreeHour', 80000, 30, NULL, 1);
+            VALUES ('FREEHOUR', N'1 giờ chơi miễn phí', N'Giảm tối đa 1 giờ chơi (tối đa 80.000đ) trực tiếp trên hóa đơn', 80, 'FreeHour', 80000, 7, NULL, 1);
         IF NOT EXISTS (SELECT 1 FROM dbo.RewardItems WHERE Code = 'VIP_TABLE')
             INSERT INTO dbo.RewardItems (Code, Name, Description, PointCost, RewardType, DiscountValue, ValidDays, MinTierId, IsActive)
-            VALUES ('VIP_TABLE', N'Voucher giảm 150.000đ bàn VIP', N'Ưu đãi đặc quyền dành cho hội viên hạng Gold trở lên', 150, 'BillDiscount', 150000, 30, @GoldTierId, 1);
+            VALUES ('VIP_TABLE', N'Voucher giảm 150.000đ bàn VIP', N'Ưu đãi đặc quyền dành cho hội viên hạng Gold trở lên', 150, 'BillDiscount', 150000, 7, @GoldTierId, 1);
 
         IF OBJECT_ID('dbo.Campaigns', 'U') IS NULL
         BEGIN
@@ -370,6 +370,9 @@ public static class SchemaUpgrader
 
                 IF COL_LENGTH('dbo.Reviews', 'AdminReply') IS NULL
                     ALTER TABLE dbo.Reviews ADD AdminReply nvarchar(max) NULL;
+
+                IF OBJECT_ID('dbo.RewardItems', 'U') IS NOT NULL
+                    UPDATE dbo.RewardItems SET ValidDays = 7 WHERE ValidDays <> 7;
 
                 IF OBJECT_ID('dbo.ComboItems', 'U') IS NULL
                 BEGIN

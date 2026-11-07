@@ -7,10 +7,12 @@ namespace Bms.Web.Services;
 /// <summary>Tiện ích xếp hạng thành viên dùng chung (TierConfig, CustomerManagement, và LoyaltyService ở Bước 5).</summary>
 public static class TierHelper
 {
-    /// <summary>Hạng cao nhất có SpendThreshold &lt;= totalSpend. Trả về null nếu chưa có hạng nào.</summary>
-    public static MembershipTier? Resolve(IEnumerable<MembershipTier> tiers, decimal totalSpend) =>
-        tiers.Where(t => t.SpendThreshold <= totalSpend)
+    /// <summary>Hạng cao nhất có SpendThreshold &lt;= totalSpend hoặc MinPoints &lt;= rewardPoints. Trả về null nếu chưa có hạng nào.</summary>
+    public static MembershipTier? Resolve(IEnumerable<MembershipTier> tiers, decimal totalSpend, int rewardPoints = 0) =>
+        tiers.Where(t => t.SpendThreshold <= totalSpend || (t.MinPoints > 0 && rewardPoints >= t.MinPoints))
              .OrderByDescending(t => t.SpendThreshold)
+             .ThenByDescending(t => t.MinPoints)
+             .ThenByDescending(t => t.SortOrder)
              .FirstOrDefault();
 
     /// <summary>

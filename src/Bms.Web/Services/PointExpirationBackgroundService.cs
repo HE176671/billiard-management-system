@@ -6,11 +6,11 @@ namespace Bms.Web.Services;
 
 /// <summary>
 /// Background Service chạy định kỳ hằng ngày lúc 02:00 giờ Việt Nam (và 15 giây sau khi khởi chạy):
-/// 1. Phát voucher sinh nhật theo hạng (BirthdayVoucherValue > 0).
-/// 2. Cảnh báo điểm sắp hết hạn trước 14 ngày (166 ngày không thanh toán).
-/// 3. Xử lý hết hạn điểm thưởng (> 180 ngày) qua sổ cái.
-/// 4. Chuyển voucher quá hạn sang Expired.
-/// 5. Xét giữ hạng / ân hạn 30 ngày / hạ 1 bậc (vòng đời hạng 12 tháng).
+/// 1. Phát voucher mừng sinh nhật (1 lần/năm, hạn dùng 7 ngày) theo hạng (BirthdayVoucherValue > 0).
+/// 2. Cảnh báo điểm sắp hết hạn trước 14 ngày (86 ngày không thanh toán).
+/// 3. Thu hồi điểm thưởng đối với hồ sơ không giao dịch trên 100 ngày qua sổ cái.
+/// 4. Chuyển trạng thái Voucher quá hạn sang Expired.
+/// 5. Tự động xét giữ hạng 1 tháng, mở 30 ngày ân hạn khi thiếu chi tiêu, hạ tối đa 1 bậc liền kề sau ân hạn.
 /// </summary>
 public class LoyaltyDailyJob : BackgroundService
 {
@@ -106,10 +106,10 @@ public class LoyaltyDailyJob : BackgroundService
             var tierSum = await tierSvc.ProcessDailyTierReviewsAsync(null, ct);
             if (tierSum.RenewedCount + tierSum.EnteredGraceCount + tierSum.DowngradedCount > 0)
             {
-                _logger.LogInformation("LoyaltyDailyJob TierReview: Gia hạn={Renew}, Ân hạn={Grace}, Hạ hạng={Down}.",
+                _logger.LogInformation("LoyaltyDailyJob TierReview (1M): Gia hạn={Renew}, Ân hạn 30 ngày={Grace}, Hạ 1 bậc liền kề={Down}.",
                     tierSum.RenewedCount, tierSum.EnteredGraceCount, tierSum.DowngradedCount);
             }
         }
-        catch (Exception ex) { _logger.LogError(ex, "Lỗi tác vụ xét giữ/hạ hạng 12 tháng."); }
+        catch (Exception ex) { _logger.LogError(ex, "Lỗi tác vụ xét giữ hạng 1 tháng / ân hạn 30 ngày / hạ 1 bậc."); }
     }
 }
