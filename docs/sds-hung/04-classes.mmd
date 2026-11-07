@@ -1,0 +1,86 @@
+classDiagram
+    class IdentityUser {
+        +string Id
+        +string UserName
+        +string Email
+        +string PasswordHash
+        +string SecurityStamp
+        +string ConcurrencyStamp
+    }
+    class ApplicationUser {
+        +string FullName
+        +bool IsActive
+        +DateTime CreatedAtUtc
+        +string EmployeeCode
+        +DateOnly HireDate
+    }
+    class AccountController {
+        -UserManager userManager
+        -SignInManager signInManager
+        +Login(LoginViewModel, returnUrl) Task~IActionResult~
+        +Logout() Task~IActionResult~
+    }
+    class EmployeeController {
+        -UserManager userManager
+        +Create(CreateEmployeeViewModel) Task~IActionResult~
+        +Index(search, status, page) Task~IActionResult~
+        +ToggleLock(id) Task~IActionResult~
+        -GenerateNextEmployeeCodeAsync() Task~string~
+    }
+    class ProfileController {
+        -UserManager userManager
+        -SignInManager signInManager
+        +ChangePassword(ChangePasswordViewModel) Task~IActionResult~
+    }
+    class LoginViewModel {
+        +string Username
+        +string Password
+        +bool RememberMe
+    }
+    class CreateEmployeeViewModel {
+        +string FullName
+        +string UserName
+        +string Email
+        +string PhoneNumber
+        +string EmployeeCode
+        +DateOnly HireDate
+        +string Password
+        +string ConfirmPassword
+    }
+    class ChangePasswordViewModel {
+        +string CurrentPassword
+        +string NewPassword
+        +string ConfirmPassword
+    }
+    class UserManager {
+        +FindByNameAsync(name)
+        +CreateAsync(user, password)
+        +AddToRoleAsync(user, role)
+        +GetUserAsync(principal)
+        +ChangePasswordAsync(user, oldPassword, newPassword)
+    }
+    class SignInManager {
+        +PasswordSignInAsync(user, password, rememberMe, lockoutOnFailure)
+        +RefreshSignInAsync(user)
+        +SignOutAsync()
+    }
+    class IdentityEFStores
+    class IdentityDbContext
+    class ApplicationDbContext {
+        +OnModelCreating(builder)
+    }
+    IdentityUser <|-- ApplicationUser
+    IdentityDbContext <|-- ApplicationDbContext
+    AccountController --> UserManager : DI
+    AccountController --> SignInManager : DI
+    EmployeeController --> UserManager : DI
+    EmployeeController ..> ApplicationDbContext : transaction cần bổ sung
+    ProfileController --> UserManager : DI
+    ProfileController --> SignInManager : DI
+    AccountController ..> LoginViewModel : input
+    EmployeeController ..> CreateEmployeeViewModel : input
+    ProfileController ..> ChangePasswordViewModel : input
+    SignInManager --> UserManager : sử dụng
+    UserManager --> IdentityEFStores : sử dụng
+    IdentityEFStores --> ApplicationDbContext : cùng scoped context
+    ApplicationDbContext ..> ApplicationUser : mapping

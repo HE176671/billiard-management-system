@@ -1,0 +1,288 @@
+@model Bms.Web.Models.CrmDashboardViewModel
+@using System.Text.Json
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Thống kê hội viên";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="text-muted" style="font-size:0.85rem">
+        Số liệu tổng hợp trong 12 tháng gần nhất theo lịch sử giao dịch hội viên
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-controller="Campaign" asp-action="Index" asp-route-segment="AtRisk" class="btn-primary-bms">
+            <i class="bi bi-megaphone"></i> Gửi ưu đãi khách vắng mặt
+        </a>
+    </div>
+</div>
+
+<!-- ═══════════ 4 CHỈ SỐ TỔNG QUAN ═══════════ -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon blue"><i class="bi bi-people"></i></div>
+            <div>
+                <div class="stat-value">@VnFormat.Number(Model.TotalMembers)</div>
+                <div class="stat-label">Tổng số hội viên</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-person-plus"></i></div>
+            <div>
+                <div class="stat-value">+@VnFormat.Number(Model.NewMembersThisMonth)</div>
+                <div class="stat-label">Đăng ký mới trong tháng</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="bi bi-arrow-repeat"></i></div>
+            <div>
+                <div class="stat-value">@Model.RepeatRate30DaysPercent.ToString("0.#")%</div>
+                <div class="stat-label">Tỷ lệ khách quay lại 30 ngày (@Model.RepeatCustomers30Days/@Model.ActiveCustomers30Days)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-coin"></i></div>
+            <div>
+                <div class="stat-value" style="font-size:1.25rem">@VnFormat.Number(Model.TotalCirculatingPoints) điểm</div>
+                <div class="stat-label">Điểm đang lưu hành (≈ <strong>@VnFormat.Money(Model.LiabilityVnd)</strong>)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════ 3 BIỂU ĐỒ THỐNG KÊ ═══════════ -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="data-card p-3 h-100">
+            <div class="fw-semibold mb-1" style="font-size:0.9rem">Nhóm hội viên theo tần suất ghé</div>
+            <div class="text-muted mb-2" style="font-size:0.75rem">Bấm vào từng nhóm để xem danh sách chi tiết</div>
+            <div style="height:220px"><canvas id="rfmChart"></canvas></div>
+            <div class="d-flex flex-wrap gap-1 mt-3 justify-content-center">
+                @foreach (var kv in Model.SegmentCounts)
+                {
+                    var (style, _) = CustomerSegmentService.GetSegmentMeta(kv.Key);
+                    <a asp-controller="CustomerManagement" asp-action="Index" asp-route-segment="@kv.Key"
+                       class="text-decoration-none" style="@style;padding:2px 9px;border-radius:6px;font-size:0.72rem;font-weight:600">
+                        @VnFormat.SegmentLabel(kv.Key): @kv.Value
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="data-card p-3 h-100">
+            <div class="fw-semibold mb-1" style="font-size:0.9rem">Cơ cấu hạng thành viên</div>
+            <div class="text-muted mb-2" style="font-size:0.75rem">Theo mức chi tiêu tích lũy 12 tháng</div>
+            <div style="height:240px"><canvas id="tierBarChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="data-card p-3 h-100">
+            <div class="fw-semibold mb-1" style="font-size:0.9rem">Điểm tích lũy &amp; đổi điểm (6 tháng)</div>
+            <div class="text-muted mb-2" style="font-size:0.75rem">So sánh lượng điểm cấp ra và điểm khách đã sử dụng</div>
+            <div style="height:240px"><canvas id="pointsLineChart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════ 2 BẢNG DANH SÁCH TIÊU BIỂU ═══════════ -->
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="data-card">
+            <div class="data-card-header">
+                <span class="data-card-title"><i class="bi bi-award text-warning me-2"></i>10 hội viên chi tiêu cao nhất (12 tháng)</span>
+            </div>
+            @if (!Model.TopSpenders12M.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    Chưa có giao dịch tích điểm trong 12 tháng qua.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Hội viên</th>
+                                <th>Hạng</th>
+                                <th>Nhóm</th>
+                                <th class="text-end">Số lượt</th>
+                                <th class="text-end">Tổng mức chi tiêu</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in Model.TopSpenders12M)
+                            {
+                                <tr>
+                                    <td>
+                                        <a asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@c.CustomerId" class="fw-semibold text-dark text-decoration-none">
+                                            @c.FullName
+                                        </a>
+                                        <div class="text-muted" style="font-size:0.75rem">@(c.PhoneNumber ?? "—")</div>
+                                    </td>
+                                    <td><span style="@(VnFormat.TierBadgeStyle(c.TierName));padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600">@c.TierName</span></td>
+                                    <td><span style="@c.BadgeStyle;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600">@VnFormat.SegmentLabel(c.Segment)</span></td>
+                                    <td class="text-end">@c.Frequency12M</td>
+                                    <td class="text-end fw-bold text-success">@VnFormat.Money(c.Monetary12M)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="data-card">
+            <div class="data-card-header">
+                <span class="data-card-title"><i class="bi bi-clock-history text-danger me-2"></i>Khách quen vắng mặt trên 30 ngày</span>
+                <a asp-controller="Campaign" asp-action="Index" asp-route-segment="AtRisk" class="btn-primary-bms py-1 px-2" style="font-size:0.75rem">
+                    <i class="bi bi-send"></i> Gửi ưu đãi
+                </a>
+            </div>
+            @if (!Model.HighValueAtRisk.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    Hiện không có khách quen nào vắng mặt từ 30 đến 90 ngày.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Hội viên</th>
+                                <th>Lần ghé cuối</th>
+                                <th class="text-end">Số lượt</th>
+                                <th class="text-end">Tổng mức chi tiêu</th>
+                                <th class="text-end">Hồ sơ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in Model.HighValueAtRisk)
+                            {
+                                <tr>
+                                    <td>
+                                        <a asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@c.CustomerId" class="fw-semibold text-dark text-decoration-none">
+                                            @c.FullName
+                                        </a>
+                                        <div class="text-muted" style="font-size:0.75rem">@(c.PhoneNumber ?? "—") · Hạng @c.TierName</div>
+                                    </td>
+                                    <td><span class="text-danger fw-semibold">@(c.RecencyDays ?? 0) ngày trước</span></td>
+                                    <td class="text-end">@c.Frequency12M lượt</td>
+                                    <td class="text-end fw-semibold">@VnFormat.Money(c.Monetary12M)</td>
+                                    <td class="text-end">
+                                        <a asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@c.CustomerId" class="btn-sm-icon" title="Xem hồ sơ">
+                                            <i class="bi bi-person-vcard"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+    (function () {
+        const segKeys = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Keys));
+        const segLabels = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Keys.Select(VnFormat.SegmentLabel)));
+        const segValues = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Values));
+        const segColors = ['#9333ea', '#16a34a', '#2563eb', '#ea580c'];
+
+        const rfmCtx = document.getElementById('rfmChart');
+        if (rfmCtx) {
+            new Chart(rfmCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: segLabels,
+                    datasets: [{ data: segValues, backgroundColor: segColors, borderWidth: 1 }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const idx = elements[0].index;
+                            const seg = segKeys[idx];
+                            window.location.href = '/CustomerManagement?segment=' + encodeURIComponent(seg);
+                        }
+                    },
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }
+                }
+            });
+        }
+
+        const tierLabels = @Html.Raw(JsonSerializer.Serialize(Model.TierCounts.Select(x => x.TierName)));
+        const tierValues = @Html.Raw(JsonSerializer.Serialize(Model.TierCounts.Select(x => x.Count)));
+        const tierColors = @Html.Raw(JsonSerializer.Serialize(Model.TierCounts.Select(x => x.ColorHex)));
+
+        const tierCtx = document.getElementById('tierBarChart');
+        if (tierCtx) {
+            new Chart(tierCtx, {
+                type: 'bar',
+                data: {
+                    labels: tierLabels,
+                    datasets: [{ label: 'Số hội viên', data: tierValues, backgroundColor: tierColors, borderRadius: 6 }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
+        }
+
+        const flowLabels = @Html.Raw(JsonSerializer.Serialize(Model.MonthlyPointsFlow.Select(x => x.MonthLabel)));
+        const flowEarned = @Html.Raw(JsonSerializer.Serialize(Model.MonthlyPointsFlow.Select(x => x.EarnedPoints)));
+        const flowRedeemed = @Html.Raw(JsonSerializer.Serialize(Model.MonthlyPointsFlow.Select(x => x.RedeemedPoints)));
+
+        const lineCtx = document.getElementById('pointsLineChart');
+        if (lineCtx) {
+            new Chart(lineCtx, {
+                type: 'line',
+                data: {
+                    labels: flowLabels,
+                    datasets: [
+                        { label: 'Điểm tích lũy', data: flowEarned, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true },
+                        { label: 'Điểm đã đổi', data: flowRedeemed, borderColor: '#e94560', backgroundColor: 'rgba(233,69,96,0.1)', tension: 0.3, fill: true }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+    })();
+</script>
+}
+

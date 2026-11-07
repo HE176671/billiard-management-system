@@ -2,8 +2,8 @@
 @{
     Layout = "_AdminLayout";
     ViewData["Title"] = "Gọi món tại quầy & Quản lý F&B";
-    var activeSessions = ViewBag.ActiveSessions as List<Bms.Web.Data.PlaySession> ?? new();
-    var selectedSession = ViewBag.SelectedSession as Bms.Web.Data.PlaySession;
+    var activeSessions = ViewBag.ActiveSessions as List<Bms.Web.Data.Entities.PlaySession> ?? new();
+    var selectedSession = ViewBag.SelectedSession as Bms.Web.Data.Entities.PlaySession;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">

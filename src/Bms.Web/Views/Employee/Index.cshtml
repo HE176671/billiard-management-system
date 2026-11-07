@@ -11,6 +11,13 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 }
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
 
 <!-- Stat cards -->
 <div class="row g-3 mb-4">
@@ -120,6 +127,14 @@
                                        class="btn-sm-icon" title="Đặt lại mật khẩu">
                                         <i class="bi bi-key"></i>
                                     </a>
+                                    <form asp-action="Delete" asp-route-id="@emp.Id"
+                                          method="post" class="d-inline"
+                                          onsubmit="return confirm('Bạn có chắc chắn muốn xóa vĩnh viễn nhân viên @emp.FullName không?\n\nCảnh báo: Hành động này không thể hoàn tác!')">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn-sm-icon text-danger" title="Xóa nhân viên">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>

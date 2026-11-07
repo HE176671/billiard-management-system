@@ -15,16 +15,16 @@ public class HomeController : Controller
 
     public IActionResult Index()
     {
-        if (User.Identity?.IsAuthenticated == true)
+        if (User.Identity != null && User.Identity.IsAuthenticated)
         {
-            if (User.IsInRole("Admin"))
-                return RedirectToAction("Index", "Employee");
-            if (User.IsInRole("Staff"))
-                return RedirectToAction("Index", "Staff");
-            if (User.IsInRole("Customer"))
-                return RedirectToAction("Index", "CustomerProfile");
+            if (User.IsInRole("Admin")) return RedirectToAction("Index", "RoleManagement");
+            if (User.IsInRole("Manager")) return RedirectToAction("Index", "Dashboard");
+            if (User.IsInRole("Staff")) return RedirectToAction("Index", "Staff");
+            if (User.IsInRole("Customer")) return RedirectToAction("Index", "CustomerProfile");
         }
-        return View();
+        
+        // Nếu chưa đăng nhập, tự động chuyển ra màn Login nội bộ
+        return RedirectToAction("Login", "Account");
     }
 
     public IActionResult Privacy()

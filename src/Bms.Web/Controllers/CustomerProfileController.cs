@@ -63,7 +63,7 @@ public class CustomerProfileController : Controller
 
         var totalPoints = await CalcTotalPointsAsync(user.Id);
 
-        var vm = new EditProfileViewModel
+        var vm = new CustomerEditProfileViewModel
         {
             FullName     = user.FullName,
             Email        = user.Email ?? string.Empty,
@@ -80,7 +80,7 @@ public class CustomerProfileController : Controller
     // POST /CustomerProfile/Edit
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(EditProfileViewModel model)
+    public async Task<IActionResult> Edit(CustomerEditProfileViewModel model)
     {
         // Validate server-side (FR-00.4)
         if (!ModelState.IsValid)
@@ -156,7 +156,7 @@ public class CustomerProfileController : Controller
         return sessions.Sum(a => LoyaltyConstants.CalcSessionPoints(a));
     }
 
-    private async Task RestoreReadOnlyFields(EditProfileViewModel model)
+    private async Task RestoreReadOnlyFields(CustomerEditProfileViewModel model)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return;

@@ -1,4 +1,4 @@
-﻿# Hướng dẫn cài đặt cho thành viên nhóm BMS
+# Hướng dẫn cài đặt cho thành viên nhóm BMS
 
 ## Yêu cầu cần có trên máy
 - .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0
@@ -26,17 +26,10 @@ git pull
 
 ## Bước 2 — Tạo database trên máy bạn
 
-Chạy lần lượt 3 lệnh sau (mỗi lệnh chờ xong mới chạy lệnh tiếp):
+Chạy lệnh sau để tạo và nạp dữ liệu mẫu cho Database:
 
 ```powershell
-sqlcmd -S 'localhost\SQLEXPRESS' -E -C -l 5 -b -f 65001 -i 'BMS_Database_Starter/01_CreateDatabase.sql'
-sqlcmd -S 'localhost\SQLEXPRESS' -E -C -l 5 -b -f 65001 -i 'BMS_Database_Starter/02_BusinessProcedures.sql'
-sqlcmd -S 'localhost\SQLEXPRESS' -E -C -l 5 -b -f 65001 -i 'BMS_Database_Starter/03_DemoData.sql'
-```
-
-Kiểm tra kết quả:
-```powershell
-sqlcmd -S 'localhost\SQLEXPRESS' -E -C -l 5 -b -f 65001 -i 'BMS_Database_Starter/04_Verify.sql'
+sqlcmd -S 'localhost\SQLEXPRESS' -E -C -l 5 -b -f 65001 -i 'BMS_Database_Starter/BilliardDB_Full.sql'
 ```
 
 > Nếu SQL Server của bạn không phải SQLEXPRESS, đổi tên instance cho đúng.

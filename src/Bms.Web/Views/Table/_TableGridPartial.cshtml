@@ -1,0 +1,94 @@
+@using System.Globalization
+@using Bms.Web.Models
+@model List<TableCardViewModel>
+@{
+    // =========================================================================
+    // PHẦN 1: CHUẨN HÓA THỜI GIAN SERVER (UTC ISO)
+    // =========================================================================
+    var firstTable = Model?.FirstOrDefault();
+    var serverTime = firstTable != null && firstTable.ServerTimeUtc != default
+        ? firstTable.ServerTimeUtc
+        : DateTime.UtcNow;
+
+    var serverTimeUtc = serverTime.Kind == DateTimeKind.Utc
+        ? serverTime
+        : DateTime.SpecifyKind(serverTime, DateTimeKind.Utc);
+
+    var serverTimeIso = serverTimeUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+}
+
+<!-- ===================================================================== -->
+<!-- PHẦN 2: VÒNG LẶP HIỂN THỊ DANH SÁCH THẺ BÀN (TABLE-CARD)              -->
+<!-- ===================================================================== -->
+<div class="table-grid" id="table-grid" data-server-time="@serverTimeIso">
+    @if (Model != null && Model.Count > 0)
+    {
+        @foreach (var table in Model)
+        {
+            var statusClass = table.Status switch
+            {
+                "Available" => "status-available",
+                "InUse" => "status-inuse",
+                "AwaitingPayment" => "status-awaitingpayment",
+                "Maintenance" => "status-maintenance",
+                "Inactive" => "status-inactive",
+                _ => "status-unknown"
+            };
+
+            string? sessionStartIso = null;
+            if (table.SessionStartUtc.HasValue)
+            {
+                var startUtc = table.SessionStartUtc.Value.Kind == DateTimeKind.Utc
+                    ? table.SessionStartUtc.Value
+                    : DateTime.SpecifyKind(table.SessionStartUtc.Value, DateTimeKind.Utc);
+                sessionStartIso = startUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+            }
+
+            <div class="table-card @statusClass"
+                 tabindex="0"
+                 role="button"
+                 aria-label="Bàn @table.TableCode, @table.DisplayStatus"
+                 data-table-id="@table.Id"
+                 data-table-code="@table.TableCode"
+                 data-table-type="@table.TableTypeName"
+                 data-floor="@table.FloorNumber"
+                 data-hourly-rate="@table.HourlyRate.ToString(CultureInfo.InvariantCulture)"
+                 data-status="@table.Status"
+                 data-display-status="@table.DisplayStatus"
+                 data-has-combo="@(table.HasCombo ? "true" : "false")"
+                 data-combo-minutes="@table.TotalComboMinutes"
+                 @if (!string.IsNullOrEmpty(sessionStartIso)) { <text>data-session-start="@sessionStartIso"</text> }>
+                <div class="table-card-top">
+                    <span class="table-code" title="@table.TableCode">@table.TableCode</span>
+                    <div class="table-top-meta">
+                        @if (table.HasCombo)
+                        {
+                            <span class="table-mode-badge" title="@table.ComboSummaryText">
+                                🎁 Combo
+                            </span>
+                        }
+                        <span class="table-type" title="@table.TableTypeName">@table.TableTypeName</span>
+                    </div>
+                </div>
+                <div class="table-card-info">
+                    <div class="table-info-row">
+                        <span class="info-label">Trạng thái:</span>
+                        <span class="info-value status-text">@table.DisplayStatus</span>
+                    </div>
+                    <div class="table-info-row">
+                        <span class="info-label">Giờ chơi:</span>
+                        <span class="info-value table-clock" id="clock-@table.Id"></span>
+                    </div>
+                    <div class="table-info-row table-remaining-row @(table.HasCombo ? "" : "table-remaining-placeholder")">
+                        <span class="info-label remaining-label">Giờ Combo:</span>
+                        <span class="info-value table-remaining" id="remaining-@table.Id"></span>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="no-tables-message">Không có dữ liệu bàn.</div>
+    }
+</div>
