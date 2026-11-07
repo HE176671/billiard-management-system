@@ -104,8 +104,8 @@
         <div class="stat-card">
             <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
             <div>
-                <div class="stat-value" style="font-size:1.25rem">@VnFormat.Money(Model.Spend12Months)</div>
-                <div class="stat-label">Chi tiêu 12 tháng (Tổng: @VnFormat.Money(Model.TotalSpendLifetime))</div>
+                <div class="stat-value" style="font-size:1.25rem">@VnFormat.Money(Math.Max(Model.TotalSpendLifetime, Model.Spend12Months))</div>
+                <div class="stat-label">Tổng mức chi tiêu của khách hàng</div>
             </div>
         </div>
     </div>
@@ -147,7 +147,7 @@
         <span>
             @if (Model.NextTierName != null)
             {
-                <span>Cần thêm <strong>@VnFormat.Money(Model.AmountToNextTier)</strong> chi tiêu trong 12 tháng để lên hạng <strong>@Model.NextTierName</strong></span>
+                <span>Cần thêm <strong>@VnFormat.Money(Model.AmountToNextTier)</strong> tổng mức chi tiêu để lên hạng <strong>@Model.NextTierName</strong></span>
             }
             else
             {

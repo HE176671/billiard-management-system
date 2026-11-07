@@ -1,7 +1,7 @@
 @model Bms.Web.Models.CustomerManagementViewModel
 @using Bms.Web.Services
 @{
-    ViewData["Title"] = "Danh sách hội viên";
+    ViewData["Title"] = "Tra cứu hội viên";
     Layout = "_AdminLayout";
     var form = Model.Form;
     var selectedId = form?.Id;
@@ -32,11 +32,11 @@
 }
 
 <div class="row g-3">
-    <!-- ═══════════ Danh sách hội viên ═══════════ -->
+    <!-- ═══════════ Tra cứu hội viên ═══════════ -->
     <div class="col-12">
         <div class="data-card">
             <div class="data-card-header">
-                <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách hội viên (@Model.TotalCount)</span>
+                <span class="data-card-title"><i class="bi bi-people me-2"></i>Tra cứu hội viên (@Model.TotalCount)</span>
                 <div class="d-flex gap-2 flex-wrap">
                     <button type="button" class="btn-primary-bms" data-bs-toggle="modal" data-bs-target="#quickEnrollModal">
                         <i class="bi bi-person-plus"></i> + Đăng ký hội viên mới (CCCD 18+)
@@ -98,7 +98,6 @@
                                 <th>Email &amp; Ngày sinh</th>
                                 <th>Hạng</th>
                                 <th>Nhóm khách</th>
-                                <th class="text-end">Chi tiêu 12T</th>
                                 <th class="text-end">Điểm</th>
                                 <th class="text-end">Thao tác</th>
                             </tr>
@@ -130,7 +129,6 @@
                                     <td>
                                         <span style="@(c.SegmentStyle);padding:2px 10px;border-radius:6px;font-size:0.75rem;font-weight:600">@VnFormat.SegmentLabel(c.Segment)</span>
                                     </td>
-                                    <td class="text-end text-muted">@VnFormat.Money(c.Spend12M)</td>
                                     <td class="text-end fw-semibold">@VnFormat.Number(c.RewardPoints)</td>
                                     <td class="text-end text-nowrap">
                                         <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@c.Id" asp-route-customerMode="member"

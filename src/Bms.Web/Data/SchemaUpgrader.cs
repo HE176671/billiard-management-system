@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Data;
@@ -457,5 +460,117 @@ public static class SchemaUpgrader
         {
             logger.LogWarning(ex, "Không thể tự khởi tạo dữ liệu mẫu Role Manager / Gậy cho thuê / Combo.");
         }
+
+        // 4. Chuẩn hóa dữ liệu Gmail hội viên (sửa email sai định dạng / thiếu email -> @gmail.com) & đồng bộ Tổng mức chi tiêu
+        try
+        {
+            await NormalizeCustomerDataAsync(db);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Không thể chuẩn hóa dữ liệu email hội viên.");
+        }
+    }
+
+    private static async Task NormalizeCustomerDataAsync(ApplicationDbContext db)
+    {
+        var customerRoleId = await db.Roles.AsNoTracking()
+            .Where(r => r.Name == "Customer")
+            .Select(r => r.Id)
+            .FirstOrDefaultAsync();
+        if (string.IsNullOrEmpty(customerRoleId)) return;
+
+        var customers = await db.Users
+            .Where(u => db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == customerRoleId))
+            .ToListAsync();
+
+        var earnTotals = await db.PointTransactions.AsNoTracking()
+            .Where(t => t.TransactionType == "Earn" && t.SpendAmount != null)
+            .GroupBy(t => t.CustomerId)
+            .Select(g => new { CustomerId = g.Key, Total = g.Sum(t => t.SpendAmount ?? 0m) })
+            .ToDictionaryAsync(x => x.CustomerId, x => x.Total);
+
+        var strictGmailRx = new Regex(@"^[a-zA-Z0-9._%+\-]+@gmail\.com$", RegexOptions.IgnoreCase);
+        var strictNameRx = new Regex(@"^[\p{L}\p{M}]+(\s+[\p{L}\p{M}]+)*$");
+        var usedEmails = new HashSet<string>(
+            await db.Users.AsNoTracking()
+                .Where(u => u.Email != null)
+                .Select(u => u.Email!.ToLowerInvariant())
+                .ToListAsync(),
+            StringComparer.OrdinalIgnoreCase);
+
+        bool changed = false;
+        int seq = 1;
+        foreach (var u in customers)
+        {
+            // Sửa họ tên nếu chứa số/ký tự lạ từ dữ liệu test cũ
+            if (string.IsNullOrWhiteSpace(u.FullName) || !strictNameRx.IsMatch(u.FullName.Trim()))
+            {
+                u.FullName = $"Nguyễn Minh Quân";
+                changed = true;
+            }
+
+            // Chuẩn hóa Email sang @gmail.com nếu bị trống, dùng domain nội bộ (.local, .test) hoặc sai định dạng Gmail
+            string currentEmail = (u.Email ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(currentEmail) || !strictGmailRx.IsMatch(currentEmail))
+            {
+                string slug = ToAsciiSlug(u.FullName);
+                if (string.IsNullOrEmpty(slug)) slug = "hoivienbms";
+
+                string phoneSuffix = string.Empty;
+                if (!string.IsNullOrWhiteSpace(u.PhoneNumber) && u.PhoneNumber.Length >= 3)
+                {
+                    var digits = new string(u.PhoneNumber.Where(char.IsDigit).ToArray());
+                    if (digits.Length >= 3) phoneSuffix = digits[^3..];
+                }
+                if (string.IsNullOrEmpty(phoneSuffix))
+                {
+                    phoneSuffix = (100 + seq).ToString();
+                }
+
+                string candidate = $"{slug}{phoneSuffix}@gmail.com";
+                int dup = 1;
+                while (usedEmails.Contains(candidate))
+                {
+                    dup++;
+                    candidate = $"{slug}{phoneSuffix}.{dup}@gmail.com";
+                }
+
+                usedEmails.Add(candidate);
+                u.Email = candidate;
+                u.NormalizedEmail = candidate.ToUpperInvariant();
+                changed = true;
+            }
+
+            // Đồng bộ Tổng mức chi tiêu (TotalSpend)
+            if (earnTotals.TryGetValue(u.Id, out var calcTotal) && calcTotal > u.TotalSpend)
+            {
+                u.TotalSpend = calcTotal;
+                changed = true;
+            }
+
+            seq++;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static string ToAsciiSlug(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        string normalized = input.Trim().Replace('đ', 'd').Replace('Đ', 'D').Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder();
+        foreach (char c in normalized)
+        {
+            var cat = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (cat != UnicodeCategory.NonSpacingMark && char.IsLetter(c) && c <= 'z')
+            {
+                sb.Append(char.ToLowerInvariant(c));
+            }
+        }
+        return sb.ToString();
     }
 }
