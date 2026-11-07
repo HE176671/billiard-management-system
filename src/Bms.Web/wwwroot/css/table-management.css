@@ -1114,3 +1114,70 @@ html, body {
     font-weight: 600;
 }
 
+/* ==========================================================================
+   Form Chọn Combo & Danh sách Combo đã chọn
+   ========================================================================== */
+.combo-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.combo-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.detail-combos-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.combo-purchase-card {
+    padding: 0.5rem 0.65rem;
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #f59e0b;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.combo-purchase-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.combo-purchase-name {
+    font-weight: 700;
+    color: var(--bg-dark);
+}
+
+.combo-purchase-price {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 700;
+    color: #047857;
+    white-space: nowrap;
+}
+
+.combo-purchase-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.combo-purchase-items {
+    font-size: 0.78rem;
+    color: #334155;
+    margin-top: 0.25rem;
+    padding-top: 0.2rem;
+    border-top: 1px dashed #e2e8f0;
+}
+
+

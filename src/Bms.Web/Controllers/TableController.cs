@@ -21,7 +21,7 @@ public class TableController : Controller
     }
 
     // =========================================================================
-    // PHẦN 2: CÁC ACTION [HttpGet] — HIỂN THỊ TRANG, LƯỚI BÀN & CHI TIẾT PHIÊN CHƠI
+    // PHẦN 2: CÁC ACTION [HttpGet] — HIỂN THỊ TRANG, LƯỚI BÀN, CHI TIẾT, COMBO & KHÁCH HÀNG
     // =========================================================================
 
     // GET: /Table
@@ -59,6 +59,22 @@ public class TableController : Controller
         return Json(detail);
     }
 
+    // GET: /Table/GetActiveCombos
+    [HttpGet]
+    public async Task<IActionResult> GetActiveCombos()
+    {
+        var combos = await _tableSessionService.GetActiveCombosAsync();
+        return Json(TableOperationResult.Ok(combos));
+    }
+
+    // GET: /Table/SearchCustomers?keyword=090
+    [HttpGet]
+    public async Task<IActionResult> SearchCustomers([FromQuery] string? keyword)
+    {
+        var customers = await _tableSessionService.SearchCustomersAsync(keyword);
+        return Json(TableOperationResult.Ok(customers));
+    }
+
     // GET: /Table/GetCloseSummary?sessionId=1
     [HttpGet]
     public async Task<IActionResult> GetCloseSummary([FromQuery] int sessionId)
@@ -78,7 +94,7 @@ public class TableController : Controller
     }
 
     // =========================================================================
-    // PHẦN 3: CÁC ACTION [HttpPost] — MỞ BÀN, ĐÓNG BÀN & CHUYỂN BÀN
+    // PHẦN 3: CÁC ACTION [HttpPost] — MỞ BÀN, ĐÓNG BÀN, CHUYỂN BÀN & CHỌN COMBO
     // =========================================================================
 
     // POST: /Table/OpenSession
@@ -97,7 +113,7 @@ public class TableController : Controller
             return Unauthorized();
         }
 
-        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, request.BookingId);
+        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, request.CustomerId);
         return Json(result);
     }
 
@@ -133,6 +149,26 @@ public class TableController : Controller
         }
 
         var result = await _tableSessionService.TransferSessionAsync(request.SessionId, request.NewTableId, staffId);
+        return Json(result);
+    }
+
+    // POST: /Table/AddSessionCombo
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddSessionCombo([FromForm] AddSessionComboRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return Json(TableOperationResult.Fail(null, "Dữ liệu gửi lên không hợp lệ.", false));
+        }
+
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(staffId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _tableSessionService.AddSessionComboAsync(request.SessionId, request.ComboId, request.Quantity, staffId);
         return Json(result);
     }
 }

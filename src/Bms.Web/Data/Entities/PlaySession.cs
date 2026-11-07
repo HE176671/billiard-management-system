@@ -48,4 +48,7 @@ public class PlaySession
 
     [InverseProperty(nameof(PlaySessionTableSegment.PlaySession))]
     public ICollection<PlaySessionTableSegment> Segments { get; set; } = [];
+
+    [InverseProperty(nameof(SessionCombo.PlaySession))]
+    public ICollection<SessionCombo> SessionCombos { get; set; } = [];
 }

@@ -218,39 +218,21 @@
         <span class="logo-sub">Billiard Management System</span>
     </div>
     <div class="sidebar-nav">
-        @if (User.IsInRole("Customer"))
-        {
-            <div class="nav-section-label">Khách hàng</div>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Customer" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")"
-               asp-controller="Customer" asp-action="Index">
-                <i class="bi bi-calendar-plus"></i> Đặt bàn mới
-            </a>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Customer" && ViewContext.RouteData.Values["action"]?.ToString() == "History" ? "active" : "")"
-               asp-controller="Customer" asp-action="History">
-                <i class="bi bi-clock-history"></i> Lịch đặt bàn của tôi
-            </a>
-        }
-        else
-        {
-            @if (User.IsInRole("Admin"))
-            {
-                <div class="nav-section-label">Admin</div>
-                <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
-                   asp-controller="Employee" asp-action="Index">
-                    <i class="bi bi-people"></i> Nhân viên
-                </a>
-            }
+        <div class="nav-section-label">Admin</div>
+        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Employee" ? "active" : "")"
+           asp-controller="Employee" asp-action="Index">
+            <i class="bi bi-people"></i> Nhân viên
+        </a>
 
-            <div class="nav-section-label">Nghiệp vụ</div>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
-               asp-controller="Table" asp-action="Index">
-                <i class="bi bi-grid-3x3"></i> Quản lý bàn
-            </a>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Booking" ? "active" : "")"
-               asp-controller="Booking" asp-action="Index">
-                <i class="bi bi-calendar-check"></i> Quản lý đặt bàn
-            </a>
-        }
+        <div class="nav-section-label">Nghiệp vụ</div>
+        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Table" ? "active" : "")"
+           asp-controller="Table" asp-action="Index">
+            <i class="bi bi-grid-3x3"></i> Quản lý bàn
+        </a>
+        <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Menu" ? "active" : "")"
+           href="#">
+            <i class="bi bi-cup-straw"></i> Thực đơn
+        </a>
     </div>
     <div class="sidebar-footer">
         @{

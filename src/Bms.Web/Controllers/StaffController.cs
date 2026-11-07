@@ -11,10 +11,4 @@ public class StaffController : Controller
     {
         return RedirectToAction("Index", "Table");
     }
-
-    // GET /Staff/Bookings
-    public IActionResult Bookings()
-    {
-        return RedirectToAction("Index", "Booking");
-    }
 }

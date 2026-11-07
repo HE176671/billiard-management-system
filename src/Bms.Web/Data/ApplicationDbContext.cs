@@ -12,9 +12,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<TableType> TableTypes => Set<TableType>();
     public DbSet<BilliardTable> BilliardTables => Set<BilliardTable>();
-    public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<PlaySession> PlaySessions => Set<PlaySession>();
     public DbSet<PlaySessionTableSegment> PlaySessionTableSegments => Set<PlaySessionTableSegment>();
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<Combo> Combos => Set<Combo>();
+    public DbSet<ComboItem> ComboItems => Set<ComboItem>();
+    public DbSet<SessionCombo> SessionCombos => Set<SessionCombo>();
+    public DbSet<SessionComboItem> SessionComboItems => Set<SessionComboItem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -35,5 +39,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<IdentityUserLogin<string>>().Property(x => x.ProviderKey).HasMaxLength(128);
         builder.Entity<IdentityUserToken<string>>().Property(x => x.LoginProvider).HasMaxLength(128);
         builder.Entity<IdentityUserToken<string>>().Property(x => x.Name).HasMaxLength(128);
+
+        builder.Entity<ComboItem>().HasKey(x => new { x.ComboId, x.ProductId });
+        builder.Entity<SessionComboItem>().HasKey(x => new { x.SessionComboId, x.ProductId });
     }
 }
