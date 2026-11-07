@@ -486,7 +486,7 @@
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form asp-controller="CustomerManagement" asp-action="QuickEnroll" method="post">
+            <form asp-controller="CustomerManagement" asp-action="QuickEnroll" method="post" id="checkoutEnrollForm" novalidate>
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="ReturnTo" value="checkout" />
                 <input type="hidden" name="SessionId" value="@Model.SelectedSessionId" />
@@ -495,25 +495,33 @@
                         <i class="bi bi-person-vcard me-1"></i>
                         Khách hàng để lại <strong>SĐT, Email, Họ tên, Ngày tháng năm sinh</strong> và nhân viên kiểm tra <strong>CCCD đủ 18 tuổi</strong> ở ngoài. Sau khi tạo xong sẽ tự động chuyển về màn thanh toán cho hội viên này (+10 điểm chào mừng).
                     </div>
+                    <div id="checkoutEnrollSyntaxAlert" class="alert alert-danger py-2 mb-3 d-none" style="font-size:0.8rem"></div>
                     <div class="mb-3">
                         <label class="form-label">Số điện thoại <span class="text-danger">*</span></label>
-                        <input type="text" name="PhoneNumber" class="form-control"
-                               pattern="^0\d{9}$" maxlength="10" placeholder="0901234567" required />
+                        <input type="text" name="PhoneNumber" id="chkEnrollPhone" class="form-control"
+                               maxlength="10" placeholder="0901234567" autocomplete="off" required />
+                        <div id="errChkEnrollPhone" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Chỉ được 10 chữ số và bắt đầu từ số 0, không chứa chữ cái hay ký tự đặc biệt.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Họ và tên khách hàng (theo CCCD) <span class="text-danger">*</span></label>
-                        <input type="text" name="FullName" class="form-control"
-                               maxlength="100" placeholder="Nguyễn Văn A" required />
+                        <input type="text" name="FullName" id="chkEnrollName" class="form-control"
+                               maxlength="100" placeholder="Nguyễn Văn A" autocomplete="off" required />
+                        <div id="errChkEnrollName" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Nhập theo định dạng chữ cái (VD: Nguyễn Văn A), không nhập số hay ký tự đặc biệt.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Email <span class="text-danger">*</span></label>
-                        <input type="email" name="Email" class="form-control"
-                               maxlength="256" placeholder="khachhang@gmail.com" required />
+                        <input type="text" name="Email" id="chkEnrollEmail" class="form-control"
+                               maxlength="256" placeholder="khachhang@gmail.com" autocomplete="off" required />
+                        <div id="errChkEnrollEmail" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Nhập đúng định dạng email hợp lệ (VD: khachhang@gmail.com).</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Ngày tháng năm sinh (theo CCCD — đủ 18 tuổi) <span class="text-danger">*</span></label>
-                        <input type="date" name="DateOfBirth" class="form-control"
+                        <input type="date" name="DateOfBirth" id="chkEnrollDob" class="form-control"
                                max="@maxAdultBirthDate" required />
+                        <div id="errChkEnrollDob" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
                         <div class="form-text">Yêu cầu sinh từ ngày <strong>@DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("dd/MM/yyyy")</strong> trở về trước.</div>
                     </div>
                     <div class="form-check p-2 rounded-3 mb-2" style="background:#fff1f2;border:1px solid #fecdd3;padding-left:2rem !important">
@@ -521,6 +529,7 @@
                         <label class="form-check-label fw-semibold text-danger" for="chkCheckoutCccd" style="font-size:0.84rem">
                             Nhân viên đã kiểm tra CCCD bên ngoài và xác nhận khách đủ 18 tuổi trở lên <span class="text-danger">*</span>
                         </label>
+                        <div id="errChkEnrollCccd" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="MarketingOptIn" value="true" id="chkCheckoutOptIn" checked />
@@ -847,6 +856,147 @@
         });
 
         updateQrAndCashUI();
+
+        // ── Kiểm tra cú pháp trực tiếp trên Modal Đăng ký hội viên tại màn Thanh toán ──
+        const chkEnrollForm = document.getElementById('checkoutEnrollForm');
+        const chkPhone = document.getElementById('chkEnrollPhone');
+        const chkName = document.getElementById('chkEnrollName');
+        const chkEmail = document.getElementById('chkEnrollEmail');
+        const chkDob = document.getElementById('chkEnrollDob');
+        const chkCccd = document.getElementById('chkCheckoutCccd');
+        const errChkPhone = document.getElementById('errChkEnrollPhone');
+        const errChkName = document.getElementById('errChkEnrollName');
+        const errChkEmail = document.getElementById('errChkEnrollEmail');
+        const errChkDob = document.getElementById('errChkEnrollDob');
+        const errChkCccd = document.getElementById('errChkEnrollCccd');
+        const chkAlert = document.getElementById('checkoutEnrollSyntaxAlert');
+        const maxAdultStr = '@maxAdultBirthDate';
+
+        const rxName = /^[\p{L}\p{M}]+(\s+[\p{L}\p{M}]+)*$/u;
+        const rxPhone = /^0\d{9}$/;
+        const rxEmail = /^[a-zA-Z0-9._%+\-]+@@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+
+        function setErr(inp, errEl, msg) {
+            if (!inp || !errEl) return;
+            if (msg) {
+                inp.classList.add('is-invalid');
+                errEl.textContent = msg;
+                errEl.classList.remove('d-none');
+            } else {
+                inp.classList.remove('is-invalid');
+                errEl.textContent = '';
+                errEl.classList.add('d-none');
+            }
+        }
+
+        function checkPhoneField(forceEmpty) {
+            const val = (chkPhone.value || '').trim();
+            if (!val) {
+                setErr(chkPhone, errChkPhone, forceEmpty ? 'Vui lòng nhập số điện thoại.' : '');
+                return !forceEmpty;
+            }
+            if (/[^0-9]/.test(val)) {
+                setErr(chkPhone, errChkPhone, 'Số điện thoại không được chứa chữ cái, khoảng trắng hoặc ký tự đặc biệt (chỉ nhập số 0-9).');
+                return false;
+            }
+            if (!val.startsWith('0')) {
+                setErr(chkPhone, errChkPhone, 'Số điện thoại phải bắt đầu từ số 0 (Ví dụ: 0901234567).');
+                return false;
+            }
+            if (!rxPhone.test(val)) {
+                setErr(chkPhone, errChkPhone, 'Số điện thoại phải gồm đúng 10 chữ số và bắt đầu từ số 0 (Ví dụ: 0901234567).');
+                return false;
+            }
+            setErr(chkPhone, errChkPhone, '');
+            return true;
+        }
+
+        function checkNameField(forceEmpty) {
+            const raw = chkName.value || '';
+            const val = raw.trim().replace(/\s+/g, ' ');
+            if (!val) {
+                setErr(chkName, errChkName, forceEmpty ? 'Vui lòng nhập họ và tên khách hàng.' : '');
+                return !forceEmpty;
+            }
+            if (/[0-9]/.test(raw)) {
+                setErr(chkName, errChkName, 'Họ và tên không được chứa chữ số. Vui lòng nhập theo định dạng: Nguyễn Văn A.');
+                return false;
+            }
+            if (!rxName.test(val) || val.length < 2) {
+                setErr(chkName, errChkName, 'Họ và tên không được chứa ký tự đặc biệt hoặc số. Vui lòng nhập theo định dạng: Nguyễn Văn A.');
+                return false;
+            }
+            setErr(chkName, errChkName, '');
+            return true;
+        }
+
+        function checkEmailField(forceEmpty) {
+            const val = (chkEmail.value || '').trim();
+            if (!val) {
+                setErr(chkEmail, errChkEmail, forceEmpty ? 'Vui lòng nhập địa chỉ Email.' : '');
+                return !forceEmpty;
+            }
+            if (!rxEmail.test(val)) {
+                setErr(chkEmail, errChkEmail, 'Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).');
+                return false;
+            }
+            setErr(chkEmail, errChkEmail, '');
+            return true;
+        }
+
+        function checkAdultField(forceEmpty) {
+            let ok = true;
+            const dobVal = (chkDob.value || '').trim();
+            if (!dobVal) {
+                if (forceEmpty) {
+                    setErr(chkDob, errChkDob, 'Vui lòng chọn ngày tháng năm sinh theo CCCD.');
+                    ok = false;
+                }
+            } else if (dobVal > maxAdultStr) {
+                setErr(chkDob, errChkDob, 'Khách hàng chưa đủ 18 tuổi theo ngày sinh trên CCCD.');
+                ok = false;
+            } else {
+                setErr(chkDob, errChkDob, '');
+            }
+
+            if (forceEmpty && !chkCccd.checked) {
+                errChkCccd.textContent = 'Vui lòng tích xác nhận đã kiểm tra CCCD đủ 18 tuổi.';
+                errChkCccd.classList.remove('d-none');
+                ok = false;
+            } else if (errChkCccd) {
+                errChkCccd.textContent = '';
+                errChkCccd.classList.add('d-none');
+            }
+            return ok;
+        }
+
+        if (chkEnrollForm && chkPhone && chkName && chkEmail) {
+            chkPhone.addEventListener('input', () => checkPhoneField(false));
+            chkPhone.addEventListener('blur', () => checkPhoneField(true));
+            chkName.addEventListener('input', () => checkNameField(false));
+            chkName.addEventListener('blur', () => checkNameField(true));
+            chkEmail.addEventListener('input', () => checkEmailField(false));
+            chkEmail.addEventListener('blur', () => checkEmailField(true));
+            chkDob && chkDob.addEventListener('change', () => checkAdultField(false));
+            chkCccd && chkCccd.addEventListener('change', () => checkAdultField(false));
+
+            chkEnrollForm.addEventListener('submit', function (e) {
+                const okP = checkPhoneField(true);
+                const okN = checkNameField(true);
+                const okE = checkEmailField(true);
+                const okA = checkAdultField(true);
+                if (!okP || !okN || !okE || !okA) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (chkAlert) {
+                        chkAlert.textContent = 'Không thể đăng ký hội viên: Vui lòng sửa các trường báo lỗi cú pháp màu đỏ bên dưới trước khi lưu.';
+                        chkAlert.classList.remove('d-none');
+                    }
+                    return false;
+                }
+                if (chkAlert) chkAlert.classList.add('d-none');
+            });
+        }
     })();
 </script>
 }

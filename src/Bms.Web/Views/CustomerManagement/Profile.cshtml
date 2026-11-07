@@ -532,7 +532,7 @@
                 <h5 class="modal-title fw-bold">Sửa thông tin liên lạc — @Model.FullName</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form asp-action="Save" method="post">
+            <form asp-action="Save" method="post" id="editProfileForm" novalidate>
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="Id" value="@Model.Id" />
                 <input type="hidden" name="returnTo" value="profile" />
@@ -540,15 +540,18 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Họ và tên <span class="text-danger">*</span></label>
-                        <input type="text" name="FullName" class="form-control" value="@Model.FullName" required maxlength="100" />
+                        <input type="text" name="FullName" id="profFullName" class="form-control" value="@Model.FullName" placeholder="Nguyễn Văn A" required maxlength="100" />
+                        <div id="errProfName" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Số điện thoại <span class="text-danger">*</span></label>
-                        <input type="text" name="PhoneNumber" class="form-control" value="@Model.PhoneNumber" pattern="^0\d{9}$" maxlength="10" required />
+                        <input type="text" name="PhoneNumber" id="profPhone" class="form-control" value="@Model.PhoneNumber" placeholder="0901234567" maxlength="10" required />
+                        <div id="errProfPhone" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Email</label>
-                        <input type="email" name="Email" class="form-control" value="@Model.Email" />
+                        <input type="text" name="Email" id="profEmail" class="form-control" value="@Model.Email" placeholder="khachhang@gmail.com" />
+                        <div id="errProfEmail" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Ngày sinh</label>
@@ -567,4 +570,81 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    (function () {
+        const form = document.getElementById('editProfileForm');
+        if (!form) return;
+        const inpName = document.getElementById('profFullName');
+        const inpPhone = document.getElementById('profPhone');
+        const inpEmail = document.getElementById('profEmail');
+        const errName = document.getElementById('errProfName');
+        const errPhone = document.getElementById('errProfPhone');
+        const errEmail = document.getElementById('errProfEmail');
+
+        const rxName = /^[\p{L}\p{M}]+(\s+[\p{L}\p{M}]+)*$/u;
+        const rxPhone = /^0\d{9}$/;
+        const rxEmail = /^[a-zA-Z0-9._%+\-]+@@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+
+        function showErr(inp, errEl, msg) {
+            if (!inp || !errEl) return;
+            if (msg) {
+                inp.classList.add('is-invalid');
+                errEl.textContent = msg;
+                errEl.classList.remove('d-none');
+            } else {
+                inp.classList.remove('is-invalid');
+                errEl.textContent = '';
+                errEl.classList.add('d-none');
+            }
+        }
+
+        function vName() {
+            const raw = inpName.value || '';
+            const val = raw.trim().replace(/\s+/g, ' ');
+            if (!val || /[0-9]/.test(raw) || !rxName.test(val) || val.length < 2) {
+                showErr(inpName, errName, 'Họ và tên không được chứa số hoặc ký tự đặc biệt. Vui lòng nhập theo định dạng: Nguyễn Văn A.');
+                return false;
+            }
+            showErr(inpName, errName, '');
+            return true;
+        }
+
+        function vPhone() {
+            const val = (inpPhone.value || '').trim();
+            if (!rxPhone.test(val)) {
+                showErr(inpPhone, errPhone, 'Số điện thoại phải gồm đúng 10 chữ số, bắt đầu từ số 0 và không chứa chữ cái hay ký tự đặc biệt (VD: 0901234567).');
+                return false;
+            }
+            showErr(inpPhone, errPhone, '');
+            return true;
+        }
+
+        function vEmail() {
+            const val = (inpEmail.value || '').trim();
+            if (val && !rxEmail.test(val)) {
+                showErr(inpEmail, errEmail, 'Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).');
+                return false;
+            }
+            showErr(inpEmail, errEmail, '');
+            return true;
+        }
+
+        inpName && inpName.addEventListener('input', vName);
+        inpPhone && inpPhone.addEventListener('input', vPhone);
+        inpEmail && inpEmail.addEventListener('input', vEmail);
+
+        form.addEventListener('submit', function (e) {
+            const ok1 = vName();
+            const ok2 = vPhone();
+            const ok3 = vEmail();
+            if (!ok1 || !ok2 || !ok3) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+    })();
+</script>
+}
 

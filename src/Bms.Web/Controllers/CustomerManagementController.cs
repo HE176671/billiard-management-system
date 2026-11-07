@@ -16,6 +16,12 @@ public class CustomerManagementController : Controller
 {
     private const int PageSize = 10;
     private const string PlaceholderEmailDomain = "@noemail.bms.local";
+    private static readonly System.Text.RegularExpressions.Regex StrictFullNameRegex =
+        new(@"^[\p{L}\p{M}]+(\s+[\p{L}\p{M}]+)*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex StrictPhoneRegex =
+        new(@"^0\d{9}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex StrictEmailRegex =
+        new(@"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ApplicationDbContext _context;
@@ -93,7 +99,7 @@ public class CustomerManagementController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> QuickEnroll(QuickEnrollInputModel input)
     {
-        input.FullName = (input.FullName ?? string.Empty).Trim();
+        input.FullName = ValidationRules.CollapseSpaces(input.FullName ?? string.Empty);
         input.PhoneNumber = (input.PhoneNumber ?? string.Empty).Trim();
         input.Email = string.IsNullOrWhiteSpace(input.Email) ? null : input.Email.Trim();
 
@@ -101,6 +107,26 @@ public class CustomerManagementController : Controller
             string.Equals(input.ReturnTo, "checkout", StringComparison.OrdinalIgnoreCase)
                 ? RedirectToAction("Index", "LoyaltyTest", new { customerMode = "guest", sessionId = input.SessionId })
                 : RedirectToAction(nameof(Lookup), new { q = input.PhoneNumber });
+
+        var syntaxErrors = new List<string>();
+        if (string.IsNullOrWhiteSpace(input.PhoneNumber) || !StrictPhoneRegex.IsMatch(input.PhoneNumber))
+        {
+            syntaxErrors.Add("Số điện thoại không hợp lệ: phải gồm đúng 10 chữ số, bắt đầu bằng số 0 và không được nhập chữ cái hay ký tự đặc biệt (Ví dụ: 0901234567).");
+        }
+        if (string.IsNullOrWhiteSpace(input.FullName) || input.FullName.Length < 2 || !StrictFullNameRegex.IsMatch(input.FullName))
+        {
+            syntaxErrors.Add("Họ và tên không hợp lệ: không được nhập số hoặc ký tự đặc biệt. Vui lòng nhập theo định dạng: Nguyễn Văn A.");
+        }
+        if (string.IsNullOrWhiteSpace(input.Email) || !StrictEmailRegex.IsMatch(input.Email))
+        {
+            syntaxErrors.Add("Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).");
+        }
+
+        if (syntaxErrors.Count > 0)
+        {
+            TempData["Error"] = string.Join(" ", syntaxErrors);
+            return RedirectBackOnError();
+        }
 
         if (!ModelState.IsValid)
         {
@@ -675,7 +701,7 @@ public class CustomerManagementController : Controller
     public async Task<IActionResult> Save(CustomerFormViewModel form, string? search, int? tierId,
         string? status, string? segment, int page = 1, string? returnTo = null)
     {
-        form.FullName = (form.FullName ?? string.Empty).Trim();
+        form.FullName = ValidationRules.CollapseSpaces(form.FullName ?? string.Empty);
         form.PhoneNumber = (form.PhoneNumber ?? string.Empty).Trim();
         form.Email = string.IsNullOrWhiteSpace(form.Email) ? null : form.Email.Trim();
 
@@ -684,6 +710,23 @@ public class CustomerManagementController : Controller
         {
             existing = await GetCustomerOrNullAsync(form.Id!);
             if (existing == null) return NotFound();
+        }
+
+        if (string.IsNullOrWhiteSpace(form.FullName) || form.FullName.Length < 2 || !StrictFullNameRegex.IsMatch(form.FullName))
+        {
+            ModelState.AddModelError(nameof(form.FullName), "Họ và tên không được chứa số hoặc ký tự đặc biệt. Vui lòng nhập theo định dạng: Nguyễn Văn A.");
+        }
+        if (string.IsNullOrWhiteSpace(form.PhoneNumber) || !StrictPhoneRegex.IsMatch(form.PhoneNumber))
+        {
+            ModelState.AddModelError(nameof(form.PhoneNumber), "Số điện thoại phải gồm đúng 10 chữ số, bắt đầu bằng số 0 và không chứa chữ cái hay ký tự đặc biệt (Ví dụ: 0901234567).");
+        }
+        if (form.IsNew && string.IsNullOrWhiteSpace(form.Email))
+        {
+            ModelState.AddModelError(nameof(form.Email), "Vui lòng nhập địa chỉ Email của khách hàng.");
+        }
+        else if (form.Email != null && !StrictEmailRegex.IsMatch(form.Email))
+        {
+            ModelState.AddModelError(nameof(form.Email), "Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).");
         }
 
         if (ModelState.IsValid)
@@ -700,7 +743,14 @@ public class CustomerManagementController : Controller
         }
 
         if (!ModelState.IsValid)
+        {
+            if (returnTo == "profile" && existing != null)
+            {
+                TempData["Error"] = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Distinct());
+                return RedirectToAction(nameof(Profile), new { id = existing.Id });
+            }
             return await RedisplayAsync(form, existing, search, tierId, status, segment, page);
+        }
 
         var now = DateTime.UtcNow;
 
