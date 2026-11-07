@@ -1,4 +1,4 @@
-﻿using Bms.Web.Data;
+using Bms.Web.Data;
 using Bms.Web.Models;
 using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -12,7 +12,7 @@ namespace Bms.Web.Controllers;
 /// Trang chủ nhân viên (TV5 duy trì khung). Mỗi workflow dùng controller riêng
 /// (TV1 bàn/booking/phiên, TV3 thanh toán, TV4 món) và thêm lối tắt vào view này.
 /// </summary>
-[Authorize(Roles = "Staff,Admin")]
+[Authorize(Roles = "Staff,Manager,Admin")]
 public class StaffController : Controller
 {
     private readonly ApplicationDbContext _db;

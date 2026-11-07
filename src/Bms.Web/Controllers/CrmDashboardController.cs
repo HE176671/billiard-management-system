@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Manager,Admin")]
 public class CrmDashboardController : Controller
 {
     private readonly ApplicationDbContext _db;

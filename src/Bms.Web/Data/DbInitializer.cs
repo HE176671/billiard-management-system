@@ -45,6 +45,22 @@ public static class DbInitializer
             logger.LogInformation("admin.demo đã có mật khẩu, bỏ qua.");
         }
 
+        // Đặt mật khẩu demo cho tài khoản Quản lý (Manager)
+        var managerPassword = config["DevSeed:ManagerPassword"] ?? "Manager@123";
+        var managerUser = await userManager.FindByNameAsync("manager.demo");
+        if (managerUser != null)
+        {
+            if (!await userManager.HasPasswordAsync(managerUser))
+            {
+                var result = await userManager.AddPasswordAsync(managerUser, managerPassword);
+                if (result.Succeeded)
+                    logger.LogInformation("Đã đặt mật khẩu cho manager.demo.");
+                else
+                    logger.LogError("Đặt mật khẩu manager.demo thất bại: {Errors}",
+                        string.Join("; ", result.Errors.Select(e => e.Description)));
+            }
+        }
+
         // Đặt mật khẩu demo cho tài khoản Nhân viên (Staff)
         var staffPassword = config["DevSeed:StaffPassword"] ?? "Staff@123";
         var demoStaff = new[] { "staff.demo01", "staff.demo02" };

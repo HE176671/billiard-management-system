@@ -54,12 +54,13 @@ public class AccountController : Controller
             return View(model);
         }
 
-        // Hệ thống quản lý nội bộ: chỉ cho phép Admin và Staff đăng nhập
-        bool isStaffOrAdmin = await _userManager.IsInRoleAsync(user, "Admin")
-                           || await _userManager.IsInRoleAsync(user, "Staff");
-        if (!isStaffOrAdmin)
+        // Hệ thống quản lý nội bộ: cho phép Admin, Manager và Staff đăng nhập
+        bool isInternalAccount = await _userManager.IsInRoleAsync(user, "Admin")
+                              || await _userManager.IsInRoleAsync(user, "Manager")
+                              || await _userManager.IsInRoleAsync(user, "Staff");
+        if (!isInternalAccount)
         {
-            ModelState.AddModelError(string.Empty, "Hệ thống quản lý nội bộ chỉ dành cho Nhân viên và Quản trị viên.");
+            ModelState.AddModelError(string.Empty, "Hệ thống quản lý nội bộ chỉ dành cho Nhân viên, Quản lý và Quản trị viên.");
             return View(model);
         }
 
@@ -111,6 +112,8 @@ public class AccountController : Controller
     private async Task<IActionResult> RedirectByRoleAsync(ApplicationUser user)
     {
         if (await _userManager.IsInRoleAsync(user, "Admin"))
+            return RedirectToAction("Index", "RoleManagement");
+        if (await _userManager.IsInRoleAsync(user, "Manager"))
             return RedirectToAction("Index", "Dashboard");
         if (await _userManager.IsInRoleAsync(user, "Staff"))
             return RedirectToAction("Index", "Staff");

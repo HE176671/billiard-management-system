@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Manager,Admin")]
 public class RevenueController : Controller
 {
     private readonly ApplicationDbContext _context;
