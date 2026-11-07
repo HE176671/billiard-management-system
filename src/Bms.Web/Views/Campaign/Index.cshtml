@@ -115,7 +115,7 @@
                             <ul class="mb-0 ps-3" style="font-size:0.8rem">
                                 @foreach (var sr in prv.SampleRecipients)
                                 {
-                                    <li><strong>@sr.FullName</strong> (@(sr.PhoneNumber ?? "—")) — Hạng @sr.TierName · @VnFormat.SegmentLabel(sr.Segment) · Chi tiêu 12T: @VnFormat.Money(sr.Monetary12M)</li>
+                                    <li><strong>@sr.FullName</strong> (@(sr.PhoneNumber ?? "—")) — Hạng @sr.TierName · @VnFormat.SegmentLabel(sr.Segment) · Tổng mức chi tiêu: @VnFormat.Money(sr.Monetary12M)</li>
                                 }
                             </ul>
                         }

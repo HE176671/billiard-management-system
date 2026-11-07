@@ -198,7 +198,7 @@
                         </div>
                         <div>
                             Điểm hiện có: <strong class="text-danger" id="lblMemberPoints">@VnFormat.Number(detail.RewardPoints) điểm</strong>
-                            <span class="ms-2 text-muted">| Chi tiêu 12T: <strong id="lblMemberSpend12M">@VnFormat.Money(detail.Spend12Months)</strong></span>
+                            <span class="ms-2 text-muted">| Tổng mức chi tiêu: <strong id="lblMemberSpend12M">@VnFormat.Money(Math.Max(detail.TotalSpend, detail.Spend12Months))</strong></span>
                         </div>
                     </div>
                 }
@@ -451,7 +451,7 @@
                 <div id="rcpTierStatus" class="mt-2 pt-2 border-top text-muted" style="font-size:0.8rem">
                     @if (isGuest)
                     {
-                        <span>Khách lẻ không tích điểm. Để đăng ký hội viên mới, vui lòng thực hiện tại màn <strong>Danh sách hội viên</strong>.</span>
+                        <span>Khách lẻ không tích điểm. Để đăng ký hội viên mới, vui lòng thực hiện tại màn <strong>Tra cứu hội viên</strong>.</span>
                     }
                     else if (p != null)
                     {
@@ -461,7 +461,7 @@
                         }
                         else if (p.NextTierName != null && p.AmountNeededForNextTier > 0)
                         {
-                            <span>Cần thêm <strong>@VnFormat.Money(p.AmountNeededForNextTier)</strong> chi tiêu 12 tháng để lên hạng <strong>@p.NextTierName</strong>.</span>
+                            <span>Cần thêm <strong>@VnFormat.Money(p.AmountNeededForNextTier)</strong> tổng mức chi tiêu để lên hạng <strong>@p.NextTierName</strong>.</span>
                         }
                         else
                         {
@@ -750,11 +750,11 @@
 
                     const statusBox = document.getElementById('rcpTierStatus');
                     if (modeInput && modeInput.value === 'guest') {
-                        statusBox.innerHTML = 'Khách lẻ không tích điểm. Để đăng ký hội viên mới, vui lòng thực hiện tại màn <strong>Danh sách hội viên</strong>.';
+                        statusBox.innerHTML = 'Khách lẻ không tích điểm. Để đăng ký hội viên mới, vui lòng thực hiện tại màn <strong>Tra cứu hội viên</strong>.';
                     } else if (d.willUpgradeTier) {
                         statusBox.innerHTML = `<span class="text-success fw-bold"><i class="bi bi-trophy-fill me-1"></i>Sắp lên hạng ${d.nextTierName} ngay sau hóa đơn này!</span>`;
                     } else if (d.nextTierName && d.amountNeededForNextTier > 0) {
-                        statusBox.innerHTML = `Còn thiếu <strong>${fmtMoney(d.amountNeededForNextTier)}</strong> chi tiêu 12 tháng để lên hạng <strong>${d.nextTierName}</strong>.`;
+                        statusBox.innerHTML = `Còn thiếu <strong>${fmtMoney(d.amountNeededForNextTier)}</strong> tổng mức chi tiêu để lên hạng <strong>${d.nextTierName}</strong>.`;
                     } else {
                         statusBox.innerHTML = 'Khách đang ở hạng cao nhất.';
                     }

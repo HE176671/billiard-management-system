@@ -146,8 +146,8 @@ public class LoyaltyTestController : Controller
                     PointMultiplier = user.Tier?.PointMultiplier ?? 1,
                     DiscountPercent = user.Tier?.DiscountPercent ?? 0,
                     RewardPoints = user.RewardPoints,
-                    TotalSpend = user.TotalSpend,
-                    Spend12Months = spend12M,
+                    TotalSpend = Math.Max(user.TotalSpend, spend12M),
+                    Spend12Months = Math.Max(user.TotalSpend, spend12M),
                     LastPaidDate = user.LastPaidDate,
                     RecentTransactions = transactions
                 };
@@ -288,7 +288,7 @@ public class LoyaltyTestController : Controller
         var user = await _context.Users.AsNoTracking()
             .Include(u => u.Tier)
             .FirstOrDefaultAsync(u => u.Id == customerId);
-        var spend12M = user != null ? await _tierEval.GetSpendLast12MonthsAsync(user.Id) : 0m;
+        var spend12M = user != null ? Math.Max(user.TotalSpend, await _tierEval.GetSpendLast12MonthsAsync(user.Id)) : 0m;
         var nowUtc = DateTime.UtcNow;
         var vouchers = user != null
             ? await _context.CustomerVouchers.AsNoTracking()

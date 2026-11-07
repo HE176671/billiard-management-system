@@ -131,7 +131,7 @@ public class CustomerSegmentService : ICustomerSegmentService
         {
             earnStats.TryGetValue(u.Id, out var st);
             int freq = st != null ? (st.Frequency > 0 ? st.Frequency : st.TotalCount) : 0;
-            decimal monetary = st?.Monetary ?? 0m;
+            decimal monetary = Math.Max(u.TotalSpend, st?.Monetary ?? 0m);
             DateTime? lastPaid = u.LastPaidDate ?? st?.MaxDate;
             int? rDays = lastPaid.HasValue ? Math.Max(0, (int)Math.Floor((now - lastPaid.Value).TotalDays)) : null;
 
