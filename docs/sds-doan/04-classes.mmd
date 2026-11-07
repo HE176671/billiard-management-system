@@ -1,0 +1,92 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'textColor': '#000000', 'noteBkgColor': '#ffffff', 'noteBorderColor': '#000000', 'noteTextColor': '#000000', 'fontFamily': 'Arial'}}}%%
+classDiagram
+    direction TB
+
+    class Controller {
+        <<framework>>
+    }
+    class TableController {
+        +OpenSession(request) Task
+        +CloseSession(request) Task
+        +GetCloseSummary(sessionId) Task
+        +TransferSession(request) Task
+    }
+    class ITableSessionService {
+        <<interface>>
+        +OpenSessionAsync(tableId, staffId, mode, minutes) Task
+        +CloseSessionAsync(sessionId, staffId) Task
+        +GetCloseSummaryAsync(sessionId) Task
+        +TransferSessionAsync(sessionId, newTableId, staffId) Task
+    }
+    class TableSessionService {
+        +OpenSessionAsync(tableId, staffId, mode, minutes) Task
+        +CloseSessionAsync(sessionId, staffId) Task
+        +GetCloseSummaryAsync(sessionId) Task
+        +TransferSessionAsync(sessionId, newTableId, staffId) Task
+    }
+    class ApplicationDbContext {
+        +DbSet TableTypes
+        +DbSet BilliardTables
+        +DbSet PlaySessions
+        +DbSet PlaySessionTableSegments
+    }
+    class TableType {
+        +int Id
+        +string Name
+        +ICollection BilliardTables
+    }
+    class BilliardTable {
+        +int Id
+        +string TableCode
+        +string Status
+        +ICollection PlaySessions
+    }
+    class PlaySession {
+        +int Id
+        +int TableId
+        +string Status
+        +decimal PlaytimeAmount
+        +ICollection Segments
+    }
+    class PlaySessionTableSegment {
+        +int SessionId
+        +int TableId
+        +decimal HourlyRateSnapshot
+        +DateTime StartAtUtc
+        +DateTime EndAtUtc
+    }
+    class CloseSummaryViewModel {
+        +int SessionId
+        +DateTime BillingStartAtUtc
+        +DateTime BillingEndPreviewAtUtc
+        +int BilledMinutes
+        +decimal EstimatedAmount
+    }
+    class TableOperationResult {
+        +bool Success
+        +int ErrorCode
+        +string Message
+        +Ok(data, message) TableOperationResult
+        +Fail(code, message, reload) TableOperationResult
+    }
+
+    Controller <|-- TableController
+    ITableSessionService <|.. TableSessionService
+
+    TableController --> ITableSessionService : "dùng qua DI"
+    TableSessionService --> ApplicationDbContext : "dùng qua DI"
+    ApplicationDbContext --> TableType : "DbSet"
+    ApplicationDbContext --> BilliardTable : "DbSet"
+    ApplicationDbContext --> PlaySession : "DbSet"
+    ApplicationDbContext --> PlaySessionTableSegment : "DbSet"
+    PlaySessionTableSegment --> BilliardTable : "thuộc bàn"
+
+    TableType "1" o-- "*" BilliardTable : "có nhiều bàn"
+    BilliardTable "1" o-- "*" PlaySession : "có nhiều phiên"
+    PlaySession "1" o-- "*" PlaySessionTableSegment : "có nhiều đoạn bàn"
+
+    TableController ..> TableOperationResult : "trả về JSON"
+    ITableSessionService ..> TableOperationResult : "kiểu trả về"
+    ITableSessionService ..> CloseSummaryViewModel : "kiểu trả về"
+    TableSessionService ..> TableOperationResult : "tạo kết quả"
+    TableSessionService ..> CloseSummaryViewModel : "tạo tóm tắt"

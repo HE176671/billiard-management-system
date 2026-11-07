@@ -472,6 +472,9 @@ public class LoyaltyTestController : Controller
                     s.HourlyRateSnapshot AS HourlyRateSnapshot,
                     CASE
                         WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
+                        WHEN OBJECT_ID(N'dbo.fn_CalcPlaytimeAmount', N'FN') IS NOT NULL
+                             AND dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) IS NOT NULL
+                        THEN dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
                         ELSE CAST(ROUND(
                             (CASE WHEN DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) < 15
                                   THEN 15
@@ -489,7 +492,7 @@ public class LoyaltyTestController : Controller
                 LEFT JOIN dbo.BilliardTables t ON t.Id = s.TableId
                 LEFT JOIN dbo.AspNetUsers u ON u.Id = s.CustomerId
                 WHERE NOT EXISTS (SELECT 1 FROM dbo.Invoices i WHERE i.SessionId = s.Id AND i.Status = 'Paid')
-                ORDER BY CASE WHEN s.Status = 'Open' THEN 0 ELSE 1 END, s.StartAtUtc DESC, s.Id DESC
+                ORDER BY CASE WHEN s.Status IN ('Active', 'Open') THEN 0 ELSE 1 END, s.StartAtUtc DESC, s.Id DESC
             ").ToListAsync();
         }
         catch
@@ -557,6 +560,13 @@ public class LoyaltyTestController : Controller
             else
             {
                 await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                    IF OBJECT_ID(N'dbo.PlaySessionTableSegments', N'U') IS NOT NULL
+                    BEGIN
+                        UPDATE dbo.PlaySessionTableSegments
+                        SET EndAtUtc = SYSUTCDATETIME()
+                        WHERE SessionId = {resolvedSessionId} AND EndAtUtc IS NULL;
+                    END;
+
                     UPDATE dbo.PlaySessions
                     SET Status = 'Closed',
                         EndAtUtc = ISNULL(EndAtUtc, SYSUTCDATETIME()),
@@ -564,6 +574,12 @@ public class LoyaltyTestController : Controller
                         CustomerId = ISNULL(CustomerId, {customerId}),
                         PlaytimeAmount = {totalPlaytime}
                     WHERE Id = {resolvedSessionId};
+
+                    UPDATE t
+                    SET t.Status = 'Available'
+                    FROM dbo.BilliardTables t
+                    INNER JOIN dbo.PlaySessions s ON s.TableId = t.Id
+                    WHERE s.Id = {resolvedSessionId} AND t.Status IN ('InUse', 'AwaitingPayment');
                 ");
             }
 

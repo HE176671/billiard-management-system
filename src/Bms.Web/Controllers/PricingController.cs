@@ -81,7 +81,7 @@ public class PricingController : Controller
                 .ToListAsync();
 
             var combos = await _context.Combos.AsNoTracking()
-                .Include(c => c.Items)
+                .Include(c => c.ComboItems)
                     .ThenInclude(i => i.Product)
                 .OrderBy(c => c.PlaytimeHours)
                 .ThenBy(c => c.Price)
@@ -89,9 +89,9 @@ public class PricingController : Controller
 
             vm.Combos = combos.Select(c =>
             {
-                var firstItem = c.Items.FirstOrDefault();
-                string summary = c.Items.Any()
-                    ? string.Join(", ", c.Items.Select(i => $"Tặng {i.Quantity} {i.Product?.Name ?? "Món"}"))
+                var firstItem = c.ComboItems.FirstOrDefault();
+                string summary = c.ComboItems.Any()
+                    ? string.Join(", ", c.ComboItems.Select(i => $"Tặng {i.Quantity} {i.Product?.Name ?? "Món"}"))
                     : "Chưa chọn món tặng kèm";
 
                 return new ComboRowViewModel
@@ -265,7 +265,7 @@ public class PricingController : Controller
         }
         else
         {
-            var existing = await _context.Combos.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == id);
+            var existing = await _context.Combos.Include(c => c.ComboItems).FirstOrDefaultAsync(c => c.Id == id);
             if (existing == null) return NotFound();
 
             existing.Name = name;
@@ -273,9 +273,9 @@ public class PricingController : Controller
             existing.Price = price;
             existing.IsActive = isActive;
 
-            if (existing.Items.Any())
+            if (existing.ComboItems.Any())
             {
-                _context.ComboItems.RemoveRange(existing.Items);
+                _context.ComboItems.RemoveRange(existing.ComboItems);
             }
             combo = existing;
             await _context.SaveChangesAsync();

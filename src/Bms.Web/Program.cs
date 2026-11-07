@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 builder.Services.AddMemoryCache();
+builder.Services.AddScoped<ITableSessionService, TableSessionService>();
 
 // DbContext trỏ vào BilliardDB (connection string trong appsettings)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>

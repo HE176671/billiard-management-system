@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Bms.Web.Data.Entities;
 
 namespace Bms.Web.Data;
 
@@ -9,30 +10,34 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options) { }
 
-    // Custom business tables (Hung)
-    public DbSet<TableType>              TableTypes              => Set<TableType>();
-    public DbSet<PricingConfig>          PricingConfigs          => Set<PricingConfig>();
-    public DbSet<PaymentTransaction>     PaymentTransactions     => Set<PaymentTransaction>();
-    public DbSet<BilliardTable>          BilliardTables          => Set<BilliardTable>();
-    public DbSet<WorkShift>              WorkShifts              => Set<WorkShift>();
+    // Custom business tables (Hung & Doan)
+    public DbSet<TableType>               TableTypes               => Set<TableType>();
+    public DbSet<PricingConfig>           PricingConfigs           => Set<PricingConfig>();
+    public DbSet<PaymentTransaction>      PaymentTransactions      => Set<PaymentTransaction>();
+    public DbSet<BilliardTable>           BilliardTables           => Set<BilliardTable>();
+    public DbSet<WorkShift>               WorkShifts               => Set<WorkShift>();
+    public DbSet<PlaySession>             PlaySessions             => Set<PlaySession>();
+    public DbSet<PlaySessionTableSegment> PlaySessionTableSegments => Set<PlaySessionTableSegment>();
+    public DbSet<SessionCombo>            SessionCombos            => Set<SessionCombo>();
+    public DbSet<SessionComboItem>        SessionComboItems        => Set<SessionComboItem>();
 
     // Loyalty & CRM tables (Dung - TV2)
-    public DbSet<MembershipTier>         MembershipTiers         => Set<MembershipTier>();
-    public DbSet<PointTransaction>       PointTransactions       => Set<PointTransaction>();
-    public DbSet<Review>                 Reviews                 => Set<Review>();
-    public DbSet<Notification>           Notifications           => Set<Notification>();
-    public DbSet<RewardItemEntity>       RewardItems             => Set<RewardItemEntity>();
-    public DbSet<CustomerVoucher>        CustomerVouchers        => Set<CustomerVoucher>();
-    public DbSet<PointAdjustmentRequest> PointAdjustmentRequests => Set<PointAdjustmentRequest>();
-    public DbSet<CustomerNote>           CustomerNotes           => Set<CustomerNote>();
-    public DbSet<Campaign>               Campaigns               => Set<Campaign>();
-    public DbSet<CustomerAuditLog>       CustomerAuditLogs       => Set<CustomerAuditLog>();
+    public DbSet<MembershipTier>          MembershipTiers          => Set<MembershipTier>();
+    public DbSet<PointTransaction>        PointTransactions        => Set<PointTransaction>();
+    public DbSet<Review>                  Reviews                  => Set<Review>();
+    public DbSet<Notification>            Notifications            => Set<Notification>();
+    public DbSet<RewardItemEntity>        RewardItems              => Set<RewardItemEntity>();
+    public DbSet<CustomerVoucher>         CustomerVouchers         => Set<CustomerVoucher>();
+    public DbSet<PointAdjustmentRequest>  PointAdjustmentRequests  => Set<PointAdjustmentRequest>();
+    public DbSet<CustomerNote>            CustomerNotes            => Set<CustomerNote>();
+    public DbSet<Campaign>                Campaigns                => Set<Campaign>();
+    public DbSet<CustomerAuditLog>        CustomerAuditLogs        => Set<CustomerAuditLog>();
 
-    // Service catalog & Combos (Manager pricing & promotion configuration)
-    public DbSet<ProductCategory>        ProductCategories       => Set<ProductCategory>();
-    public DbSet<Product>                Products                => Set<Product>();
-    public DbSet<Combo>                  Combos                  => Set<Combo>();
-    public DbSet<ComboItem>              ComboItems              => Set<ComboItem>();
+    // Service catalog & Combos (Manager pricing & promotion configuration + Doan session combos)
+    public DbSet<ProductCategory>         ProductCategories        => Set<ProductCategory>();
+    public DbSet<Product>                 Products                 => Set<Product>();
+    public DbSet<Combo>                   Combos                   => Set<Combo>();
+    public DbSet<ComboItem>               ComboItems               => Set<ComboItem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -303,13 +308,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             e.ToTable("ComboItems");
             e.HasKey(x => new { x.ComboId, x.ProductId });
-            e.HasOne(x => x.Combo).WithMany(c => c.Items)
+            e.HasOne(x => x.Combo).WithMany(c => c.ComboItems)
                 .HasForeignKey(x => x.ComboId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Product).WithMany()
                 .HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
 
-        // BilliardTables (Hung)
+        builder.Entity<SessionComboItem>().HasKey(x => new { x.SessionComboId, x.ProductId });
+
+        // BilliardTables (Hung & Doan)
         builder.Entity<BilliardTable>(e =>
         {
             e.ToTable("BilliardTables");

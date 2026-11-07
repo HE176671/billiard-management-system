@@ -391,6 +391,74 @@ public static class SchemaUpgrader
                     CREATE INDEX IX_ComboItems_ProductId ON dbo.ComboItems(ProductId);
                 END;
 
+                IF OBJECT_ID('dbo.SessionCombos', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.SessionCombos (
+                        Id int IDENTITY NOT NULL CONSTRAINT PK_SessionCombos PRIMARY KEY,
+                        SessionId int NOT NULL,
+                        ComboId int NOT NULL,
+                        Quantity int NOT NULL,
+                        ComboNameSnapshot nvarchar(100) NOT NULL,
+                        UnitPriceSnapshot decimal(18,2) NOT NULL,
+                        PlaytimeHoursSnapshot decimal(5,2) NOT NULL,
+                        PurchasedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_SessionCombos_Purchased DEFAULT SYSUTCDATETIME(),
+                        CreatedById nvarchar(450) NOT NULL,
+                        CONSTRAINT FK_SessionCombos_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+                        CONSTRAINT FK_SessionCombos_Combo FOREIGN KEY (ComboId) REFERENCES dbo.Combos(Id),
+                        CONSTRAINT FK_SessionCombos_CreatedBy FOREIGN KEY (CreatedById) REFERENCES dbo.AspNetUsers(Id),
+                        CONSTRAINT CK_SessionCombos_Quantity CHECK (Quantity > 0),
+                        CONSTRAINT CK_SessionCombos_Name CHECK (LEN(LTRIM(RTRIM(ComboNameSnapshot))) > 0),
+                        CONSTRAINT CK_SessionCombos_Price CHECK (UnitPriceSnapshot >= 0),
+                        CONSTRAINT CK_SessionCombos_Hours CHECK (PlaytimeHoursSnapshot > 0)
+                    );
+                    CREATE INDEX IX_SessionCombos_SessionId ON dbo.SessionCombos(SessionId);
+                    CREATE INDEX IX_SessionCombos_ComboId ON dbo.SessionCombos(ComboId);
+                    CREATE INDEX IX_SessionCombos_CreatedById ON dbo.SessionCombos(CreatedById);
+                END;
+
+                IF OBJECT_ID('dbo.SessionComboItems', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.SessionComboItems (
+                        SessionComboId int NOT NULL,
+                        ProductId int NOT NULL,
+                        ProductNameSnapshot nvarchar(100) NOT NULL,
+                        QuantityPerCombo int NOT NULL,
+                        CONSTRAINT PK_SessionComboItems PRIMARY KEY (SessionComboId, ProductId),
+                        CONSTRAINT FK_SessionComboItems_Purchase FOREIGN KEY (SessionComboId) REFERENCES dbo.SessionCombos(Id),
+                        CONSTRAINT FK_SessionComboItems_Product FOREIGN KEY (ProductId) REFERENCES dbo.Products(Id),
+                        CONSTRAINT CK_SessionComboItems_Name CHECK (LEN(LTRIM(RTRIM(ProductNameSnapshot))) > 0),
+                        CONSTRAINT CK_SessionComboItems_Quantity CHECK (QuantityPerCombo > 0)
+                    );
+                    CREATE INDEX IX_SessionComboItems_ProductId ON dbo.SessionComboItems(ProductId);
+                END;
+
+                IF OBJECT_ID('dbo.PlaySessionTableSegments', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.PlaySessionTableSegments (
+                        Id int IDENTITY NOT NULL CONSTRAINT PK_PlaySessionTableSegments PRIMARY KEY,
+                        SessionId int NOT NULL,
+                        TableId int NOT NULL,
+                        HourlyRateSnapshot decimal(18,2) NOT NULL,
+                        StartAtUtc datetime2(0) NOT NULL,
+                        EndAtUtc datetime2(0) NULL,
+                        CONSTRAINT FK_SessionSegment_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+                        CONSTRAINT FK_SessionSegment_Table FOREIGN KEY (TableId) REFERENCES dbo.BilliardTables(Id),
+                        CONSTRAINT CK_SessionSegment_Rate CHECK (HourlyRateSnapshot > 0),
+                        CONSTRAINT CK_SessionSegment_Times CHECK (EndAtUtc IS NULL OR EndAtUtc >= StartAtUtc)
+                    );
+                    CREATE UNIQUE INDEX UX_SessionSegments_OpenPerSession ON dbo.PlaySessionTableSegments(SessionId) WHERE EndAtUtc IS NULL;
+                    CREATE INDEX IX_SessionSegments_Session_Start ON dbo.PlaySessionTableSegments(SessionId, StartAtUtc);
+                    CREATE INDEX IX_SessionSegments_Table ON dbo.PlaySessionTableSegments(TableId);
+                END;
+
+                IF EXISTS (SELECT 1 FROM dbo.PlaySessions s WHERE NOT EXISTS (SELECT 1 FROM dbo.PlaySessionTableSegments g WHERE g.SessionId = s.Id))
+                BEGIN
+                    INSERT INTO dbo.PlaySessionTableSegments(SessionId, TableId, HourlyRateSnapshot, StartAtUtc, EndAtUtc)
+                    SELECT s.Id, s.TableId, s.HourlyRateSnapshot, s.StartAtUtc, s.EndAtUtc
+                    FROM dbo.PlaySessions s
+                    WHERE NOT EXISTS (SELECT 1 FROM dbo.PlaySessionTableSegments g WHERE g.SessionId = s.Id);
+                END;
+
                 IF NOT EXISTS (SELECT 1 FROM dbo.AspNetRoles WHERE NormalizedName = N'MANAGER')
                 BEGIN
                     INSERT INTO dbo.AspNetRoles(Id, Name, NormalizedName, ConcurrencyStamp)

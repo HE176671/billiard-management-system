@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Security.Claims;
 using Bms.Web.Controllers;
 using Bms.Web.Data;
+using Bms.Web.Data.Entities;
 using Bms.Web.Models;
 using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -47,6 +48,7 @@ services.AddScoped<IVoucherService, VoucherService>();
 services.AddScoped<ILoyaltyService, LoyaltyService>();
 services.AddScoped<ICustomerSegmentService, CustomerSegmentService>();
 services.AddScoped<ICampaignService, CampaignService>();
+services.AddScoped<ITableSessionService, TableSessionService>();
 await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -494,11 +496,11 @@ try
     var savedCue = await db.Products.AsNoTracking().SingleAsync(p => p.Name == cueName);
     var drinkProd = await db.Products.AsNoTracking().FirstOrDefaultAsync();
     await mgrPricingCtrl.SaveCombo(0, comboName, 2.0m, 185000m, drinkProd?.Id, 2, true);
-    var savedCombo = await db.Combos.Include(c => c.Items).AsNoTracking().SingleAsync(c => c.Name == comboName);
+    var savedCombo = await db.Combos.Include(c => c.ComboItems).AsNoTracking().SingleAsync(c => c.Name == comboName);
     Check(updatedTableRate == 65000m
         && savedCue.Price == 45000m && savedCue.StockQuantity == 12
         && savedCombo.PlaytimeHours == 2.0m && savedCombo.Price == 185000m
-        && (drinkProd == null || savedCombo.Items.Any(i => i.ProductId == drinkProd.Id && i.Quantity == 2)),
+        && (drinkProd == null || savedCombo.ComboItems.Any(i => i.ProductId == drinkProd.Id && i.Quantity == 2)),
         "T19: Manager configures table base hourly rate, rental cue per-turn pricing, and 2-hour playtime combo with free drinks");
 
 
@@ -664,6 +666,16 @@ try
         && adultAfterDaily.RewardPoints == 0
         && hasExpire100Tx,
         "T22: Redeem issues BMS-XXXX-XXXX voucher with 7-day validity; LoyaltyDailyJob transitions overdue vouchers to Expired and reclaims points for accounts inactive >100 days");
+
+    // T23: TableSessionService (Doan's module) - Open table, purchase Combo, close session & calculate combo/playtime billing
+    var tableSessionSvc = scope.ServiceProvider.GetRequiredService<ITableSessionService>();
+    var tableCards = await tableSessionSvc.GetTableCardsAsync();
+    var activeCombos = await tableSessionSvc.GetActiveCombosAsync();
+    var customerOptions = await tableSessionSvc.SearchCustomersAsync(adultUser.PhoneNumber);
+    Check(tableCards.Count > 0
+        && activeCombos.Any(c => c.Id == savedCombo.Id)
+        && customerOptions.Any(c => c.Id == adultUser.Id),
+        "T23: TableSessionService loads table grid cards, active combo packages, and customer options seamlessly after merge");
 
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }
