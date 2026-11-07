@@ -94,35 +94,40 @@
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form asp-controller="CustomerManagement" asp-action="QuickEnroll" method="post">
+            <form asp-controller="CustomerManagement" asp-action="QuickEnroll" method="post" id="quickEnrollForm" novalidate>
                 @Html.AntiForgeryToken()
                 <div class="modal-body">
                     <div class="alert alert-info py-2 mb-3" style="font-size:0.8rem">
                         <i class="bi bi-person-badge me-1"></i>
                         <strong>Quy định đăng ký tại quầy:</strong> Khách hàng để lại <strong>SĐT, Email, Họ tên, Ngày tháng năm sinh</strong> và nhân viên kiểm tra <strong>CCCD đủ 18 tuổi trở lên</strong> bên ngoài trước khi kích hoạt tài khoản (+10 điểm chào mừng).
                     </div>
+                    <div id="enrollSyntaxAlert" class="alert alert-danger py-2 mb-3 d-none" style="font-size:0.8rem"></div>
                     <div class="mb-3">
                         <label class="form-label">Số điện thoại <span class="text-danger">*</span></label>
                         <input type="text" name="PhoneNumber" id="enrollPhone" class="form-control"
-                               pattern="^0\d{9}$" maxlength="10" placeholder="0901234567" required />
-                        <div class="form-text">Gồm 10 chữ số, bắt đầu bằng số 0 (dùng để định danh hội viên).</div>
+                               maxlength="10" placeholder="0901234567" autocomplete="off" required />
+                        <div id="errEnrollPhone" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Chỉ được 10 chữ số và bắt đầu từ số 0, không chứa chữ cái hay ký tự đặc biệt (VD: 0901234567).</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Họ và tên khách hàng (theo CCCD) <span class="text-danger">*</span></label>
                         <input type="text" name="FullName" id="enrollName" class="form-control"
-                               maxlength="100" placeholder="Nguyễn Văn A" required />
+                               maxlength="100" placeholder="Nguyễn Văn A" autocomplete="off" required />
+                        <div id="errEnrollName" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Nhập đúng định dạng chữ cái (VD: Nguyễn Văn A), không chứa chữ số hoặc ký tự đặc biệt.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Email <span class="text-danger">*</span></label>
-                        <input type="email" name="Email" id="enrollEmail" class="form-control"
-                               maxlength="256" pattern="^[a-zA-Z0-9._%+\-]+@@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$"
-                               title="Nhập đúng định dạng email (ví dụ: khachhang@gmail.com)"
-                               placeholder="khachhang@gmail.com" required />
+                        <input type="text" name="Email" id="enrollEmail" class="form-control"
+                               maxlength="256" placeholder="khachhang@gmail.com" autocomplete="off" required />
+                        <div id="errEnrollEmail" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Nhập đúng định dạng email hợp lệ (VD: khachhang@gmail.com).</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Ngày tháng năm sinh (theo CCCD — đủ 18 tuổi) <span class="text-danger">*</span></label>
                         <input type="date" name="DateOfBirth" id="enrollDob" class="form-control"
                                max="@maxAdultBirthDate" required />
+                        <div id="errEnrollDob" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
                         <div class="form-text">Khách hàng phải sinh từ ngày <strong>@DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("dd/MM/yyyy")</strong> trở về trước (đủ 18 tuổi).</div>
                     </div>
                     <div class="form-check p-2 rounded-3 mb-2" style="background:#fff1f2;border:1px solid #fecdd3;padding-left:2rem !important">
@@ -130,6 +135,7 @@
                         <label class="form-check-label fw-semibold text-danger" for="enrollCccd" style="font-size:0.84rem">
                             Nhân viên đã kiểm tra CCCD trực tiếp bên ngoài và xác nhận khách đủ 18 tuổi trở lên <span class="text-danger">*</span>
                         </label>
+                        <div id="errEnrollCccd" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="MarketingOptIn" value="true" id="enrollOptIn" checked />
@@ -140,7 +146,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn-outline-bms" data-bs-dismiss="modal">Đóng</button>
-                    <button type="submit" class="btn-primary-bms">
+                    <button type="submit" class="btn-primary-bms" id="btnSubmitQuickEnroll">
                         <i class="bi bi-check-lg"></i> Đăng ký hội viên (+10 điểm)
                     </button>
                 </div>
@@ -232,6 +238,147 @@
         if (input.value.trim().length >= 2) {
             doSearch(input.value);
         }
+
+        // ── Kiểm tra cú pháp trực tiếp (Live Validation) và chặn submit khi nhập sai định dạng ──
+        const quickForm = document.getElementById('quickEnrollForm');
+        const enrollName = document.getElementById('enrollName');
+        const enrollEmail = document.getElementById('enrollEmail');
+        const enrollDob = document.getElementById('enrollDob');
+        const enrollCccd = document.getElementById('enrollCccd');
+        const errPhone = document.getElementById('errEnrollPhone');
+        const errName = document.getElementById('errEnrollName');
+        const errEmail = document.getElementById('errEnrollEmail');
+        const errDob = document.getElementById('errEnrollDob');
+        const errCccd = document.getElementById('errEnrollCccd');
+        const syntaxAlert = document.getElementById('enrollSyntaxAlert');
+        const maxAdultDateStr = '@maxAdultBirthDate';
+
+        const rxName = /^[\p{L}\p{M}]+(\s+[\p{L}\p{M}]+)*$/u;
+        const rxPhone = /^0\d{9}$/;
+        const rxEmail = /^[a-zA-Z0-9._%+\-]+@@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+
+        function setFieldError(inp, errEl, msg) {
+            if (!inp || !errEl) return;
+            if (msg) {
+                inp.classList.add('is-invalid');
+                errEl.textContent = msg;
+                errEl.classList.remove('d-none');
+            } else {
+                inp.classList.remove('is-invalid');
+                errEl.textContent = '';
+                errEl.classList.add('d-none');
+            }
+        }
+
+        function validatePhone(forceEmpty) {
+            const val = (enrollPhone.value || '').trim();
+            if (!val) {
+                if (forceEmpty) setFieldError(enrollPhone, errPhone, 'Vui lòng nhập số điện thoại.');
+                else setFieldError(enrollPhone, errPhone, '');
+                return !forceEmpty;
+            }
+            if (/[^0-9]/.test(val)) {
+                setFieldError(enrollPhone, errPhone, 'Số điện thoại không được chứa chữ cái, khoảng trắng hoặc ký tự đặc biệt (chỉ nhập số 0-9).');
+                return false;
+            }
+            if (!val.startsWith('0')) {
+                setFieldError(enrollPhone, errPhone, 'Số điện thoại phải bắt đầu từ số 0 (Ví dụ: 0901234567).');
+                return false;
+            }
+            if (!rxPhone.test(val)) {
+                setFieldError(enrollPhone, errPhone, 'Số điện thoại phải gồm đúng 10 chữ số và bắt đầu từ số 0 (Ví dụ: 0901234567).');
+                return false;
+            }
+            setFieldError(enrollPhone, errPhone, '');
+            return true;
+        }
+
+        function validateName(forceEmpty) {
+            const raw = enrollName.value || '';
+            const val = raw.trim().replace(/\s+/g, ' ');
+            if (!val) {
+                if (forceEmpty) setFieldError(enrollName, errName, 'Vui lòng nhập họ và tên khách hàng.');
+                else setFieldError(enrollName, errName, '');
+                return !forceEmpty;
+            }
+            if (/[0-9]/.test(raw)) {
+                setFieldError(enrollName, errName, 'Họ và tên không được chứa chữ số. Vui lòng nhập theo định dạng: Nguyễn Văn A.');
+                return false;
+            }
+            if (!rxName.test(val) || val.length < 2) {
+                setFieldError(enrollName, errName, 'Họ và tên không được chứa ký tự đặc biệt hoặc số. Vui lòng nhập theo định dạng: Nguyễn Văn A.');
+                return false;
+            }
+            setFieldError(enrollName, errName, '');
+            return true;
+        }
+
+        function validateEmail(forceEmpty) {
+            const val = (enrollEmail.value || '').trim();
+            if (!val) {
+                if (forceEmpty) setFieldError(enrollEmail, errEmail, 'Vui lòng nhập địa chỉ Email.');
+                else setFieldError(enrollEmail, errEmail, '');
+                return !forceEmpty;
+            }
+            if (!rxEmail.test(val)) {
+                setFieldError(enrollEmail, errEmail, 'Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).');
+                return false;
+            }
+            setFieldError(enrollEmail, errEmail, '');
+            return true;
+        }
+
+        function validateDobAndCccd(forceEmpty) {
+            let ok = true;
+            const dobVal = (enrollDob.value || '').trim();
+            if (!dobVal) {
+                if (forceEmpty) {
+                    setFieldError(enrollDob, errDob, 'Vui lòng chọn ngày tháng năm sinh theo CCCD.');
+                    ok = false;
+                }
+            } else if (dobVal > maxAdultDateStr) {
+                setFieldError(enrollDob, errDob, 'Khách hàng chưa đủ 18 tuổi theo ngày sinh trên CCCD.');
+                ok = false;
+            } else {
+                setFieldError(enrollDob, errDob, '');
+            }
+
+            if (forceEmpty && !enrollCccd.checked) {
+                errCccd.textContent = 'Vui lòng tích xác nhận đã kiểm tra CCCD đủ 18 tuổi.';
+                errCccd.classList.remove('d-none');
+                ok = false;
+            } else {
+                errCccd.textContent = '';
+                errCccd.classList.add('d-none');
+            }
+            return ok;
+        }
+
+        enrollPhone.addEventListener('input', () => validatePhone(false));
+        enrollPhone.addEventListener('blur', () => validatePhone(true));
+        enrollName.addEventListener('input', () => validateName(false));
+        enrollName.addEventListener('blur', () => validateName(true));
+        enrollEmail.addEventListener('input', () => validateEmail(false));
+        enrollEmail.addEventListener('blur', () => validateEmail(true));
+        enrollDob.addEventListener('change', () => validateDobAndCccd(false));
+        enrollCccd.addEventListener('change', () => validateDobAndCccd(false));
+
+        quickForm.addEventListener('submit', function (e) {
+            const okPhone = validatePhone(true);
+            const okName = validateName(true);
+            const okEmail = validateEmail(true);
+            const okAdult = validateDobAndCccd(true);
+            if (!okPhone || !okName || !okEmail || !okAdult) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (syntaxAlert) {
+                    syntaxAlert.textContent = 'Không thể đăng ký hội viên: Vui lòng sửa các trường báo lỗi cú pháp màu đỏ bên dưới trước khi lưu.';
+                    syntaxAlert.classList.remove('d-none');
+                }
+                return false;
+            }
+            if (syntaxAlert) syntaxAlert.classList.add('d-none');
+        });
     })();
 </script>
 }

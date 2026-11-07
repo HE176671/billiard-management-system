@@ -506,12 +506,12 @@ try
 
 
 
-    // T20: Đăng ký hội viên tại quầy không dùng thẻ thành viên (SĐT, Email, Họ tên, Ngày sinh + kiểm tra CCCD đủ 18 tuổi)
+    // T20: Đăng ký hội viên tại quầy không dùng thẻ thành viên (chặn sai định dạng Họ tên có số/ký tự đặc biệt, SĐT, Email, chưa đủ 18 tuổi)
     var custMgmtCtrl = Prepare(new CustomerManagementController(users, db, ledger, segmentSvc, voucherSvc), staffPrincipal);
     var minorPhone = "09" + Random.Shared.Next(10000000, 99999999);
     await custMgmtCtrl.QuickEnroll(new QuickEnrollInputModel
     {
-        FullName = "Khách Chưa Đủ 18 Tuổi",
+        FullName = "Nguyễn Văn Nhỏ Tuổi",
         PhoneNumber = minorPhone,
         Email = $"minor.{key[..6]}@bms.local",
         DateOfBirth = VnTime.Today.AddYears(-16),
@@ -520,12 +520,47 @@ try
     });
     var minorCreated = await db.Users.AsNoTracking().AnyAsync(u => u.PhoneNumber == minorPhone);
 
+    // Kiểm thử chặn Họ tên chứa số/ký tự đặc biệt, SĐT sai format, Email sai format -> không lưu DB
+    var badSyntaxPhone = "09" + Random.Shared.Next(10000000, 99999999);
+    await custMgmtCtrl.QuickEnroll(new QuickEnrollInputModel
+    {
+        FullName = "Nguyễn Văn A 123@",
+        PhoneNumber = badSyntaxPhone,
+        Email = $"badsyntax.{key[..6]}@bms.local",
+        DateOfBirth = VnTime.Today.AddYears(-22),
+        IsCccdVerified = true,
+        ReturnTo = "checkout"
+    });
+    var badNameCreated = await db.Users.AsNoTracking().AnyAsync(u => u.PhoneNumber == badSyntaxPhone);
+
+    await custMgmtCtrl.QuickEnroll(new QuickEnrollInputModel
+    {
+        FullName = "Nguyễn Văn Hợp Lệ",
+        PhoneNumber = "1901234567",
+        Email = $"badphone.{key[..6]}@bms.local",
+        DateOfBirth = VnTime.Today.AddYears(-22),
+        IsCccdVerified = true,
+        ReturnTo = "checkout"
+    });
+    var badPhoneCreated = await db.Users.AsNoTracking().AnyAsync(u => u.PhoneNumber == "1901234567");
+
+    await custMgmtCtrl.QuickEnroll(new QuickEnrollInputModel
+    {
+        FullName = "Nguyễn Văn Hợp Lệ",
+        PhoneNumber = badSyntaxPhone,
+        Email = "saicuphap@gmail",
+        DateOfBirth = VnTime.Today.AddYears(-22),
+        IsCccdVerified = true,
+        ReturnTo = "checkout"
+    });
+    var badEmailCreated = await db.Users.AsNoTracking().AnyAsync(u => u.PhoneNumber == badSyntaxPhone);
+
     var adultPhone = "09" + Random.Shared.Next(10000000, 99999999);
     var adultEmail = $"adult.{key[..6]}@bms.local";
     var adultDob = VnTime.Today.AddYears(-22);
     var enrollRes = await custMgmtCtrl.QuickEnroll(new QuickEnrollInputModel
     {
-        FullName = "Khách Đủ 18 Tuổi CCCD",
+        FullName = "Nguyễn Văn Trưởng Thành",
         PhoneNumber = adultPhone,
         Email = adultEmail,
         DateOfBirth = adultDob,
@@ -534,13 +569,16 @@ try
     }) as RedirectToActionResult;
     var adultUser = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.PhoneNumber == adultPhone);
     Check(!minorCreated
+        && !badNameCreated
+        && !badPhoneCreated
+        && !badEmailCreated
         && adultUser != null
         && adultUser.EmployeeCode == null
         && adultUser.Email == adultEmail
         && adultUser.DateOfBirth == adultDob
         && adultUser.RewardPoints == 10
         && enrollRes?.ControllerName == "LoyaltyTest",
-        "T20: Counter QuickEnroll rejects under-18 or unverified CCCD, registers cardless 18+ member (+10 welcome points), and redirects to POS Checkout");
+        "T20: Counter QuickEnroll rejects invalid FullName (numbers/symbols), invalid PhoneNumber, invalid Email, or under-18 CCCD, and registers valid 18+ member (+10 welcome points)");
 
     // T21: Thanh toán tại quầy (POS Checkout) hỗ trợ Khách lẻ & Hội viên qua 2 hình thức VietQR / Tiền mặt + tích hợp bàn chơi & F&B
     var posCtrl = Prepare(new LoyaltyTestController(db, loyalty, ledger, tierEval), staffPrincipal);

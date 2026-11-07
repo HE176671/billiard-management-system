@@ -42,17 +42,19 @@ public class CustomerFormViewModel
     public string? Id { get; set; }
     public bool IsNew => string.IsNullOrEmpty(Id);
 
-    [Required(ErrorMessage = "Vui lòng nhập họ tên.")]
-    [StringLength(100, ErrorMessage = "Tối đa 100 ký tự.")]
+    [Required(ErrorMessage = "Vui lòng nhập họ và tên khách hàng.")]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "Họ và tên phải từ 2 đến 100 ký tự.")]
+    [RegularExpression(@"^[\p{L}\p{M}]+(\s+[\p{L}\p{M}]+)*$", ErrorMessage = "Họ và tên không được chứa số hoặc ký tự đặc biệt. Vui lòng nhập theo định dạng: Nguyễn Văn A.")]
     [Display(Name = "Họ và tên")]
     public string FullName { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Vui lòng nhập số điện thoại.")]
-    [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số.")]
+    [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải gồm đúng 10 chữ số, bắt đầu bằng số 0 và không chứa chữ cái hay ký tự đặc biệt (Ví dụ: 0901234567).")]
     [Display(Name = "Số điện thoại")]
     public string PhoneNumber { get; set; } = string.Empty;
 
-    [EmailAddress(ErrorMessage = "Email không hợp lệ.")]
+    [EmailAddress(ErrorMessage = "Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).")]
+    [RegularExpression(@"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", ErrorMessage = "Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).")]
     [StringLength(256)]
     [Display(Name = "Email")]
     public string? Email { get; set; }
@@ -71,17 +73,18 @@ public class CustomerFormViewModel
 // ── Ghi danh nhanh tại quầy (F1) ──
 public class QuickEnrollInputModel
 {
-    [Required(ErrorMessage = "Vui lòng nhập họ tên khách hàng.")]
-    [StringLength(100)]
+    [Required(ErrorMessage = "Vui lòng nhập họ và tên khách hàng.")]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "Họ và tên phải từ 2 đến 100 ký tự.")]
+    [RegularExpression(@"^[\p{L}\p{M}]+(\s+[\p{L}\p{M}]+)*$", ErrorMessage = "Họ và tên không được chứa số hoặc ký tự đặc biệt. Vui lòng nhập theo định dạng: Nguyễn Văn A.")]
     public string FullName { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Vui lòng nhập số điện thoại.")]
-    [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải bắt đầu bằng 0 và gồm đúng 10 chữ số.")]
+    [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải gồm đúng 10 chữ số, bắt đầu bằng số 0 và không chứa chữ cái hay ký tự đặc biệt (Ví dụ: 0901234567).")]
     public string PhoneNumber { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Vui lòng nhập địa chỉ Email của khách hàng.")]
-    [EmailAddress(ErrorMessage = "Email không đúng định dạng (VD: ten@domain.com).")]
-    [RegularExpression(@"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", ErrorMessage = "Email không đúng định dạng (VD: ten@domain.com).")]
+    [EmailAddress(ErrorMessage = "Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).")]
+    [RegularExpression(@"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", ErrorMessage = "Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).")]
     [StringLength(256)]
     public string? Email { get; set; }
 
