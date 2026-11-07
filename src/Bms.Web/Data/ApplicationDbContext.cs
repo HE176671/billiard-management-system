@@ -9,15 +9,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options) { }
 
-    // Custom business tables (Hung & Financial Audit E2E)
+    // Custom business tables (Hung)
     public DbSet<TableType>              TableTypes              => Set<TableType>();
     public DbSet<PricingConfig>          PricingConfigs          => Set<PricingConfig>();
     public DbSet<PaymentTransaction>     PaymentTransactions     => Set<PaymentTransaction>();
     public DbSet<BilliardTable>          BilliardTables          => Set<BilliardTable>();
     public DbSet<WorkShift>              WorkShifts              => Set<WorkShift>();
-    public DbSet<OperatingExpense>       OperatingExpenses       => Set<OperatingExpense>();
-    public DbSet<FinancialAuditCase>     FinancialAuditCases     => Set<FinancialAuditCase>();
-    public DbSet<MonthlyBudget>          MonthlyBudgets          => Set<MonthlyBudget>();
 
     // Loyalty & CRM tables (Dung - TV2)
     public DbSet<MembershipTier>         MembershipTiers         => Set<MembershipTier>();
@@ -275,83 +272,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.ToTable("BilliardTables");
             e.Property(x => x.TableCode).HasMaxLength(20);
             e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
-        });
-
-        // OperatingExpenses (Quản trị Tài chính & P&L 12 tháng + Phê duyệt E2E)
-        builder.Entity<OperatingExpense>(e =>
-        {
-            e.ToTable("OperatingExpenses");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.ExpenseCode).HasColumnType("varchar(50)").IsRequired();
-            e.HasIndex(x => x.ExpenseCode).IsUnique();
-            e.Property(x => x.ExpenseDate).HasColumnType("date");
-            e.Property(x => x.Category).HasColumnType("varchar(30)").IsRequired();
-            e.Property(x => x.Title).HasMaxLength(150).IsRequired();
-            e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
-            e.Property(x => x.ShiftPeriod).HasColumnType("varchar(20)").HasDefaultValue("All").IsRequired();
-            e.Property(x => x.VendorName).HasMaxLength(150);
-            e.Property(x => x.Status).HasColumnType("varchar(20)").HasDefaultValue("Approved").IsRequired();
-            e.Property(x => x.Notes).HasMaxLength(500);
-            e.Property(x => x.CreatedById).HasMaxLength(450);
-            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
-            e.Property(x => x.ReviewedById).HasMaxLength(450);
-            e.Property(x => x.ReviewedAtUtc).HasColumnType("datetime2(0)");
-            e.Property(x => x.ReviewNote).HasMaxLength(500);
-            e.Property(x => x.UpdatedAtUtc).HasColumnType("datetime2(0)");
-            e.HasOne(x => x.Table).WithMany().HasForeignKey(x => x.TableId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne(x => x.ReviewedBy).WithMany().HasForeignKey(x => x.ReviewedById).OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // FinancialAuditCases (Hồ sơ điều tra & xử lý thất thoát End-to-End)
-        builder.Entity<FinancialAuditCase>(e =>
-        {
-            e.ToTable("FinancialAuditCases");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.CaseCode).HasColumnType("varchar(64)").IsRequired();
-            e.HasIndex(x => x.CaseCode).IsUnique();
-            e.Property(x => x.LeakageCode).HasColumnType("varchar(20)").IsRequired();
-            e.Property(x => x.RuleName).HasMaxLength(150).IsRequired();
-            e.Property(x => x.Severity).HasColumnType("varchar(20)").IsRequired();
-            e.Property(x => x.OccurredAtUtc).HasColumnType("datetime2(0)");
-            e.Property(x => x.TableOrShiftLabel).HasMaxLength(150).IsRequired();
-            e.Property(x => x.StaffName).HasMaxLength(120).IsRequired();
-            e.Property(x => x.ExpectedAmount).HasColumnType("decimal(18,2)");
-            e.Property(x => x.ActualAmount).HasColumnType("decimal(18,2)");
-            e.Property(x => x.LeakageAmount).HasColumnType("decimal(18,2)");
-            e.Property(x => x.RecoveredAmount).HasColumnType("decimal(18,2)");
-            e.Property(x => x.Status).HasColumnType("varchar(24)").HasDefaultValue("Open").IsRequired();
-            e.Property(x => x.ResolutionType).HasColumnType("varchar(32)");
-            e.Property(x => x.EvidenceDetail).HasMaxLength(1000).IsRequired();
-            e.Property(x => x.RecommendedAction).HasMaxLength(600).IsRequired();
-            e.Property(x => x.ProblemSolved).HasMaxLength(600).IsRequired();
-            e.Property(x => x.InvestigationNote).HasMaxLength(1000);
-            e.Property(x => x.ResolvedById).HasMaxLength(450);
-            e.Property(x => x.ResolvedAtUtc).HasColumnType("datetime2(0)");
-            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
-            e.HasOne(x => x.ResolvedBy).WithMany().HasForeignKey(x => x.ResolvedById).OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // MonthlyBudgets (Định mức ngân sách 4 luồng chi & Kế hoạch mùa vụ 12 tháng)
-        builder.Entity<MonthlyBudget>(e =>
-        {
-            e.ToTable("MonthlyBudgets");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.PeriodMonth).HasColumnType("varchar(7)").IsRequired();
-            e.HasIndex(x => x.PeriodMonth).IsUnique();
-            e.Property(x => x.RevenueTarget).HasColumnType("decimal(18,2)");
-            e.Property(x => x.MaintenanceCap).HasColumnType("decimal(18,2)");
-            e.Property(x => x.InventoryCogsCap).HasColumnType("decimal(18,2)");
-            e.Property(x => x.UtilitiesCap).HasColumnType("decimal(18,2)");
-            e.Property(x => x.PayrollCap).HasColumnType("decimal(18,2)");
-            e.Property(x => x.StrategicFocus).HasMaxLength(150).IsRequired();
-            e.Property(x => x.ActionPlanSummary).HasMaxLength(1000).IsRequired();
-            e.Property(x => x.Status).HasColumnType("varchar(20)").HasDefaultValue("Active").IsRequired();
-            e.Property(x => x.UpdatedById).HasMaxLength(450);
-            e.Property(x => x.UpdatedAtUtc).HasColumnType("datetime2(0)");
-            e.Ignore(x => x.TotalExpenseCap);
-            e.Ignore(x => x.TargetNetProfit);
-            e.HasOne(x => x.UpdatedBy).WithMany().HasForeignKey(x => x.UpdatedById).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

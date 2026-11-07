@@ -64,7 +64,6 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 // TV5: dich vu ca lam dung chung (TV3 goi khi ghi nhan tien mat)
 builder.Services.AddScoped<IShiftService, ShiftService>();
-builder.Services.AddScoped<IFinancialAuditService, FinancialAuditService>();
 
 #endregion
 
@@ -98,13 +97,8 @@ using (var upgradeScope = app.Services.CreateScope())
     var upgradeLogger = upgradeScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     try
     {
-        var db = upgradeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        await SchemaUpgrader.ApplyAsync(db, upgradeLogger);
-        if (!await db.OperatingExpenses.AnyAsync())
-        {
-            var finAudit = upgradeScope.ServiceProvider.GetRequiredService<IFinancialAuditService>();
-            await finAudit.EnsureYearFinancialDataSeededAsync();
-        }
+        await SchemaUpgrader.ApplyAsync(
+            upgradeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), upgradeLogger);
     }
     catch (Exception ex)
     {
