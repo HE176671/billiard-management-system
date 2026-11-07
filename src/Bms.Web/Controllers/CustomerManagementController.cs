@@ -16,7 +16,6 @@ public class CustomerManagementController : Controller
 {
     private const int PageSize = 10;
     private const string PlaceholderEmailDomain = "@noemail.bms.local";
-    private const string CardPrefix = "MB";
 
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ApplicationDbContext _context;
@@ -160,7 +159,7 @@ public class CustomerManagementController : Controller
             CreatedAtUtc = now,
             TierId = defaultTier?.Id,
             TierAchievedAtUtc = now,
-            TierReviewAtUtc = now.AddMonths(12),
+            TierReviewAtUtc = now.AddMonths(1),
             RewardPoints = 0,
             TotalSpend = 0
         };
@@ -722,7 +721,7 @@ public class CustomerManagementController : Controller
                 CreatedAtUtc = now,
                 TierId = defaultTier?.Id,
                 TierAchievedAtUtc = now,
-                TierReviewAtUtc = now.AddMonths(12),
+                TierReviewAtUtc = now.AddMonths(1),
                 RewardPoints = 0,
                 TotalSpend = 0
             };
@@ -873,36 +872,6 @@ public class CustomerManagementController : Controller
         return RedirectToIndex(id, search, tierId, status, segment, page);
     }
 
-    // POST /CustomerManagement/AssignCard (Giữ tương thích nếu có gọi nội bộ)
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AssignCard(string id, string? cardCode, string? search, int? tierId,
-        string? status, string? segment, int page = 1)
-    {
-        var user = await GetCustomerOrNullAsync(id);
-        if (user == null) return NotFound();
-
-        var code = string.IsNullOrWhiteSpace(cardCode) ? await GenerateNextCardCode6Async() : cardCode.Trim().ToUpperInvariant();
-
-        if (code.Length > 20 || !System.Text.RegularExpressions.Regex.IsMatch(code, @"^[A-Z0-9\-]+$"))
-        {
-            TempData["Error"] = "Mã thẻ chỉ gồm chữ, số, dấu gạch ngang và tối đa 20 ký tự.";
-            return RedirectToIndex(id, search, tierId, status, segment, page);
-        }
-        if (await _context.Users.AnyAsync(u => u.EmployeeCode == code && u.Id != id))
-        {
-            TempData["Error"] = $"Mã thẻ {code} đã được gắn cho người khác.";
-            return RedirectToIndex(id, search, tierId, status, segment, page);
-        }
-
-        user.EmployeeCode = code;
-        var result = await _userManager.UpdateAsync(user);
-        if (result.Succeeded) TempData["Success"] = $"Đã gắn thẻ {code} cho {user.FullName}.";
-        else TempData["Error"] = "Không thể gắn thẻ: " + string.Join(" ", result.Errors.Select(TranslateIdentityError));
-
-        return RedirectToIndex(id, search, tierId, status, segment, page);
-    }
-
     // ── Helpers ──
 
     public static string MaskPhone(string? phone)
@@ -1034,20 +1003,6 @@ public class CustomerManagementController : Controller
 
     private static bool IsPlaceholderEmail(string? email) =>
         email != null && email.EndsWith(PlaceholderEmailDomain, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Sinh mã thẻ MB + 6 chữ số (vd: MB000001).</summary>
-    private async Task<string> GenerateNextCardCode6Async()
-    {
-        var codes = await _context.Users
-            .Where(u => u.EmployeeCode != null && u.EmployeeCode.StartsWith(CardPrefix))
-            .Select(u => u.EmployeeCode!)
-            .ToListAsync();
-
-        int max = 0;
-        foreach (var c in codes)
-            if (int.TryParse(c.AsSpan(CardPrefix.Length), out var n) && n > max) max = n;
-        return $"{CardPrefix}{(max + 1):D6}";
-    }
 
     private static string TranslateIdentityError(IdentityError err) => err.Code switch
     {

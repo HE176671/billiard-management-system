@@ -84,6 +84,6 @@ public interface ILoyaltyService
     [Obsolete("Sử dụng PreviewCheckoutAsync / CommitCheckoutAsync để đổi điểm trong cùng giao dịch thanh toán.")]
     Task<BillRedeemResult> RedeemPointsForBillAsync(string customerId, int pointsToRedeem, decimal currentBillAmount, CancellationToken ct = default);
 
-    /// <summary>Quét và xử lý hết hạn điểm thưởng cho các tài khoản không phát sinh hóa đơn quá 180 ngày.</summary>
+    /// <summary>Quét và thu hồi điểm thưởng cho các hồ sơ không phát sinh giao dịch trên 100 ngày.</summary>
     Task<int> ProcessPointExpirationsAsync(CancellationToken ct = default);
 }

@@ -76,17 +76,17 @@ public class TierEvaluationService : ITierEvaluationService
         var currentTier = tiers.FirstOrDefault(t => t.Id == user.TierId) ?? tiers[0];
         var oldTierName = currentTier.TierName;
 
-        // Hạng cao nhất đạt được theo chi tiêu 12 tháng
-        var resolvedTier = TierHelper.Resolve(tiers, newSpend12Months) ?? tiers[0];
+        // Hạng cao nhất đạt được theo ngưỡng điểm tích lũy hoặc chi tiêu
+        var resolvedTier = TierHelper.Resolve(tiers, newSpend12Months, user.RewardPoints) ?? tiers[0];
 
-        // 1. Nếu khách đang trong ân hạn mà đã chi tiêu đủ giữ hạng hiện tại -> xóa ân hạn, gia hạn review +12 tháng
-        if (user.TierGraceUntilUtc != null && newSpend12Months >= currentTier.SpendThreshold)
+        // 1. Nếu khách đang trong ân hạn mà đã chi tiêu hoặc đạt ngưỡng điểm đủ giữ hạng hiện tại -> xóa ân hạn, gia hạn review +1 tháng
+        if (user.TierGraceUntilUtc != null && (newSpend12Months >= currentTier.SpendThreshold || (currentTier.MinPoints > 0 && user.RewardPoints >= currentTier.MinPoints)))
         {
             user.TierGraceUntilUtc = null;
-            user.TierReviewAtUtc = now.AddMonths(12);
+            user.TierReviewAtUtc = now.AddMonths(1);
         }
 
-        // 2. Nếu đạt ngưỡng hạng cao hơn hiện tại -> Lên hạng ngay lập tức (BR-F5-1)
+        // 2. Nếu đạt ngưỡng điểm/chi tiêu của hạng cao hơn hiện tại -> Tự động nâng hạng tức thì ngay sau thanh toán
         bool upgraded = false;
         if (resolvedTier.SpendThreshold > currentTier.SpendThreshold || user.TierId == null)
         {
@@ -95,7 +95,7 @@ public class TierEvaluationService : ITierEvaluationService
                 upgraded = user.TierId != null && resolvedTier.SpendThreshold > currentTier.SpendThreshold;
                 user.TierId = resolvedTier.Id;
                 user.TierAchievedAtUtc = now;
-                user.TierReviewAtUtc = now.AddMonths(12);
+                user.TierReviewAtUtc = now.AddMonths(1);
                 user.TierGraceUntilUtc = null;
 
                 if (upgraded)
@@ -104,7 +104,7 @@ public class TierEvaluationService : ITierEvaluationService
                     {
                         UserId = user.Id,
                         Title = $"Chúc mừng thăng hạng {resolvedTier.TierName}!",
-                        Content = $"Chi tiêu 12 tháng của bạn đạt {VnFormat.Money(newSpend12Months)}, chính thức lên hạng {resolvedTier.TierName} (giảm {resolvedTier.DiscountPercent:0.##}% tiền giờ, tích điểm ×{resolvedTier.PointMultiplier}). Hạng có hiệu lực đến {now.AddMonths(12):dd/MM/yyyy}.",
+                        Content = $"Bạn đã đạt ngưỡng thăng hạng (Điểm hiện tại: {user.RewardPoints} · Chi tiêu: {VnFormat.Money(newSpend12Months)}), chính thức lên hạng {resolvedTier.TierName} (giảm {resolvedTier.DiscountPercent:0.##}% tiền giờ, tích điểm ×{resolvedTier.PointMultiplier}). Chu kỳ xét giữ hạng kế tiếp: {now.AddMonths(1):dd/MM/yyyy}.",
                         Type = "TierUpgrade",
                         IsRead = false,
                         CreatedAt = now
@@ -114,7 +114,7 @@ public class TierEvaluationService : ITierEvaluationService
                     {
                         CustomerId = user.Id,
                         Action = "TierChange",
-                        Detail = JsonSerializer.Serialize(new { from = oldTierName, to = resolvedTier.TierName, reason = "Upgrade12M", spend12M = newSpend12Months }),
+                        Detail = JsonSerializer.Serialize(new { from = oldTierName, to = resolvedTier.TierName, reason = "ImmediateCheckoutUpgrade", points = user.RewardPoints, spend12M = newSpend12Months }),
                         ActorId = actorId,
                         CreatedAtUtc = now
                     });
@@ -126,7 +126,7 @@ public class TierEvaluationService : ITierEvaluationService
         else if (user.TierReviewAtUtc == null)
         {
             user.TierAchievedAtUtc ??= now;
-            user.TierReviewAtUtc = now.AddMonths(12);
+            user.TierReviewAtUtc = now.AddMonths(1);
         }
 
         return (upgraded, oldTierName, currentTier);
@@ -157,26 +157,26 @@ public class TierEvaluationService : ITierEvaluationService
 
             var spend12M = await GetSpendLast12MonthsAsync(user.Id, now, ct);
 
-            // A. Khách đang trong thời gian ân hạn
+            // A. Khách đang trong thời gian ân hạn 30 ngày
             if (user.TierGraceUntilUtc.HasValue)
             {
                 if (spend12M >= currentTier.SpendThreshold)
                 {
-                    // Đã chi tiêu đủ trong thời gian ân hạn -> Giữ hạng
+                    // Đã chi tiêu đủ trong thời gian ân hạn -> Giữ hạng thêm 1 tháng
                     user.TierGraceUntilUtc = null;
-                    user.TierReviewAtUtc = now.AddMonths(12);
+                    user.TierReviewAtUtc = now.AddMonths(1);
                     renewed++;
                 }
                 else if (user.TierGraceUntilUtc.Value <= now)
                 {
-                    // BR-F5-3: Hết ân hạn mà vẫn chưa đủ -> Hạ đúng 1 bậc (không rơi thẳng về Member)
+                    // Hết 30 ngày ân hạn mà vẫn thiếu chi tiêu -> Hạ tối đa 1 bậc liền kề (không rơi thẳng về Member)
                     int newIdx = Math.Max(0, currentIdx - 1);
                     var lowerTier = tiers[newIdx];
                     var oldName = currentTier.TierName;
 
                     user.TierId = lowerTier.Id;
                     user.TierAchievedAtUtc = now;
-                    user.TierReviewAtUtc = now.AddMonths(12);
+                    user.TierReviewAtUtc = now.AddMonths(1);
                     user.TierGraceUntilUtc = null;
                     downgraded++;
 
@@ -184,7 +184,7 @@ public class TierEvaluationService : ITierEvaluationService
                     {
                         UserId = user.Id,
                         Title = $"Thông báo điều chỉnh hạng thành viên ({oldName} → {lowerTier.TierName})",
-                        Content = $"Thời gian ân hạn giữ hạng {oldName} đã kết thúc. Hạng hiện tại của bạn được điều chỉnh về {lowerTier.TierName}. Hãy tiếp tục tích lũy chi tiêu để thăng hạng trở lại!",
+                        Content = $"Thời gian 30 ngày ân hạn giữ hạng {oldName} đã kết thúc. Hạng hiện tại của bạn được điều chỉnh giảm 1 bậc liền kề về {lowerTier.TierName}. Hãy tiếp tục tích lũy để thăng hạng trở lại!",
                         Type = "TierDowngrade",
                         IsRead = false,
                         CreatedAt = now
@@ -201,18 +201,18 @@ public class TierEvaluationService : ITierEvaluationService
                 continue;
             }
 
-            // B. Đến kỳ xét giữ hạng (TierReviewAtUtc <= now) cho các hạng > hạng thấp nhất
+            // B. Đến kỳ xét giữ hạng 1 tháng (TierReviewAtUtc <= now) cho các hạng > hạng thấp nhất
             if (currentIdx > 0 && user.TierReviewAtUtc.HasValue && user.TierReviewAtUtc.Value <= now)
             {
                 if (spend12M >= currentTier.SpendThreshold)
                 {
-                    // BR-F5-2: Đủ chi tiêu 12 tháng -> gia hạn review thêm 12 tháng
-                    user.TierReviewAtUtc = now.AddMonths(12);
+                    // Đủ chi tiêu -> tự động xét giữ hạng thêm 1 tháng
+                    user.TierReviewAtUtc = now.AddMonths(1);
                     renewed++;
                 }
                 else
                 {
-                    // BR-F5-2: Chưa đủ -> vào ân hạn 30 ngày
+                    // Thiếu chi tiêu -> mở 30 ngày ân hạn
                     var graceUntil = now.AddDays(30);
                     user.TierGraceUntilUtc = graceUntil;
                     var needed = currentTier.SpendThreshold - spend12M;
@@ -221,8 +221,8 @@ public class TierEvaluationService : ITierEvaluationService
                     _db.Notifications.Add(new Notification
                     {
                         UserId = user.Id,
-                        Title = $"Cảnh báo duy trì hạng {currentTier.TierName}",
-                        Content = $"Kỳ xét hạng 12 tháng đã đến. Bạn cần chi tiêu thêm {VnFormat.Money(needed)} trước ngày {graceUntil.ToVn():dd/MM/yyyy} để giữ hạng {currentTier.TierName}.",
+                        Title = $"Cảnh báo duy trì hạng {currentTier.TierName} (30 ngày ân hạn)",
+                        Content = $"Kỳ xét giữ hạng 1 tháng đã đến. Bạn đang được mở 30 ngày ân hạn và cần chi tiêu thêm {VnFormat.Money(needed)} trước ngày {graceUntil.ToVn():dd/MM/yyyy} để giữ hạng {currentTier.TierName}.",
                         Type = "TierGrace",
                         IsRead = false,
                         CreatedAt = now

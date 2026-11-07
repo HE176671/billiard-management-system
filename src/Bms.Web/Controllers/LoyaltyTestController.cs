@@ -630,8 +630,8 @@ public class LoyaltyTestController : Controller
     {
         int count = await _loyaltyService.ProcessPointExpirationsAsync();
         TempData["Success"] = count > 0
-            ? $"Đã quét và reset điểm thưởng hết hạn cho {count} khách hàng (>180 ngày không thanh toán)."
-            : "Đã quét xong: Không có khách hàng nào có điểm thưởng hết hạn.";
+            ? $"Đã quét và thu hồi điểm thưởng cho {count} hồ sơ (>100 ngày không giao dịch)."
+            : "Đã quét xong: Không có hồ sơ nào không giao dịch trên 100 ngày.";
 
         return RedirectToAction(nameof(Index), new { customerId });
     }
@@ -652,15 +652,15 @@ public class LoyaltyTestController : Controller
                 type: PointTransaction.Bonus,
                 referenceCode: $"SIM-AGING-{DateTime.UtcNow:yyyyMMddHHmmss}",
                 invoiceId: null,
-                reason: "Cấp điểm giả lập để kiểm thử hết hạn 180 ngày",
+                reason: "Cấp điểm giả lập để kiểm thử thu hồi điểm >100 ngày",
                 actorId: CurrentActorId);
         }
 
         await _context.Entry(user).ReloadAsync();
-        user.LastPaidDate = DateTime.UtcNow.AddDays(-185);
+        user.LastPaidDate = DateTime.UtcNow.AddDays(-105);
         await _context.SaveChangesAsync();
 
-        TempData["Success"] = $"[ĐÃ GIẢ LẬP] Đặt LastPaidDate của {user.FullName} về 185 ngày trước (Điểm hiện có: {user.RewardPoints}). Bạn có thể bấm 'Quét hết hạn điểm' ngay để kiểm tra kết quả!";
+        TempData["Success"] = $"[ĐÃ GIẢ LẬP] Đặt LastPaidDate của {user.FullName} về 105 ngày trước (Điểm hiện có: {user.RewardPoints}). Bạn có thể bấm 'Quét hết hạn điểm' ngay để kiểm tra kết quả!";
         return RedirectToAction(nameof(Index), new { customerId });
     }
 

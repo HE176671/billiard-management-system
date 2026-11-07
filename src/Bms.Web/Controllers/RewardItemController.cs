@@ -60,7 +60,7 @@ public class RewardItemController : Controller
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Save(int id, string code, string name, string? description,
-        int pointCost, string rewardType, decimal? discountValue, int validDays = 30, int? minTierId = null, bool isActive = true)
+        int pointCost, string rewardType, decimal? discountValue, int validDays = 7, int? minTierId = null, bool isActive = true)
     {
         code = (code ?? string.Empty).Trim().ToUpperInvariant();
         name = (name ?? string.Empty).Trim();

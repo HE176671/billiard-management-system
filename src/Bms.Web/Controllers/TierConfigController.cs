@@ -141,13 +141,13 @@ public class TierConfigController : Controller
             {
                 var spend12M = await _tierEval.GetSpendLast12MonthsAsync(u.Id, now);
                 var curTier = allTiers.FirstOrDefault(t => t.Id == u.TierId) ?? allTiers[0];
-                var resolved = TierHelper.Resolve(allTiers, spend12M) ?? allTiers[0];
+                var resolved = TierHelper.Resolve(allTiers, spend12M, u.RewardPoints) ?? allTiers[0];
 
                 if (u.TierId == null || resolved.SpendThreshold > curTier.SpendThreshold)
                 {
                     u.TierId = resolved.Id;
                     u.TierAchievedAtUtc = now;
-                    u.TierReviewAtUtc = now.AddMonths(12);
+                    u.TierReviewAtUtc = now.AddMonths(1);
                     u.TierGraceUntilUtc = null;
                     upgradedCount++;
                 }
@@ -157,7 +157,7 @@ public class TierConfigController : Controller
             await tx.CommitAsync();
 
             TempData["Success"] = upgradedCount > 0
-                ? $"Đã lưu cấu hình hạng & ưu đãi. Đã nâng hạng ngay cho {upgradedCount} khách hàng đủ điều kiện (các khách hàng chưa đủ ngưỡng sẽ được xét giữ/ân hạn theo chu kỳ 12 tháng)."
+                ? $"Đã lưu cấu hình hạng & ưu đãi. Đã nâng hạng ngay cho {upgradedCount} khách hàng đủ điều kiện (các khách hàng chưa đủ ngưỡng sẽ được xét giữ/ân hạn theo chu kỳ 1 tháng)."
                 : "Đã lưu cấu hình hạng & ưu đãi thành công.";
         }
         catch

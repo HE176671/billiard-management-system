@@ -109,7 +109,7 @@ public class VoucherService : IVoucherService
                 DiscountValue = item.DiscountValue,
                 Status = CustomerVoucher.StatusActive,
                 IssuedAtUtc = now,
-                ExpiresAtUtc = now.AddDays(Math.Max(1, item.ValidDays)),
+                ExpiresAtUtc = now.AddDays(7),
                 PointTransactionId = ledgerRes.TransactionId
             };
 
@@ -316,7 +316,8 @@ public class VoucherService : IVoucherService
             bool exists = await _db.CustomerVouchers.AnyAsync(v => v.Code == code, ct);
             if (!exists) return code;
         }
-        return $"BMS-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+        var fallback = Guid.NewGuid().ToString("N").ToUpperInvariant();
+        return $"BMS-{fallback[..4]}-{fallback[4..8]}";
     }
 
     private Task<int> GetPointsAsync(string customerId, CancellationToken ct) =>

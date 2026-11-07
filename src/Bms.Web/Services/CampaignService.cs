@@ -146,7 +146,7 @@ public class CampaignService : ICampaignService
                         DiscountValue = campaign.RewardItem.DiscountValue,
                         Status = CustomerVoucher.StatusActive,
                         IssuedAtUtc = now,
-                        ExpiresAtUtc = now.AddDays(Math.Max(1, campaign.RewardItem.ValidDays))
+                        ExpiresAtUtc = now.AddDays(7)
                     });
                 }
 
@@ -262,7 +262,7 @@ public class CampaignService : ICampaignService
                 DiscountValue = val,
                 Status = CustomerVoucher.StatusActive,
                 IssuedAtUtc = now,
-                ExpiresAtUtc = now.AddDays(30),
+                ExpiresAtUtc = now.AddDays(7),
                 UsedReferenceCode = bdayRef
             });
 
@@ -270,7 +270,7 @@ public class CampaignService : ICampaignService
             {
                 UserId = u.Id,
                 Title = $"🎂 Chúc mừng sinh nhật {u.FullName}!",
-                Content = $"Quán gửi tặng bạn voucher giảm {VnFormat.Money(val)} nhân dịp sinh nhật (Hạng {u.Tier.TierName}). Mã voucher: {code} (hạn dùng 30 ngày).",
+                Content = $"Quán gửi tặng bạn voucher giảm {VnFormat.Money(val)} nhân dịp sinh nhật (Hạng {u.Tier.TierName}). Mã voucher: {code} (hạn dùng 7 ngày).",
                 Type = "Birthday",
                 IsRead = false,
                 CreatedAt = now
@@ -288,9 +288,9 @@ public class CampaignService : ICampaignService
     public async Task<int> SendExpiryWarningNotificationsAsync(DateTime? nowUtc = null, CancellationToken ct = default)
     {
         var now = nowUtc ?? DateTime.UtcNow;
-        // Khách có LastPaidDate cách đây 166 ngày (còn 14 ngày nữa chạm mốc 180 ngày)
-        var fromDate = now.AddDays(-167);
-        var toDate = now.AddDays(-165);
+        // Khách có LastPaidDate cách đây 86 ngày (còn 14 ngày nữa chạm mốc 100 ngày thu hồi điểm)
+        var fromDate = now.AddDays(-87);
+        var toDate = now.AddDays(-85);
 
         var warningUsers = await _db.Users.AsNoTracking()
             .Where(u => u.IsActive && u.RewardPoints > 0 && u.LastPaidDate >= fromDate && u.LastPaidDate <= toDate)
@@ -303,12 +303,12 @@ public class CampaignService : ICampaignService
                 .AnyAsync(n => n.UserId == u.Id && n.Type == "ExpireWarning" && n.CreatedAt >= now.AddDays(-15), ct);
             if (recentWarned) continue;
 
-            var expireDate = u.LastPaidDate!.Value.AddDays(180).ToVn();
+            var expireDate = u.LastPaidDate!.Value.AddDays(100).ToVn();
             _db.Notifications.Add(new Notification
             {
                 UserId = u.Id,
-                Title = "⚠️ Điểm thưởng sắp hết hạn sau 14 ngày",
-                Content = $"Bạn đang có {u.RewardPoints} điểm (tương đương {VnFormat.Money(u.RewardPoints * 1000m)}) sẽ hết hạn vào ngày {expireDate:dd/MM/yyyy}. Hãy ghé quán chơi hoặc đổi quà ngay!",
+                Title = "⚠️ Điểm thưởng sắp bị thu hồi sau 14 ngày",
+                Content = $"Bạn đang có {u.RewardPoints} điểm (tương đương {VnFormat.Money(u.RewardPoints * 1000m)}) sẽ hết hạn vào ngày {expireDate:dd/MM/yyyy} (sau 100 ngày không giao dịch). Hãy ghé quán chơi hoặc đổi quà ngay!",
                 Type = "ExpireWarning",
                 IsRead = false,
                 CreatedAt = now

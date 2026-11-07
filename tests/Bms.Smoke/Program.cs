@@ -278,7 +278,7 @@ try
     Check(previewT5.PointsToEarn == 7 * goldTier.PointMultiplier,
         "T6: PointsToEarn calculated on FinalAmount * PointMultiplier");
 
-    // T7: Lên hạng khi vượt ngưỡng 12 tháng -> TierId đổi, TierReviewAtUtc = +12 tháng, có Notification
+    // T7: Tự động nâng hạng tức thì ngay sau thanh toán khi đạt ngưỡng -> TierId đổi, TierReviewAtUtc = +1 tháng, có Notification
     var upCustomer = new ApplicationUser
     {
         UserName = "tv2.up." + key,
@@ -296,9 +296,10 @@ try
     var upUserAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == upCustomer.Id);
     var hasUpgradeNotif = await db.Notifications.AnyAsync(n => n.UserId == upCustomer.Id && n.Title.Contains(silverTier.TierName));
     Check(commitT7.Success && commitT7.UpgradedTier && upUserAfter.TierId == silverTier.Id
-        && upUserAfter.TierReviewAtUtc.HasValue && upUserAfter.TierReviewAtUtc.Value > DateTime.UtcNow.AddMonths(11)
+        && upUserAfter.TierReviewAtUtc.HasValue && upUserAfter.TierReviewAtUtc.Value > DateTime.UtcNow.AddDays(25)
+        && upUserAfter.TierReviewAtUtc.Value < DateTime.UtcNow.AddDays(35)
         && hasUpgradeNotif,
-        "T7: Immediate tier upgrade on 12M spend threshold updates TierId, sets TierReviewAtUtc +12M, and creates Notification");
+        "T7: Immediate tier upgrade on threshold updates TierId, sets 1-month TierReviewAtUtc (+1M), and creates Notification");
 
     // T8: Hết review, chưa đủ chi tiêu -> Vào ân hạn 30 ngày, chưa hạ
     var graceCustomer = new ApplicationUser
@@ -597,6 +598,34 @@ try
         && ptsAfterQr == 22
         && ptsAfterCash == 32,
         "T21: POS Checkout supports Walk-in Guest and Member checkout via both VietQR and Cash (validating cash received/change and awarding points for both payment methods)");
+
+    // T22: Voucher BMS-XXXX-XXXX hạn dùng 7 ngày; LoyaltyDailyJob quét hết hạn voucher (Expired) & thu hồi điểm thưởng hồ sơ >100 ngày không giao dịch
+    await ledger.PostAsync(adultUser.Id, rewardItem.PointCost + 50, PointTransaction.Bonus, $"T22-BONUS-{key[..6]}", null, "Cấp điểm kiểm thử T22", staff.Id);
+    var redeemT22 = await voucherSvc.RedeemRewardForVoucherAsync(adultUser.Id, rewardItem.Code);
+    var vT22 = redeemT22.Voucher!;
+    bool isBmsFormat = System.Text.RegularExpressions.Regex.IsMatch(vT22.Code, @"^BMS-[A-Z0-9]{4}-[A-Z0-9]{4}$");
+    int validDaysT22 = (int)Math.Round((vT22.ExpiresAtUtc - vT22.IssuedAtUtc).TotalDays);
+
+    await db.CustomerVouchers.Where(v => v.Id == vT22.Id)
+        .ExecuteUpdateAsync(s => s.SetProperty(v => v.ExpiresAtUtc, DateTime.UtcNow.AddMinutes(-5)));
+    await db.Users.Where(u => u.Id == adultUser.Id)
+        .ExecuteUpdateAsync(s => s.SetProperty(u => u.LastPaidDate, DateTime.UtcNow.AddDays(-105)));
+    db.ChangeTracker.Clear();
+
+    var dailySummary = await campaignSvc.RunAllDailyTasksAsync(DateTime.UtcNow);
+    var vT22After = await db.CustomerVouchers.AsNoTracking().SingleAsync(v => v.Id == vT22.Id);
+    var adultAfterDaily = await db.Users.AsNoTracking().SingleAsync(u => u.Id == adultUser.Id);
+    var hasExpire100Tx = await db.PointTransactions.AnyAsync(t => t.CustomerId == adultUser.Id && t.TransactionType == PointTransaction.Expire && t.Reason!.Contains("100 ngày"));
+
+    Check(redeemT22.Success
+        && isBmsFormat
+        && validDaysT22 == 7
+        && dailySummary.VouchersExpired >= 1
+        && vT22After.Status == CustomerVoucher.StatusExpired
+        && dailySummary.PointsExpiredUsers >= 1
+        && adultAfterDaily.RewardPoints == 0
+        && hasExpire100Tx,
+        "T22: Redeem issues BMS-XXXX-XXXX voucher with 7-day validity; LoyaltyDailyJob transitions overdue vouchers to Expired and reclaims points for accounts inactive >100 days");
 
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }
