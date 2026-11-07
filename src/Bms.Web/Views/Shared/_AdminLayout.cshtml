@@ -234,10 +234,6 @@
                asp-controller="Order" asp-action="Manage">
                 <i class="bi bi-bell"></i> Duyệt đơn bàn
             </a>
-            <a class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Checkout" && ViewContext.RouteData.Values["action"]?.ToString() == "Invoices" ? "active" : "")"
-               asp-controller="Checkout" asp-action="Invoices">
-                <i class="bi bi-receipt"></i> Hóa đơn & Đối soát
-            </a>
         }
 
         @if (User.IsInRole("Customer"))

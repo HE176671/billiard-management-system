@@ -15,18 +15,15 @@ public class OrderController : Controller
 {
     private readonly ApplicationDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IVnPayService _vnPayService;
     private readonly ILogger<OrderController> _logger;
 
     public OrderController(
         ApplicationDbContext db,
         UserManager<ApplicationUser> userManager,
-        IVnPayService vnPayService,
         ILogger<OrderController> logger)
     {
         _db = db;
         _userManager = userManager;
-        _vnPayService = vnPayService;
         _logger = logger;
     }
 
@@ -314,7 +311,7 @@ public class OrderController : Controller
     [Authorize(Roles = "Staff,Admin")]
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SubmitCounterTakeaway(SubmitOrderInputModel input, string paymentMethod = "Cash")
+    public async Task<IActionResult> SubmitCounterTakeaway(SubmitOrderInputModel input)
     {
         var staffId = _userManager.GetUserId(User) 
             ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
@@ -392,52 +389,10 @@ public class OrderController : Controller
                 prod.StockQuantity -= item.Quantity; // Trừ tồn kho
             }
             await _db.SaveChangesAsync();
+            await tx.CommitAsync();
 
-            // 4. Tạo Hóa đơn Invoices
-            var isCash = paymentMethod.Equals("Cash", StringComparison.OrdinalIgnoreCase);
-            var invoice = new Invoice
-            {
-                SessionId = counterSession.Id,
-                CustomerId = null,
-                TotalPlaytime = 0,
-                TotalFandB = totalAmount,
-                DiscountAmount = 0,
-                Status = isCash ? "Paid" : "Unpaid",
-                CreatedAtUtc = DateTime.UtcNow
-            };
-            _db.Invoices.Add(invoice);
-            await _db.SaveChangesAsync();
-
-            if (isCash)
-            {
-                // Lưu giao dịch tiền mặt
-                var pt = new PaymentTransaction
-                {
-                    InvoiceId = invoice.Id,
-                    PaymentMethod = "Cash",
-                    AmountPaid = totalAmount,
-                    GatewayRefCode = null,
-                    TransactionTimeUtc = DateTime.UtcNow
-                };
-                _db.PaymentTransactions.Add(pt);
-                await _db.SaveChangesAsync();
-                await tx.CommitAsync();
-
-                TempData["Success"] = $"Đã thu tiền mặt {totalAmount:#,##0 ₫} cho đơn mua tại quầy.";
-                return RedirectToAction("InvoiceReceipt", "Checkout", new { id = invoice.Id });
-            }
-            else
-            {
-                // Thanh toán VNPay
-                await tx.CommitAsync();
-                var paymentUrl = _vnPayService.CreatePaymentUrl(
-                    HttpContext,
-                    invoice.Id,
-                    totalAmount,
-                    $"Khach quay mua do an - HD #{invoice.Id}"
-                );
-                return Redirect(paymentUrl);
-            }
+            TempData["Success"] = $"Đã tạo đơn bán mang về thành công! Tổng tiền: {totalAmount:#,##0 ₫}.";
+            return RedirectToAction(nameof(Counter));
         }
         catch (Exception ex)
         {

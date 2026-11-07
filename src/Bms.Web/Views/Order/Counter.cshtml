@@ -15,9 +15,6 @@
         <a asp-controller="Order" asp-action="Manage" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
             <i class="bi bi-bell"></i> Duyệt đơn bàn QR
         </a>
-        <a asp-controller="Checkout" asp-action="Invoices" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
-            <i class="bi bi-receipt"></i> Lịch sử hóa đơn
-        </a>
     </div>
 </div>
 
@@ -131,18 +128,15 @@
                             </div>
                         </div>
 
-                        <!-- 2 nút thanh toán -->
+                        <!-- Nút hoàn tất đơn quầy -->
                         <div class="d-grid gap-2">
-                            <button type="submit" name="paymentMethod" value="Cash" class="btn btn-success py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2 btn-takeaway-submit" disabled>
-                                <i class="bi bi-cash-stack fs-5"></i> Thu TIỀN MẶT & In hóa đơn
-                            </button>
-                            <button type="submit" name="paymentMethod" value="VNPay" class="btn btn-primary py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2 btn-takeaway-submit" disabled>
-                                <i class="bi bi-qr-code-scan fs-5"></i> Thanh toán VNPAY (QR Code)
+                            <button type="submit" class="btn btn-success py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2 btn-takeaway-submit" disabled>
+                                <i class="bi bi-check2-circle fs-5"></i> Xác nhận tạo đơn mang về
                             </button>
                         </div>
 
                         <div class="text-center text-muted small mt-3">
-                            <i class="bi bi-check-circle text-success me-1"></i> Tồn kho sẽ được trừ ngay khi bấm thanh toán
+                            <i class="bi bi-check-circle text-success me-1"></i> Tồn kho sẽ được trừ ngay khi tạo đơn
                         </div>
                     </div>
                 </div>
@@ -256,16 +250,10 @@
                             <h5 class="fw-bold mb-0">Bàn @Model.TableCode</h5>
                             <span class="badge bg-success">Đang chơi</span>
                         </div>
-                        <div class="small text-muted mb-3">
+                        <div class="small text-muted">
                             <div>Loại bàn: <strong>@Model.TableTypeName</strong></div>
                             <div>Tầng: <strong>@Model.FloorNumber</strong></div>
                             <div>Giờ bắt đầu: <strong>@Model.StartAtUtc?.AddHours(7).ToString("HH:mm dd/MM/yyyy")</strong></div>
-                        </div>
-
-                        <div class="d-grid gap-2">
-                            <a asp-controller="Checkout" asp-action="Session" asp-route-sessionId="@Model.ActiveSessionId" class="btn btn-danger fw-bold py-2 shadow-sm">
-                                <i class="bi bi-credit-card me-1"></i> Đi đến thanh toán bàn này
-                            </a>
                         </div>
                     </div>
 

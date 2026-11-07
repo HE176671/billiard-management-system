@@ -7,7 +7,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
-builder.Services.AddScoped<IVnPayService, VnPayService>();
 
 // DbContext trỏ vào BilliardDB (connection string trong appsettings)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -71,11 +70,6 @@ app.MapControllerRoute(
     name: "order",
     pattern: "Order/{action=Index}/{id?}",
     defaults: new { controller = "Order" });
-
-app.MapControllerRoute(
-    name: "checkout",
-    pattern: "Checkout/{action=Index}/{id?}",
-    defaults: new { controller = "Checkout" });
 
 app.MapControllerRoute(
     name: "default",
