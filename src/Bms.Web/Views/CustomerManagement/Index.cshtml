@@ -1,10 +1,11 @@
 @model Bms.Web.Models.CustomerManagementViewModel
 @using Bms.Web.Services
 @{
-    ViewData["Title"] = "Quản lý khách hàng";
+    ViewData["Title"] = "Tra cứu hội viên";
     Layout = "_AdminLayout";
     var form = Model.Form;
     var selectedId = form?.Id;
+    var maxAdultBirthDate = DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("yyyy-MM-dd");
 
     string TierStyle(string? name) => name switch
     {
@@ -31,43 +32,51 @@
 }
 
 <div class="row g-3">
-    <!-- ═══════════ Trái: danh sách ═══════════ -->
-    <div class="col-md-7">
+    <!-- ═══════════ Tra cứu hội viên ═══════════ -->
+    <div class="col-12">
         <div class="data-card">
             <div class="data-card-header">
-                <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách khách hàng (@Model.TotalCount)</span>
-                <a asp-action="Index"
-                   asp-route-add="true"
-                   asp-route-search="@Model.Search"
-                   asp-route-tierId="@Model.TierId"
-                   asp-route-status="@Model.Status"
-                   asp-route-page="@Model.Page"
-                   id="btnAddCustomer" class="btn-primary-bms">
-                    <i class="bi bi-plus-lg"></i> Add Customer
-                </a>
+                <span class="data-card-title"><i class="bi bi-people me-2"></i>Tra cứu hội viên (@Model.TotalCount)</span>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn-primary-bms" data-bs-toggle="modal" data-bs-target="#quickEnrollModal">
+                        <i class="bi bi-person-plus"></i> + Đăng ký hội viên mới (CCCD 18+)
+                    </button>
+                    <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-outline-bms">
+                        <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
+                    </a>
+                    <a asp-action="ExportCsv"
+                       asp-route-search="@Model.Search"
+                       asp-route-tierId="@Model.TierId"
+                       asp-route-segment="@Model.Segment"
+                       class="btn-outline-bms">
+                        <i class="bi bi-download"></i> Xuất CSV
+                    </a>
+                </div>
             </div>
 
-            <form method="get" id="searchForm" class="d-flex gap-2 flex-wrap p-3 border-bottom">
-                <input type="text" name="search" value="@Model.Search" placeholder="Tìm tên / SĐT..."
-                       class="form-control" style="flex:1;min-width:160px;font-size:0.8rem" />
-                <select name="tierId" class="form-select" style="width:130px;font-size:0.8rem"
+            <form method="get" id="searchForm" class="d-flex gap-2 flex-wrap p-3 border-bottom bg-light bg-opacity-50">
+                <input type="text" name="search" value="@Model.Search" placeholder="Tìm theo họ tên, số điện thoại hoặc email..."
+                       class="form-control" style="flex:1;min-width:200px" />
+                <select name="segment" class="form-select" style="width:175px"
                         onchange="this.form.submit()">
-                    <option value="" selected="@(Model.TierId == null)">All Tiers</option>
-                    @foreach (var t in Model.Tiers)
+                    <option value="" selected="@(string.IsNullOrEmpty(Model.Segment))">Tất cả nhóm khách</option>
+                    @foreach (var seg in new[] { "Champion", "Loyal", "New", "AtRisk" })
                     {
-                        <option value="@t.Id" selected="@(Model.TierId == t.Id)">@t.Name</option>
+                        <option value="@seg" selected="@(Model.Segment == seg)">@VnFormat.SegmentLabel(seg)</option>
                     }
                 </select>
-                <select name="status" class="form-select" style="width:130px;font-size:0.8rem"
+                <select name="tierId" class="form-select" style="width:140px"
                         onchange="this.form.submit()">
-                    <option value="" selected="@(Model.Status == null)">All Status</option>
-                    <option value="active" selected="@(Model.Status == "active")">Active</option>
-                    <option value="locked" selected="@(Model.Status == "locked")">Locked</option>
+                    <option value="" selected="@(Model.TierId == null)">Tất cả hạng</option>
+                    @foreach (var t in Model.Tiers)
+                    {
+                        <option value="@t.Id" selected="@(Model.TierId == t.Id)">Hạng @t.Name</option>
+                    }
                 </select>
-                <button type="submit" class="btn-primary-bms" title="Tìm kiếm"><i class="bi bi-search"></i></button>
-                @if (!string.IsNullOrEmpty(Model.Search) || Model.TierId != null || Model.Status != null)
+                <button type="submit" class="btn-primary-bms" title="Tìm kiếm"><i class="bi bi-search"></i> Tìm</button>
+                @if (!string.IsNullOrEmpty(Model.Search) || Model.TierId != null || !string.IsNullOrEmpty(Model.Segment))
                 {
-                    <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x"></i> Xóa lọc</a>
+                    <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x-lg"></i> Xóa lọc</a>
                 }
             </form>
 
@@ -75,7 +84,7 @@
             {
                 <div class="text-center py-5 text-muted">
                     <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                    Không tìm thấy khách hàng nào.
+                    Không tìm thấy hội viên nào phù hợp.
                 </div>
             }
             else
@@ -84,32 +93,51 @@
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Full Name</th>
-                                <th>Phone</th>
-                                <th>Tier</th>
-                                <th class="text-end">Points</th>
-                                <th>Status</th>
+                                <th>Họ và tên</th>
+                                <th>Số điện thoại</th>
+                                <th>Email &amp; Ngày sinh</th>
+                                <th>Hạng</th>
+                                <th>Nhóm khách</th>
+                                <th class="text-end">Điểm</th>
+                                <th class="text-end">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var c in Model.Customers)
                             {
-                                var href = Url.Action("Index", new { search = Model.Search, tierId = Model.TierId, status = Model.Status, page = Model.Page, id = c.Id });
-                                <tr style="cursor:pointer;@(c.Id == selectedId ? "background:#fff1f3" : "")"
-                                    onclick="location.href='@href'">
-                                    <td><strong>@c.FullName</strong></td>
-                                    <td>@(c.PhoneNumber ?? "—")</td>
+                                <tr style="@(c.Id == selectedId ? "background:#fff1f3" : "")">
+                                    <td>
+                                        <a asp-action="Profile" asp-route-id="@c.Id" class="fw-semibold text-dark text-decoration-none">
+                                            @c.FullName
+                                        </a>
+                                    </td>
+                                    <td class="fw-semibold">@(c.PhoneNumber ?? "—")</td>
+                                    <td>
+                                        <div style="font-size:0.82rem">@(c.Email ?? "—")</div>
+                                        @if (c.DateOfBirth.HasValue)
+                                        {
+                                            <div class="text-muted" style="font-size:0.75rem">NS: @c.DateOfBirth.Value.ToString("dd/MM/yyyy")</div>
+                                        }
+                                    </td>
                                     <td>
                                         @if (c.TierName != null)
                                         {
-                                            <span style="@(TierStyle(c.TierName));padding:2px 10px;border-radius:20px;font-size:0.75rem;font-weight:600">@c.TierName</span>
+                                            <span style="@(TierStyle(c.TierName));padding:2px 10px;border-radius:6px;font-size:0.75rem;font-weight:600">@c.TierName</span>
                                         }
                                         else { <span class="text-muted">—</span> }
                                     </td>
-                                    <td class="text-end">@VnFormat.Number(c.RewardPoints)</td>
                                     <td>
-                                        @if (c.IsActive) { <span class="badge-active">Active</span> }
-                                        else { <span class="badge-inactive">Locked</span> }
+                                        <span style="@(c.SegmentStyle);padding:2px 10px;border-radius:6px;font-size:0.75rem;font-weight:600">@VnFormat.SegmentLabel(c.Segment)</span>
+                                    </td>
+                                    <td class="text-end fw-semibold">@VnFormat.Number(c.RewardPoints)</td>
+                                    <td class="text-end text-nowrap">
+                                        <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@c.Id" asp-route-customerMode="member"
+                                           class="btn-outline-bms py-1 px-2 me-1" style="font-size:0.75rem" title="Chuyển sang Thanh toán cho hội viên này">
+                                            <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
+                                        </a>
+                                        <a asp-action="Profile" asp-route-id="@c.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem" title="Xem và sửa thông tin trong Hồ sơ hội viên">
+                                            <i class="bi bi-person-vcard"></i> Hồ sơ hội viên
+                                        </a>
                                     </td>
                                 </tr>
                             }
@@ -119,15 +147,14 @@
 
                 @if (Model.TotalPages > 1)
                 {
-                    <div class="d-flex justify-content-center align-items-center gap-2 py-3 flex-wrap">
+                    <div class="d-flex justify-content-center align-items-center gap-2 py-3 flex-wrap border-top">
                         @for (int i = 1; i <= Model.TotalPages; i++)
                         {
                             <a asp-action="Index"
                                asp-route-search="@Model.Search"
                                asp-route-tierId="@Model.TierId"
-                               asp-route-status="@Model.Status"
+                               asp-route-segment="@Model.Segment"
                                asp-route-page="@i"
-                               asp-route-id="@selectedId"
                                class="btn-sm-icon"
                                style="@(i == Model.Page ? "background:#e94560;color:#fff;border-color:#e94560" : "")">@i</a>
                         }
@@ -136,129 +163,222 @@
             }
         </div>
     </div>
+</div>
 
-    <!-- ═══════════ Phải: chi tiết ═══════════ -->
-    <div class="col-md-5">
-        @if (form == null)
-        {
-            <div class="form-card text-center text-muted py-5">
-                <i class="bi bi-person-lines-fill fs-1 d-block mb-2"></i>
-                Chọn một khách hàng ở danh sách bên trái<br />hoặc bấm <strong>Add Customer</strong> để thêm mới.
+<!-- ═══════════ Modal Đăng ký tài khoản hội viên mới tại màn Danh sách hội viên (Kiểm tra CCCD >= 18 tuổi) ═══════════ -->
+<div class="modal fade" id="quickEnrollModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" style="font-size:1rem">
+                    <i class="bi bi-person-plus me-2 text-danger"></i>Đăng ký hội viên mới (CCCD 18+)
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-        }
-        else
-        {
-            <div class="form-card" id="customerDetailPanel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h6 fw-bold mb-0">
-                        <i class="bi @(form.IsNew ? "bi-person-plus" : "bi-person-vcard") me-2"></i>
-                        @(form.IsNew ? "Thêm khách hàng mới" : "Chi tiết khách hàng")
-                    </h2>
-                    <a asp-action="Index" asp-route-search="@Model.Search" asp-route-tierId="@Model.TierId"
-                       asp-route-status="@Model.Status" asp-route-page="@Model.Page"
-                       class="btn-sm-icon" title="Đóng"><i class="bi bi-x-lg"></i></a>
+            <form asp-controller="CustomerManagement" asp-action="QuickEnroll" method="post" id="quickEnrollForm" novalidate>
+                @Html.AntiForgeryToken()
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 mb-3" style="font-size:0.8rem">
+                        <i class="bi bi-person-vcard me-1"></i>
+                        <strong>Quy định đăng ký hội viên:</strong> Khách hàng để lại <strong>SĐT, Email, Họ tên, Ngày tháng năm sinh</strong> và nhân viên kiểm tra <strong>CCCD đủ 18 tuổi trở lên</strong> bên ngoài trước khi kích hoạt tài khoản (+10 điểm chào mừng).
+                    </div>
+                    <div id="enrollSyntaxAlert" class="alert alert-danger py-2 mb-3 d-none" style="font-size:0.8rem"></div>
+                    <div class="mb-3">
+                        <label class="form-label" for="enrollPhone">Số điện thoại <span class="text-danger">*</span></label>
+                        <input type="text" name="PhoneNumber" id="enrollPhone" class="form-control"
+                               maxlength="10" placeholder="0901234567" autocomplete="off" required />
+                        <div id="errEnrollPhone" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Chỉ được 10 chữ số và bắt đầu từ số 0, không được nhập chữ cái hay ký tự đặc biệt.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="enrollName">Họ và tên khách hàng (theo CCCD) <span class="text-danger">*</span></label>
+                        <input type="text" name="FullName" id="enrollName" class="form-control"
+                               maxlength="100" placeholder="Nguyễn Văn A" autocomplete="off" required />
+                        <div id="errEnrollName" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Nhập theo định dạng chữ cái (VD: Nguyễn Văn A), không nhập số hoặc ký tự đặc biệt.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="enrollEmail">Email <span class="text-danger">*</span></label>
+                        <input type="text" name="Email" id="enrollEmail" class="form-control"
+                               maxlength="256" placeholder="khachhang@gmail.com" autocomplete="off" required />
+                        <div id="errEnrollEmail" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Nhập đúng định dạng email hợp lệ (VD: khachhang@gmail.com).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="enrollDob">Ngày tháng năm sinh (theo CCCD — đủ 18 tuổi) <span class="text-danger">*</span></label>
+                        <input type="date" name="DateOfBirth" id="enrollDob" class="form-control"
+                               max="@maxAdultBirthDate" required />
+                        <div id="errEnrollDob" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                        <div class="form-text">Khách hàng phải sinh từ ngày <strong>@DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("dd/MM/yyyy")</strong> trở về trước (đủ 18 tuổi).</div>
+                    </div>
+                    <div class="form-check p-2 rounded-3 mb-2" style="background:#fff1f2;border:1px solid #fecdd3;padding-left:2rem !important">
+                        <input class="form-check-input" type="checkbox" name="IsCccdVerified" value="true" id="enrollCccd" required />
+                        <label class="form-check-label fw-semibold text-danger" for="enrollCccd" style="font-size:0.84rem">
+                            Nhân viên đã kiểm tra CCCD trực tiếp bên ngoài và xác nhận khách đủ 18 tuổi trở lên <span class="text-danger">*</span>
+                        </label>
+                        <div id="errEnrollCccd" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="MarketingOptIn" value="true" id="chkQuickOptIn" checked />
+                        <label class="form-check-label" for="chkQuickOptIn" style="font-size:0.85rem">
+                            Nhận thông báo ưu đãi và quà sinh nhật qua Email/SĐT
+                        </label>
+                    </div>
                 </div>
-
-                <form asp-action="Save" method="post" id="customerForm">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="Id" value="@form.Id" />
-                    <input type="hidden" name="search" value="@Model.Search" />
-                    <input type="hidden" name="tierId" value="@Model.TierId" />
-                    <input type="hidden" name="status" value="@Model.Status" />
-                    <input type="hidden" name="page" value="@Model.Page" />
-
-                    @if (ViewData.ModelState[string.Empty]?.Errors.Count > 0)
-                    {
-                        <div class="alert alert-danger py-2 rounded-3" style="font-size:0.8rem">
-                            @foreach (var e in ViewData.ModelState[string.Empty]!.Errors) { <div>@e.ErrorMessage</div> }
-                        </div>
-                    }
-
-                    <div class="mb-3">
-                        <label class="form-label" for="FullName">Full Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="FullName" name="FullName" maxlength="100"
-                               value="@form.FullName" required />
-                        @Html.ValidationMessage("FullName", new { @class = "field-error" })
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label" for="PhoneNumber">Phone Number <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="PhoneNumber" name="PhoneNumber" maxlength="10"
-                               inputmode="numeric" pattern="\d{10}" title="Đúng 10 chữ số"
-                               value="@form.PhoneNumber" required />
-                        <div class="form-text">10 chữ số, dùng làm tên đăng nhập.</div>
-                        @Html.ValidationMessage("PhoneNumber", new { @class = "field-error" })
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label" for="Email">Email <span class="text-muted fw-normal">(không bắt buộc)</span></label>
-                        <input type="email" class="form-control" id="Email" name="Email" maxlength="256"
-                               value="@form.Email" />
-                        @Html.ValidationMessage("Email", new { @class = "field-error" })
-                    </div>
-
-                    <div class="row g-3 mb-3">
-                        <div class="col-6">
-                            <label class="form-label">Membership Tier</label>
-                            <input type="text" class="form-control" value="@(form.TierName ?? "—")" readonly disabled />
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label">Total Points</label>
-                            <input type="text" class="form-control" value="@VnFormat.Number(form.RewardPoints)" readonly disabled />
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Total Spend</label>
-                            <input type="text" class="form-control" value="@VnFormat.Money(form.TotalSpend)" readonly disabled />
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label d-block">Account Status</label>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="IsActive" id="statusActive"
-                                   value="true" checked="@form.IsActive" />
-                            <label class="form-check-label" for="statusActive"><span class="badge-active">Active</span></label>
-                        </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="IsActive" id="statusLocked"
-                                   value="false" checked="@(!form.IsActive)" />
-                            <label class="form-check-label" for="statusLocked"><span class="badge-inactive">Locked</span></label>
-                        </div>
-                    </div>
-
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button type="submit" class="btn-primary-bms" id="btnSaveCustomer">
-                            <i class="bi bi-save"></i> @(form.IsNew ? "Thêm khách hàng" : "Cập nhật")
-                        </button>
-                        <a asp-action="Index" asp-route-search="@Model.Search" asp-route-tierId="@Model.TierId"
-                           asp-route-status="@Model.Status" asp-route-page="@Model.Page"
-                           class="btn-outline-bms">Hủy</a>
-                    </div>
-                </form>
-
-                @if (!form.IsNew)
-                {
-                    <hr class="my-4" />
-
-                    <!-- Gắn thẻ thành viên -->
-                    <form asp-action="AssignCard" method="post">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="id" value="@form.Id" />
-                        <input type="hidden" name="search" value="@Model.Search" />
-                        <input type="hidden" name="tierId" value="@Model.TierId" />
-                        <input type="hidden" name="status" value="@Model.Status" />
-                        <input type="hidden" name="page" value="@Model.Page" />
-                        <label class="form-label" for="cardCode"><i class="bi bi-credit-card-2-front me-1"></i>Thẻ thành viên</label>
-                        <div class="d-flex gap-2">
-                            <input type="text" class="form-control" id="cardCode" name="cardCode" maxlength="20"
-                                   value="@form.CardCode" placeholder="Để trống = tự sinh mã (MB0001…)" />
-                            <button type="submit" class="btn-primary-bms text-nowrap" id="btnAssignCard">
-                                <i class="bi bi-link-45deg"></i> Gắn thẻ
-                            </button>
-                        </div>
-                    </form>
-                }
-            </div>
-        }
+                <div class="modal-footer">
+                    <button type="button" class="btn-outline-bms" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn-primary-bms" id="btnSubmitQuickEnroll">
+                        <i class="bi bi-check-lg"></i> Đăng ký hội viên (+10 điểm)
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    (function () {
+        const rxName = /^[\p{L}\p{M}]+(\s+[\p{L}\p{M}]+)*$/u;
+        const rxPhone = /^0\d{9}$/;
+        const rxEmail = /^[a-zA-Z0-9._%+\-]+@@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+        const maxAdultStr = '@maxAdultBirthDate';
+
+        function showErr(inp, errEl, msg) {
+            if (!inp || !errEl) return;
+            if (msg) {
+                inp.classList.add('is-invalid');
+                errEl.textContent = msg;
+                errEl.classList.remove('d-none');
+            } else {
+                inp.classList.remove('is-invalid');
+                errEl.textContent = '';
+                errEl.classList.add('d-none');
+            }
+        }
+
+        // 1. Kiểm tra cú pháp trên Modal Đăng ký hội viên mới (#quickEnrollModal)
+        const enrollForm = document.getElementById('quickEnrollForm');
+        const enrollPhone = document.getElementById('enrollPhone');
+        const enrollName = document.getElementById('enrollName');
+        const enrollEmail = document.getElementById('enrollEmail');
+        const enrollDob = document.getElementById('enrollDob');
+        const enrollCccd = document.getElementById('enrollCccd');
+        const errEnrollPhone = document.getElementById('errEnrollPhone');
+        const errEnrollName = document.getElementById('errEnrollName');
+        const errEnrollEmail = document.getElementById('errEnrollEmail');
+        const errEnrollDob = document.getElementById('errEnrollDob');
+        const errEnrollCccd = document.getElementById('errEnrollCccd');
+        const enrollSyntaxAlert = document.getElementById('enrollSyntaxAlert');
+
+        function validateEnrollPhone(forceShowEmpty) {
+            const val = (enrollPhone.value || '').trim();
+            if (!val) {
+                showErr(enrollPhone, errEnrollPhone, forceShowEmpty ? 'Vui lòng nhập số điện thoại.' : '');
+                return !forceShowEmpty;
+            }
+            if (/[^0-9]/.test(val)) {
+                showErr(enrollPhone, errEnrollPhone, 'Số điện thoại không được chứa chữ cái, khoảng trắng hoặc ký tự đặc biệt (chỉ nhập số 0-9).');
+                return false;
+            }
+            if (!val.startsWith('0')) {
+                showErr(enrollPhone, errEnrollPhone, 'Số điện thoại phải bắt đầu từ số 0 (Ví dụ: 0901234567).');
+                return false;
+            }
+            if (!rxPhone.test(val)) {
+                showErr(enrollPhone, errEnrollPhone, 'Số điện thoại phải gồm đúng 10 chữ số và bắt đầu từ số 0 (Ví dụ: 0901234567).');
+                return false;
+            }
+            showErr(enrollPhone, errEnrollPhone, '');
+            return true;
+        }
+
+        function validateEnrollName(forceShowEmpty) {
+            const raw = enrollName.value || '';
+            const val = raw.trim().replace(/\s+/g, ' ');
+            if (!val) {
+                showErr(enrollName, errEnrollName, forceShowEmpty ? 'Vui lòng nhập họ và tên khách hàng.' : '');
+                return !forceShowEmpty;
+            }
+            if (/[0-9]/.test(raw)) {
+                showErr(enrollName, errEnrollName, 'Họ và tên không được chứa chữ số. Vui lòng nhập theo định dạng: Nguyễn Văn A.');
+                return false;
+            }
+            if (!rxName.test(val) || val.length < 2) {
+                showErr(enrollName, errEnrollName, 'Họ và tên không được chứa ký tự đặc biệt hoặc số. Vui lòng nhập theo định dạng: Nguyễn Văn A.');
+                return false;
+            }
+            showErr(enrollName, errEnrollName, '');
+            return true;
+        }
+
+        function validateEnrollEmail(forceShowEmpty) {
+            const val = (enrollEmail.value || '').trim();
+            if (!val) {
+                showErr(enrollEmail, errEnrollEmail, forceShowEmpty ? 'Vui lòng nhập địa chỉ Email.' : '');
+                return !forceShowEmpty;
+            }
+            if (!rxEmail.test(val)) {
+                showErr(enrollEmail, errEnrollEmail, 'Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).');
+                return false;
+            }
+            showErr(enrollEmail, errEnrollEmail, '');
+            return true;
+        }
+
+        function validateEnrollAdult(forceShowEmpty) {
+            let ok = true;
+            const dobVal = (enrollDob.value || '').trim();
+            if (!dobVal) {
+                if (forceShowEmpty) {
+                    showErr(enrollDob, errEnrollDob, 'Vui lòng chọn ngày tháng năm sinh theo CCCD.');
+                    ok = false;
+                }
+            } else if (dobVal > maxAdultStr) {
+                showErr(enrollDob, errEnrollDob, 'Khách hàng chưa đủ 18 tuổi theo ngày sinh trên CCCD.');
+                ok = false;
+            } else {
+                showErr(enrollDob, errEnrollDob, '');
+            }
+
+            if (forceShowEmpty && !enrollCccd.checked) {
+                errEnrollCccd.textContent = 'Vui lòng tích xác nhận nhân viên đã kiểm tra CCCD đủ 18 tuổi.';
+                errEnrollCccd.classList.remove('d-none');
+                ok = false;
+            } else if (errEnrollCccd) {
+                errEnrollCccd.textContent = '';
+                errEnrollCccd.classList.add('d-none');
+            }
+            return ok;
+        }
+
+        if (enrollForm && enrollPhone && enrollName && enrollEmail) {
+            enrollPhone.addEventListener('input', () => validateEnrollPhone(false));
+            enrollPhone.addEventListener('blur', () => validateEnrollPhone(true));
+            enrollName.addEventListener('input', () => validateEnrollName(false));
+            enrollName.addEventListener('blur', () => validateEnrollName(true));
+            enrollEmail.addEventListener('input', () => validateEnrollEmail(false));
+            enrollEmail.addEventListener('blur', () => validateEnrollEmail(true));
+            enrollDob && enrollDob.addEventListener('change', () => validateEnrollAdult(false));
+            enrollCccd && enrollCccd.addEventListener('change', () => validateEnrollAdult(false));
+
+            enrollForm.addEventListener('submit', function (e) {
+                const okPhone = validateEnrollPhone(true);
+                const okName = validateEnrollName(true);
+                const okEmail = validateEnrollEmail(true);
+                const okAdult = validateEnrollAdult(true);
+                if (!okPhone || !okName || !okEmail || !okAdult) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (enrollSyntaxAlert) {
+                        enrollSyntaxAlert.textContent = 'Không thể đăng ký hội viên: Vui lòng sửa các trường báo lỗi cú pháp màu đỏ bên dưới trước khi lưu.';
+                        enrollSyntaxAlert.classList.remove('d-none');
+                    }
+                    return false;
+                }
+                if (enrollSyntaxAlert) enrollSyntaxAlert.classList.add('d-none');
+            });
+        }
+    })();
+</script>
+}

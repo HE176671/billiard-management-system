@@ -33,21 +33,37 @@ $secretPath = Join-Path $env:APPDATA 'Microsoft/UserSecrets/d8114019-df86-4943-8
 $secret = Get-Content -LiteralPath $secretPath -Raw | ConvertFrom-Json
 $password = $secret.'DevSeed:AdminPassword'
 if (-not $password) { throw 'DevSeed:AdminPassword is missing from user-secrets' }
+$staffPassword = if ($secret.'DevSeed:StaffPassword') { $secret.'DevSeed:StaffPassword' } else { 'Staff@123' }
 $admin = New-Client
+$staff = New-Client
 $customer = New-Client
 $fixtureName = 'http.smoke.' + [guid]::NewGuid().ToString('N')
 try {
-    foreach ($path in @('/Dashboard','/Employee','/Customer','/MemberTier','/Pricing','/Revenue')) {
+    foreach ($path in @('/Dashboard','/Employee','/Customer','/MemberTier','/Pricing','/Revenue','/CustomerManagement','/CustomerManagement/Lookup','/CashierSimulator','/PointAdjustment','/CrmDashboard','/Campaign','/RewardItem','/TierConfig')) {
         $response = Get-Page $admin $path
         Assert-Check ([int]$response.StatusCode -eq 302 -and $response.Headers.Location.ToString().Contains('/Account/Login')) "Anonymous blocked: $path"
     }
     $login = Get-Page $admin '/Account/Login'
     $response = Post-Form $admin '/Account/Login' @{ Username='admin.demo'; Password=$password; __RequestVerificationToken=(Get-Token $login) }
     Assert-Check ([int]$response.StatusCode -eq 302 -and $response.Headers.Location.ToString() -eq '/Dashboard') 'Admin login redirects to Dashboard'
-    foreach ($path in @('/Dashboard','/Employee','/Customer','/MemberTier','/MemberTier/Create','/Pricing','/Pricing/Create','/Revenue','/Profile/ChangePassword')) {
+    foreach ($path in @('/Dashboard','/Employee','/Customer','/MemberTier','/MemberTier/Create','/Pricing','/Pricing/Create','/Revenue','/Profile/ChangePassword','/CustomerManagement','/CustomerManagement/Lookup','/CashierSimulator','/PointAdjustment','/CrmDashboard','/Campaign','/RewardItem','/TierConfig')) {
         $response = Get-Page $admin $path
         Assert-Check ([int]$response.StatusCode -eq 200) "Admin page renders: $path"
     }
+
+    # Staff login and role boundary checks (TV2)
+    $staffLogin = Get-Page $staff '/Account/Login'
+    $staffResp = Post-Form $staff '/Account/Login' @{ Username='staff.demo01'; Password=$staffPassword; __RequestVerificationToken=(Get-Token $staffLogin) }
+    Assert-Check ([int]$staffResp.StatusCode -eq 302) 'Staff login succeeds'
+    foreach ($path in @('/CustomerManagement/Lookup','/CashierSimulator','/PointAdjustment')) {
+        $response = Get-Page $staff $path
+        Assert-Check ([int]$response.StatusCode -eq 200) "Staff page renders: $path"
+    }
+    foreach ($path in @('/CrmDashboard','/Campaign','/RewardItem','/TierConfig','/PointAdjustment/Pending')) {
+        $response = Get-Page $staff $path
+        Assert-Check ([int]$response.StatusCode -eq 302 -and $response.Headers.Location.ToString().Contains('/Account/AccessDenied')) "Staff denied admin-only page: $path"
+    }
+
     $response = Post-Form $admin '/Pricing/Create' @{ TableTypeId='1'; StartHour='08:00'; EndHour='09:00'; HourlyRate='50000' }
     Assert-Check ([int]$response.StatusCode -eq 400) 'POST without anti-forgery token rejected'
     $form = Get-Page $admin '/MemberTier/Create'
@@ -72,36 +88,21 @@ try {
         }
     }
 
-    $registration = Get-Page $customer '/Account/Register'
-    $fixturePassword = [guid]::NewGuid().ToString('N') + '!Aa1'
-    $response = Post-Form $customer '/Account/Register' @{ UserName=$fixtureName; Email=($fixtureName + '@example.invalid'); FullName='HTTP Smoke Customer'; Password=$fixturePassword; ConfirmPassword=$fixturePassword; __RequestVerificationToken=(Get-Token $registration) }
-    Assert-Check ([int]$response.StatusCode -eq 302 -and $response.Headers.Location.ToString() -eq '/Customer/Portal') 'Customer registration and correct landing page'
-    $response = Get-Page $customer '/Customer/Portal'
-    Assert-Check ([int]$response.StatusCode -eq 200) 'Customer portal renders'
-    $change = Get-Page $customer '/Profile/ChangePassword'
+    # Internal management software checks: Customer self-registration & CustomerPortal removed
+    Assert-Check ([int](Get-Page $customer '/Account/Register').StatusCode -eq 404) 'Customer self-registration route disabled (404)'
+    Assert-Check ([int](Get-Page $customer '/CustomerPortal/Profile').StatusCode -eq 404) 'Customer portal route disabled (404)'
+
+    # Customer login is blocked on internal system
+    $custLoginPage = Get-Page $customer '/Account/Login'
+    $custLoginResp = Post-Form $customer '/Account/Login' @{ Username='customer.demo01'; Password='Customer@123'; __RequestVerificationToken=(Get-Token $custLoginPage) }
+    Assert-Check ([int]$custLoginResp.StatusCode -eq 200 -and $custLoginResp.Content.ReadAsStringAsync().GetAwaiter().GetResult().Contains('alert-danger')) 'Customer role blocked from internal login'
+
+    # Staff wrong current password rejected on /Profile/ChangePassword
+    $change = Get-Page $staff '/Profile/ChangePassword'
     $newPassword = [guid]::NewGuid().ToString('N') + '!Aa2'
-    $response = Post-Form $customer '/Profile/ChangePassword' @{ CurrentPassword='WrongCurrent!123'; NewPassword=$newPassword; ConfirmPassword=$newPassword; __RequestVerificationToken=(Get-Token $change) }
+    $response = Post-Form $staff '/Profile/ChangePassword' @{ CurrentPassword='WrongCurrent!123'; NewPassword=$newPassword; ConfirmPassword=$newPassword; __RequestVerificationToken=(Get-Token $change) }
     Assert-Check ([int]$response.StatusCode -eq 200 -and $response.Content.ReadAsStringAsync().GetAwaiter().GetResult().Contains('alert-danger')) 'Wrong current password rejected'
-    $response = Post-Form $customer '/Profile/ChangePassword' @{ CurrentPassword=$fixturePassword; NewPassword=$newPassword; ConfirmPassword=$newPassword; __RequestVerificationToken=(Get-Token (Get-Page $customer '/Profile/ChangePassword')) }
-    Assert-Check ([int]$response.StatusCode -eq 302) 'Customer changes password successfully'
-    $fixturePassword = $newPassword
-    Assert-Check ([int](Get-Page $customer '/Customer/Portal').StatusCode -eq 200) 'Current session refreshed after password change'
-    foreach ($path in @('/Dashboard','/Employee','/Customer','/MemberTier','/Pricing','/Revenue')) {
-        $response = Get-Page $customer $path
-        Assert-Check ([int]$response.StatusCode -eq 302 -and $response.Headers.Location.ToString().Contains('/Account/AccessDenied')) "Customer denied admin page: $path"
-    }
-    $page = Get-Page $admin ("/Customer?search=" + $fixtureName)
-    $html = $page.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-    $match = [regex]::Match($html, 'action="(/Customer/ToggleLock/[^"]+)"')
-    Assert-Check ($match.Success) 'Registered customer appears in admin management'
-    $response = Post-Form $admin $match.Groups[1].Value @{ __RequestVerificationToken=(Get-Token $page) }
-    Assert-Check ([int]$response.StatusCode -eq 302) 'Admin locks customer through HTTP'
-    $response = Get-Page $customer '/Customer/Portal'
-    Assert-Check ([int]$response.StatusCode -eq 302 -and $response.Headers.Location.ToString().Contains('/Account/Login')) 'Locked customer cookie rejected on next request'
-    $response = Post-Form $admin $match.Groups[1].Value @{ __RequestVerificationToken=(Get-Token (Get-Page $admin '/Customer')) }
-    $login = Get-Page $customer '/Account/Login'
-    $response = Post-Form $customer '/Account/Login' @{ Username=$fixtureName; Password=$fixturePassword; __RequestVerificationToken=(Get-Token $login) }
-    Assert-Check ([int]$response.StatusCode -eq 302 -and $response.Headers.Location.ToString() -eq '/Customer/Portal') 'Unlocked customer can login again'
+
     $response = Post-Form $admin '/Account/Logout' @{ __RequestVerificationToken=(Get-Token (Get-Page $admin '/Dashboard')) }
     Assert-Check ([int]$response.StatusCode -eq 302) 'Logout succeeds'
     $response = Get-Page $admin '/Dashboard'
@@ -109,9 +110,6 @@ try {
     Write-Output "$checks HTTP checks passed."
 }
 finally {
-    # Only remove this run's unique test account, with no business history.
-    & sqlcmd -S $SqlServer -d BilliardDB -E -C -b -Q "SET QUOTED_IDENTIFIER ON; BEGIN TRAN; DELETE ur FROM dbo.AspNetUserRoles ur JOIN dbo.AspNetUsers u ON ur.UserId=u.Id WHERE u.UserName=N'$fixtureName' AND u.Email=N'$fixtureName@example.invalid'; DELETE FROM dbo.AspNetUsers WHERE UserName=N'$fixtureName' AND Email=N'$fixtureName@example.invalid'; COMMIT;" | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Test account cleanup failed' }
-    $admin.Dispose(); $customer.Dispose()
-    $password = $null; $secret = $null; $fixturePassword = $null
+    $admin.Dispose(); $staff.Dispose(); $customer.Dispose()
+    $password = $null; $staffPassword = $null; $secret = $null
 }

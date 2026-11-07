@@ -5,7 +5,7 @@ namespace Bms.Web.Data;
 
 /// <summary>
 /// Chỉ chạy trong môi trường Development.
-/// Đặt mật khẩu cho admin.demo nếu PasswordHash còn NULL.
+/// Đặt mật khẩu cho các tài khoản nội bộ (Admin & Staff) nếu PasswordHash còn NULL.
 /// Mật khẩu lấy từ cấu hình — không viết cứng trong source code.
 /// </summary>
 public static class DbInitializer
@@ -45,27 +45,19 @@ public static class DbInitializer
             logger.LogInformation("admin.demo đã có mật khẩu, bỏ qua.");
         }
 
-        // Đặt mật khẩu demo cho tài khoản Khách hàng (Customer)
-        var customerPassword = config["DevSeed:CustomerPassword"] ?? "Customer@123";
-        var demoCustomers = new[] { "customer.demo01", "customer.demo02" };
-        foreach (var customerUsername in demoCustomers)
+        // Đặt mật khẩu demo cho tài khoản Quản lý (Manager)
+        var managerPassword = config["DevSeed:ManagerPassword"] ?? "Manager@123";
+        var managerUser = await userManager.FindByNameAsync("manager.demo");
+        if (managerUser != null)
         {
-            var customer = await userManager.FindByNameAsync(customerUsername);
-            if (customer != null)
+            if (!await userManager.HasPasswordAsync(managerUser))
             {
-                if (!await userManager.HasPasswordAsync(customer))
-                {
-                    var result = await userManager.AddPasswordAsync(customer, customerPassword);
-                    if (result.Succeeded)
-                        logger.LogInformation("Đã đặt mật khẩu cho {CustomerUsername}.", customerUsername);
-                    else
-                        logger.LogError("Đặt mật khẩu {CustomerUsername} thất bại: {Errors}", customerUsername,
-                            string.Join("; ", result.Errors.Select(e => e.Description)));
-                }
+                var result = await userManager.AddPasswordAsync(managerUser, managerPassword);
+                if (result.Succeeded)
+                    logger.LogInformation("Đã đặt mật khẩu cho manager.demo.");
                 else
-                {
-                    logger.LogInformation("{CustomerUsername} đã có mật khẩu, bỏ qua.", customerUsername);
-                }
+                    logger.LogError("Đặt mật khẩu manager.demo thất bại: {Errors}",
+                        string.Join("; ", result.Errors.Select(e => e.Description)));
             }
         }
 

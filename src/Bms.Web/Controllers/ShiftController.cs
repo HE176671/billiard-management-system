@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Bms.Web.Controllers;
 
 /// <summary>TV5 — BMS-017: mở ca, đóng ca, đối soát tiền mặt, lịch sử ca.</summary>
-[Authorize(Roles = "Staff,Admin")]
+[Authorize(Roles = "Staff,Manager,Admin")]
 public class ShiftController : Controller
 {
     private const int PageSize = 15;
@@ -54,7 +54,7 @@ public class ShiftController : Controller
         try
         {
             var shift = await _shifts.OpenShiftAsync(CurrentUserId, model.StartingCash!.Value, model.Notes);
-            TempData["Success"] = $"Đã mở ca #{shift.Id} với {shift.StartingCash:N0} ₫ đầu ca.";
+            TempData["Success"] = $"Đã mở ca #{shift.Id} với {shift.StartingCash:N0} VND đầu ca.";
         }
         catch (ShiftException ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index));
@@ -70,7 +70,7 @@ public class ShiftController : Controller
         var shift = await _db.WorkShifts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == model.ShiftId);
         if (shift == null) return NotFound();
         var isOwner = shift.StaffId == CurrentUserId;
-        if (!isOwner && !User.IsInRole("Admin")) return Forbid();
+        if (!isOwner && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
 
         var back = isOwner ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Details), new { id = shift.Id });
         if (!ModelState.IsValid)
@@ -83,8 +83,8 @@ public class ShiftController : Controller
             var summary = await _shifts.CloseShiftAsync(shift.Id, CurrentUserId, model.EndingCash!.Value, model.Notes);
             var diff = summary.Difference ?? 0;
             TempData["Success"] = diff == 0
-                ? $"Đã đóng ca #{shift.Id}. Tiền mặt khớp ({summary.ExpectedCash:N0} ₫)."
-                : $"Đã đóng ca #{shift.Id}. Chênh lệch {(diff > 0 ? "thừa" : "thiếu")} {Math.Abs(diff):N0} ₫ đã được ghi nhận.";
+                ? $"Đã đóng ca #{shift.Id}. Tiền mặt khớp ({summary.ExpectedCash:N0} VND)."
+                : $"Đã đóng ca #{shift.Id}. Chênh lệch {(diff > 0 ? "thừa" : "thiếu")} {Math.Abs(diff):N0} VND đã được ghi nhận.";
             return RedirectToAction(nameof(Details), new { id = shift.Id });
         }
         catch (ShiftException ex)
@@ -104,7 +104,7 @@ public class ShiftController : Controller
     {
         var summary = await _shifts.GetSummaryAsync(id);
         if (summary == null) return NotFound();
-        if (summary.Shift.StaffId != CurrentUserId && !User.IsInRole("Admin")) return Forbid();
+        if (summary.Shift.StaffId != CurrentUserId && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
 
         var vm = new ShiftDetailsViewModel
         {
@@ -140,7 +140,7 @@ public class ShiftController : Controller
     #region Admin: quan ly moi ca
 
     // GET /Shift/Manage
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Manage(DateOnly? from, DateOnly? to, string? staffId, string? status,
         bool onlyDifference = false, int page = 1)
     {

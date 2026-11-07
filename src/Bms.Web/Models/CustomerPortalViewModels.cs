@@ -1,6 +1,9 @@
+using Bms.Web.Data;
+using Bms.Web.Services;
+
 namespace Bms.Web.Models;
 
-// ── Hồ sơ + Điểm + Hạng ──
+// ── Hồ sơ + Điểm + Hạng + Thẻ ảo (Customer Portal V2) ──
 public class CustomerProfileViewModel
 {
     public string FullName { get; set; } = string.Empty;
@@ -12,14 +15,22 @@ public class CustomerProfileViewModel
     public int PointMultiplier { get; set; } = 1;
 
     public int RewardPoints { get; set; }
+    public decimal PointsEquivalentVnd => RewardPoints * 1000m;
     public decimal TotalSpend { get; set; }
+    public decimal Spend12Months { get; set; }
 
     /// <summary>null = đã ở hạng cao nhất.</summary>
     public string? NextTierName { get; set; }
     public decimal AmountToNextTier { get; set; }
     public int ProgressPercent { get; set; }
 
+    public DateTime? TierReviewAtUtc { get; set; }
+    public DateTime? TierGraceUntilUtc { get; set; }
+    public decimal AmountToKeepTier { get; set; }
+
     public DateTime? PointsExpireAtUtc { get; set; }
+    public int ActiveVoucherCount { get; set; }
+    public int UnreadNotificationCount { get; set; }
     public List<PointTransactionRowViewModel> Transactions { get; set; } = new();
 }
 
@@ -28,6 +39,9 @@ public class PointTransactionRowViewModel
     public DateTime CreatedAt { get; set; }
     public string TransactionType { get; set; } = string.Empty;
     public int Amount { get; set; }
+    public int BalanceAfter { get; set; }
+    public string? ReferenceCode { get; set; }
+    public string? Reason { get; set; }
 }
 
 // ── Lịch sử chơi & hóa đơn ──
@@ -37,8 +51,6 @@ public class HistoryViewModel
     public int Page { get; set; } = 1;
     public int TotalPages { get; set; }
     public int TotalCount { get; set; }
-
-    /// <summary>true = đang hiển thị dữ liệu mẫu vì chưa có dữ liệu thật.</summary>
     public bool IsMock { get; set; }
 }
 
@@ -48,17 +60,16 @@ public class HistoryItemViewModel
     public string TableCode { get; set; } = string.Empty;
     public DateTime StartAtUtc { get; set; }
     public DateTime? EndAtUtc { get; set; }
-    public string SessionStatus { get; set; } = string.Empty;   // Active | Closed
+    public string SessionStatus { get; set; } = string.Empty;
 
     public int? InvoiceId { get; set; }
     public decimal? TotalPlaytime { get; set; }
     public decimal? TotalFandB { get; set; }
     public decimal? DiscountAmount { get; set; }
     public decimal? FinalAmount { get; set; }
-    public string? InvoiceStatus { get; set; }                  // Paid | Unpaid | null
+    public string? InvoiceStatus { get; set; }
 }
 
-/// <summary>Kết quả map trực tiếp từ truy vấn SQL (PlaySessions LEFT JOIN Invoices) - thuộc phạm vi thành viên khác.</summary>
 public class HistoryRow
 {
     public int SessionId { get; set; }
@@ -74,12 +85,18 @@ public class HistoryRow
     public string? InvoiceStatus { get; set; }
 }
 
-// ── Khuyến mãi & đổi điểm ──
+// ── Khuyến mãi & Đổi điểm + Voucher của tôi (F4) ──
 public class PromotionsViewModel
 {
     public int RewardPoints { get; set; }
+    public string CustomerTierName { get; set; } = "Member";
+    public decimal CustomerTierThreshold { get; set; }
+    public List<RewardItemEntity> RewardItems { get; set; } = new();
+    public List<CustomerVoucher> ActiveVouchers { get; set; } = new();
+    public List<CustomerVoucher> UsedOrExpiredVouchers { get; set; } = new();
     public List<ComboCardViewModel> Combos { get; set; } = new();
     public bool IsMockCombos { get; set; }
+    public string? NewlyIssuedVoucherCode { get; set; }
 }
 
 public class ComboCardViewModel

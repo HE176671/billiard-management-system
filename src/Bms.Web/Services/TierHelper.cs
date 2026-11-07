@@ -7,10 +7,12 @@ namespace Bms.Web.Services;
 /// <summary>Tiện ích xếp hạng thành viên dùng chung (TierConfig, CustomerManagement, và LoyaltyService ở Bước 5).</summary>
 public static class TierHelper
 {
-    /// <summary>Hạng cao nhất có SpendThreshold &lt;= totalSpend. Trả về null nếu chưa có hạng nào.</summary>
-    public static MembershipTier? Resolve(IEnumerable<MembershipTier> tiers, decimal totalSpend) =>
-        tiers.Where(t => t.SpendThreshold <= totalSpend)
+    /// <summary>Hạng cao nhất có SpendThreshold &lt;= totalSpend hoặc MinPoints &lt;= rewardPoints. Trả về null nếu chưa có hạng nào.</summary>
+    public static MembershipTier? Resolve(IEnumerable<MembershipTier> tiers, decimal totalSpend, int rewardPoints = 0) =>
+        tiers.Where(t => t.SpendThreshold <= totalSpend || (t.MinPoints > 0 && rewardPoints >= t.MinPoints))
              .OrderByDescending(t => t.SpendThreshold)
+             .ThenByDescending(t => t.MinPoints)
+             .ThenByDescending(t => t.SortOrder)
              .FirstOrDefault();
 
     /// <summary>
@@ -44,11 +46,11 @@ public static class TierHelper
     }
 }
 
-/// <summary>Định dạng tiền VNĐ.</summary>
+/// <summary>Định dạng tiền VND.</summary>
 public static class VnFormat
 {
     private static readonly CultureInfo Vi = new("vi-VN");
-    public static string Money(decimal value) => value.ToString("N0", Vi) + " ₫";
+    public static string Money(decimal value) => value.ToString("N0", Vi) + " VND";
     public static string Number(decimal value) => value.ToString("N0", Vi);
 
     /// <summary>UTC (từ DB) → giờ địa phương, dạng dd/MM/yyyy HH:mm.</summary>
@@ -62,5 +64,38 @@ public static class VnFormat
         "Silver" => "background:#e2e8f0;color:#475569",
         "Member" => "background:#dbeafe;color:#1d4ed8",
         _        => "background:#f1f5f9;color:#64748b"
+    };
+
+    /// <summary>Nhãn tiếng Việt tự nhiên cho 4 nhóm khách hàng (RFM): VIP, Thân thiết, Khách mới, Lâu rồi chưa ghé.</summary>
+    public static string SegmentLabel(string? segment) => segment switch
+    {
+        "Champion" => "VIP",
+        "Loyal"    => "Thân thiết",
+        "New"      => "Khách mới",
+        "AtRisk"   => "Lâu rồi chưa ghé",
+        "Lost"     => "Lâu rồi chưa ghé",
+        "Regular"  => "Thân thiết",
+        _          => segment ?? "Thân thiết"
+    };
+
+    /// <summary>Nhãn tiếng Việt cho loại ưu đãi/voucher.</summary>
+    public static string RewardTypeLabel(string? type) => type switch
+    {
+        "Gift"         => "Quà tại quầy",
+        "FreeHour"     => "Giờ chơi",
+        "BillDiscount" => "Giảm hóa đơn",
+        _              => type ?? "Ưu đãi"
+    };
+
+    /// <summary>Nhãn tiếng Việt cho loại giao dịch điểm.</summary>
+    public static string TxTypeLabel(string? type) => type switch
+    {
+        "Earn"    => "Tích điểm",
+        "Redeem"  => "Đổi điểm",
+        "Adjust"  => "Điều chỉnh",
+        "Bonus"   => "Điểm thưởng",
+        "Expire"  => "Hết hạn",
+        "Reverse" => "Hoàn điểm",
+        _         => type ?? "Khác"
     };
 }

@@ -6,8 +6,8 @@ namespace Bms.Web.Models;
 public class OpenShiftViewModel
 {
     [Required(ErrorMessage = "Vui lòng nhập tiền đầu ca.")]
-    [Range(0, 1_000_000_000, ErrorMessage = "Tiền đầu ca phải từ 0 đến 1.000.000.000 ₫.")]
-    [Display(Name = "Tiền mặt đầu ca (₫)")]
+    [Range(0, 1_000_000_000, ErrorMessage = "Tiền đầu ca phải từ 0 đến 1.000.000.000 VND.")]
+    [Display(Name = "Tiền mặt đầu ca ( VND)")]
     public decimal? StartingCash { get; set; }
 
     [StringLength(500, ErrorMessage = "Tối đa 500 ký tự.")]
@@ -20,8 +20,8 @@ public class CloseShiftViewModel
     public int ShiftId { get; set; }
 
     [Required(ErrorMessage = "Vui lòng nhập số tiền đếm thực tế.")]
-    [Range(0, 1_000_000_000, ErrorMessage = "Số tiền phải từ 0 đến 1.000.000.000 ₫.")]
-    [Display(Name = "Tiền mặt đếm thực tế (₫)")]
+    [Range(0, 1_000_000_000, ErrorMessage = "Số tiền phải từ 0 đến 1.000.000.000 VND.")]
+    [Display(Name = "Tiền mặt đếm thực tế ( VND)")]
     public decimal? EndingCash { get; set; }
 
     [StringLength(500, ErrorMessage = "Tối đa 500 ký tự.")]

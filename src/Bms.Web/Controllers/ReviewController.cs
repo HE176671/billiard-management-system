@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
+[Authorize(Roles = "Manager,Admin")]
 public class ReviewController : Controller
 {
     private readonly ApplicationDbContext _context;
@@ -16,14 +17,9 @@ public class ReviewController : Controller
         _context = context;
     }
 
-    private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-
-    // ══════════════════════════════════════════════════════════════
-    // ADMIN / STAFF: Xem danh sách đánh giá & Phản hồi
-    // ══════════════════════════════════════════════════════════════
-
-    [Authorize(Roles = "Admin,Staff")]
-    public async Task<IActionResult> Index(int? rating)
+    // GET /Review?rating=...
+    [HttpGet]
+    public async Task<IActionResult> Index(int? rating = null)
     {
         var allReviews = await _context.Reviews
             .AsNoTracking()
@@ -67,9 +63,9 @@ public class ReviewController : Controller
         return View(vm);
     }
 
+    // POST /Review/Reply
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Admin,Staff")]
     public async Task<IActionResult> Reply(AdminReplyInputModel model)
     {
         if (!ModelState.IsValid)
@@ -90,107 +86,19 @@ public class ReviewController : Controller
 
         review.AdminReply = model.Reply.Trim();
 
-        // Tự động tạo thông báo gửi tới Customer
-        var notification = new Notification
+        _context.Notifications.Add(new Notification
         {
             UserId = review.CustomerId,
-            Title = "Phản hồi đánh giá phiên chơi",
-            Content = $"Quản lý đã phản hồi đánh giá của bạn (Phiên #{review.SessionId}): \"{review.AdminReply}\"",
+            Title = "Phản hồi đánh giá dịch vụ từ Quản lý CLB",
+            Content = $"Quản lý CLB đã phản hồi đánh giá của bạn (Phiên #{review.SessionId}): \"{review.AdminReply}\"",
             Type = "ReviewReply",
             IsRead = false,
             CreatedAt = DateTime.UtcNow
-        };
-        _context.Notifications.Add(notification);
+        });
 
         await _context.SaveChangesAsync();
 
-        TempData["Success"] = $"Đã gửi phản hồi tới khách hàng {review.Customer?.FullName ?? review.CustomerId}.";
+        TempData["Success"] = $"Đã gửi phản hồi tới hội viên {review.Customer?.FullName ?? review.CustomerId}.";
         return RedirectToAction(nameof(Index), new { rating = model.RatingFilter });
-    }
-
-    // ══════════════════════════════════════════════════════════════
-    // CUSTOMER: Gửi đánh giá cho phiên chơi đã hoàn thành
-    // ══════════════════════════════════════════════════════════════
-
-    [Authorize(Roles = "Customer")]
-    [HttpGet]
-    public async Task<IActionResult> Create(int? sessionId)
-    {
-        var uid = CurrentUserId;
-        var vm = new CreateReviewViewModel
-        {
-            SessionId = sessionId ?? 0,
-            Rating = 5
-        };
-
-        // Tìm thông tin bàn nếu có
-        if (sessionId.HasValue && sessionId.Value > 0)
-        {
-            var tableCode = (await _context.Database.SqlQuery<string>($@"
-                SELECT t.TableCode AS [Value]
-                FROM dbo.PlaySessions s
-                JOIN dbo.BilliardTables t ON t.Id = s.TableId
-                WHERE s.Id = {sessionId.Value}").ToListAsync()).FirstOrDefault();
-
-            vm.TableCode = tableCode;
-        }
-
-        return View(vm);
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Customer")]
-    public async Task<IActionResult> Create(CreateReviewViewModel model)
-    {
-        if (!ModelState.IsValid)
-        {
-            return View(model);
-        }
-
-        var customerId = CurrentUserId;
-
-        // Đảm bảo SessionId trỏ vào 1 bản ghi hợp lệ trong dbo.PlaySessions để thỏa mãn FK_Review_Session
-        var sessionExists = model.SessionId > 0 && (await _context.Database
-            .SqlQuery<int>($"SELECT COUNT(*) AS [Value] FROM dbo.PlaySessions WHERE Id = {model.SessionId}")
-            .ToListAsync()).FirstOrDefault() > 0;
-
-        if (!sessionExists)
-        {
-            // Tìm phiên chơi gần nhất của user hoặc phiên có sẵn trong DB
-            var existingSession = (await _context.Database
-                .SqlQuery<int>($"SELECT TOP 1 Id AS [Value] FROM dbo.PlaySessions ORDER BY Id DESC")
-                .ToListAsync()).FirstOrDefault();
-
-            if (existingSession == 0)
-            {
-                // DB hoàn toàn chưa có phiên nào: Tạo 1 phiên mẫu hoàn thành để liên kết FK
-                await _context.Database.ExecuteSqlRawAsync(@"
-                    INSERT INTO dbo.PlaySessions 
-                    (TableId, CustomerId, OpenedById, ClosedById, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status)
-                    VALUES (1, {0}, {0}, {0}, SYSUTCDATETIME(), SYSUTCDATETIME(), 60000, 60000, 'Closed')", customerId);
-
-                existingSession = (await _context.Database
-                    .SqlQuery<int>($"SELECT TOP 1 Id AS [Value] FROM dbo.PlaySessions ORDER BY Id DESC")
-                    .ToListAsync()).FirstOrDefault();
-            }
-
-            model.SessionId = existingSession;
-        }
-
-        var review = new Review
-        {
-            CustomerId = customerId,
-            SessionId = model.SessionId,
-            Rating = model.Rating,
-            Comment = string.IsNullOrWhiteSpace(model.Comment) ? null : model.Comment.Trim(),
-            CreatedAtUtc = DateTime.UtcNow
-        };
-
-        _context.Reviews.Add(review);
-        await _context.SaveChangesAsync();
-
-        TempData["Success"] = "Cảm ơn bạn đã gửi đánh giá! Ý kiến của bạn giúp chúng tôi nâng cao chất lượng phục vụ.";
-        return RedirectToAction("History", "CustomerPortal");
     }
 }

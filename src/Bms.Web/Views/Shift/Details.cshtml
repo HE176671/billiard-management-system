@@ -47,7 +47,7 @@
             {
                 <tr>
                     <td>#@p.Id</td><td>#@p.InvoiceId</td><td>@p.PaymentMethod</td>
-                    <td class="text-end">@p.AmountPaid.ToString("N0") ₫</td>
+                    <td class="text-end">@p.AmountPaid.ToString("N0") VND</td>
                     <td style="font-size:0.82rem">@p.TimeUtc.ToVn().ToString("HH:mm:ss dd/MM/yyyy")</td>
                     <td>@(p.PaymentMethod == "Cash" ? "Có" : "Không")</td>
                 </tr>

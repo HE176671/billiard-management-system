@@ -8,14 +8,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Manager,Admin")]
 public class TierConfigController : Controller
 {
     private readonly ApplicationDbContext _context;
+    private readonly ITierEvaluationService _tierEval;
 
-    public TierConfigController(ApplicationDbContext context)
+    public TierConfigController(ApplicationDbContext context, ITierEvaluationService tierEval)
     {
         _context = context;
+        _tierEval = tierEval;
     }
 
     // GET /TierConfig
@@ -25,6 +27,27 @@ public class TierConfigController : Controller
         return View(vm);
     }
 
+    // POST /TierConfig/PreviewImpact (Xem trước ảnh hưởng nếu đổi ngưỡng chi tiêu 12 tháng)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PreviewImpact(TierConfigViewModel model)
+    {
+        var counts = await CountCustomersAsync();
+        var map = new Dictionary<int, decimal>();
+
+        foreach (var item in model.Tiers)
+        {
+            item.CustomerCount = counts.GetValueOrDefault(item.Id);
+            if (TryParseDecimal(item.SpendThreshold, out var th) && th >= 0)
+            {
+                map[item.Id] = th;
+            }
+        }
+
+        model.ImpactPreview = await _tierEval.PreviewThresholdImpactAsync(map);
+        return View("Index", model);
+    }
+
     // POST /TierConfig/Save
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -32,7 +55,7 @@ public class TierConfigController : Controller
     {
         var tiers = await _context.MembershipTiers.ToListAsync();
         var counts = await CountCustomersAsync();
-        var parsed = new List<(MembershipTier Tier, decimal Threshold, decimal Discount, int Multiplier)>();
+        var parsed = new List<(MembershipTier Tier, decimal Threshold, decimal Discount, int Multiplier, decimal BirthdayVoucher)>();
 
         foreach (var item in model.Tiers)
         {
@@ -47,7 +70,7 @@ public class TierConfigController : Controller
 
             if (!TryParseDecimal(item.SpendThreshold, out var threshold) || threshold < 0 || threshold > 999_999_999_999m)
             {
-                ModelState.AddModelError(string.Empty, $"[{tier.TierName}] Ngưỡng chi tiêu không hợp lệ (phải là số >= 0).");
+                ModelState.AddModelError(string.Empty, $"[{tier.TierName}] Ngưỡng chi tiêu 12 tháng không hợp lệ (phải là số >= 0).");
                 continue;
             }
             if (!TryParseDecimal(item.DiscountPercent, out var discount) || discount < 0 || discount > 100)
@@ -60,7 +83,13 @@ public class TierConfigController : Controller
                 ModelState.AddModelError(string.Empty, $"[{tier.TierName}] Hệ số nhân điểm phải từ 1 đến 100.");
                 continue;
             }
-            parsed.Add((tier, threshold, Math.Round(discount, 2), item.PointMultiplier));
+            if (!TryParseDecimal(item.BirthdayVoucherValue, out var bdayVoucher) || bdayVoucher < 0 || bdayVoucher > 100_000_000m)
+            {
+                ModelState.AddModelError(string.Empty, $"[{tier.TierName}] Giá trị voucher sinh nhật không hợp lệ.");
+                continue;
+            }
+
+            parsed.Add((tier, threshold, Math.Round(discount, 2), item.PointMultiplier, Math.Round(bdayVoucher, 0)));
         }
 
         if (ModelState.IsValid)
@@ -88,21 +117,48 @@ public class TierConfigController : Controller
         await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
-            foreach (var p in parsed)
+            for (int i = 0; i < parsed.Count; i++)
             {
+                var p = parsed[i];
                 p.Tier.SpendThreshold = p.Threshold;
                 p.Tier.DiscountPercent = p.Discount;
                 p.Tier.PointMultiplier = p.Multiplier;
+                p.Tier.BirthdayVoucherValue = p.BirthdayVoucher;
+                p.Tier.SortOrder = i + 1;
             }
             await _context.SaveChangesAsync();
 
-            // Ngưỡng thay đổi => xếp lại hạng cho toàn bộ khách theo TotalSpend hiện có
-            var changed = await TierHelper.RecalculateUserTiersAsync(_context);
+            // F5: Không tự hạ hạng hàng loạt khi đổi ngưỡng (chỉ nâng ngay cho khách đủ điều kiện chi tiêu 12 tháng; hạ thì theo chu kỳ review)
+            int upgradedCount = 0;
+            var allTiers = parsed.Select(x => x.Tier).OrderBy(t => t.SpendThreshold).ToList();
+            var roleId = await _context.Roles.Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync();
+            var customers = await _context.Users
+                .Where(u => _context.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == roleId))
+                .ToListAsync();
+
+            var now = DateTime.UtcNow;
+            foreach (var u in customers)
+            {
+                var spend12M = await _tierEval.GetSpendLast12MonthsAsync(u.Id, now);
+                var curTier = allTiers.FirstOrDefault(t => t.Id == u.TierId) ?? allTiers[0];
+                var resolved = TierHelper.Resolve(allTiers, spend12M, u.RewardPoints) ?? allTiers[0];
+
+                if (u.TierId == null || resolved.SpendThreshold > curTier.SpendThreshold)
+                {
+                    u.TierId = resolved.Id;
+                    u.TierAchievedAtUtc = now;
+                    u.TierReviewAtUtc = now.AddMonths(1);
+                    u.TierGraceUntilUtc = null;
+                    upgradedCount++;
+                }
+            }
+
+            if (upgradedCount > 0) await _context.SaveChangesAsync();
             await tx.CommitAsync();
 
-            TempData["Success"] = changed > 0
-                ? $"Đã lưu cấu hình hạng. Đã cập nhật lại hạng cho {changed} khách hàng."
-                : "Đã lưu cấu hình hạng. Không có khách hàng nào thay đổi hạng.";
+            TempData["Success"] = upgradedCount > 0
+                ? $"Đã lưu cấu hình hạng & ưu đãi. Đã nâng hạng ngay cho {upgradedCount} khách hàng đủ điều kiện (các khách hàng chưa đủ ngưỡng sẽ được xét giữ/ân hạn theo chu kỳ 1 tháng)."
+                : "Đã lưu cấu hình hạng & ưu đãi thành công.";
         }
         catch
         {
@@ -114,13 +170,11 @@ public class TierConfigController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // ── Helpers ──
-
     private async Task<List<TierEditItem>> LoadItemsAsync()
     {
         var counts = await CountCustomersAsync();
         var tiers = await _context.MembershipTiers.AsNoTracking()
-            .OrderBy(t => t.SpendThreshold).ToListAsync();
+            .OrderBy(t => t.SpendThreshold).ThenBy(t => t.SortOrder).ToListAsync();
 
         return tiers.Select(t => new TierEditItem
         {
@@ -129,6 +183,7 @@ public class TierConfigController : Controller
             SpendThreshold = t.SpendThreshold.ToString("0.##", CultureInfo.InvariantCulture),
             DiscountPercent = t.DiscountPercent.ToString("0.##", CultureInfo.InvariantCulture),
             PointMultiplier = t.PointMultiplier,
+            BirthdayVoucherValue = t.BirthdayVoucherValue.ToString("0.##", CultureInfo.InvariantCulture),
             CustomerCount = counts.GetValueOrDefault(t.Id)
         }).ToList();
     }
