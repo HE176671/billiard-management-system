@@ -27,3 +27,4 @@ public class Order
 
     public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
 }
+

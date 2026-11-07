@@ -32,3 +32,4 @@ public class OrderDetail
     [ForeignKey(nameof(ProductId))]
     public Product Product { get; set; } = null!;
 }
+

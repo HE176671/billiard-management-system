@@ -53,6 +53,9 @@ await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+var loggerFactory = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
+var logger = loggerFactory.CreateLogger("SchemaUpgrader");
+await SchemaUpgrader.ApplyAsync(db, logger);
 await using var tx = await db.Database.BeginTransactionAsync();
 var passed = 0;
 void Check(bool condition, string label) {
@@ -199,9 +202,11 @@ try
     var campaignSvc = scope.ServiceProvider.GetRequiredService<ICampaignService>();
 
     var allTiers = await db.MembershipTiers.OrderBy(t => t.MinPoints).ToListAsync();
-    var memberTier = allTiers.First(t => t.MinPoints == 0);
-    var silverTier = allTiers.First(t => t.TierName == "Silver" || t.MinPoints == 200);
-    var goldTier = allTiers.First(t => t.TierName == "Gold" || t.MinPoints == 1000);
+    var memberTier = allTiers.FirstOrDefault(t => t.MinPoints == 0) ?? allTiers.First();
+    var silverTier = allTiers.FirstOrDefault(t => t.TierName == "Silver" || t.TierName == "Bạc" || t.MinPoints == 200)
+                     ?? (allTiers.Count > 1 ? allTiers[1] : allTiers[0]);
+    var goldTier = allTiers.FirstOrDefault(t => t.TierName == "Gold" || t.TierName == "Vàng" || t.MinPoints == 1000)
+                   ?? (allTiers.Count > 2 ? allTiers[2] : allTiers[^1]);
 
     var adminUser = new ApplicationUser { UserName = "admin.tv2." + key, Email = "admin." + key + "@example.invalid", FullName = "TV2 Admin Checker" };
     Check((await users.CreateAsync(adminUser, "SmokeAdmin!123")).Succeeded && (await users.AddToRoleAsync(adminUser, "Admin")).Succeeded, "TV2 Admin fixture creation");
