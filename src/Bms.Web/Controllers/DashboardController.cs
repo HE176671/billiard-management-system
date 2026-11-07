@@ -39,8 +39,8 @@ public class DashboardController : Controller
         vm.TotalTables = tables.Values.Sum();
         vm.AvailableTables = tables.GetValueOrDefault("Available");
         vm.InUseTables = tables.GetValueOrDefault("InUse");
-        vm.AwaitingPaymentTables = tables.GetValueOrDefault("AwaitingPayment");
-        vm.UnavailableTables = tables.GetValueOrDefault("Maintenance") + tables.GetValueOrDefault("Inactive");
+        vm.AwaitingPaymentTables = 0;
+        vm.UnavailableTables = tables.GetValueOrDefault("Maintenance");
 
         vm.TodayRevenue = await _context.PaymentTransactions
             .Where(p => p.TransactionTimeUtc >= start && p.TransactionTimeUtc < end)
@@ -99,31 +99,7 @@ public class DashboardController : Controller
         }
 
         // ══════════════════════════════════════════════════════════════
-        // 3. TV2 (Dung): Đánh giá chất lượng dịch vụ (Reviews)
-        // ══════════════════════════════════════════════════════════════
-        var reviewStats = await _context.Reviews
-            .AsNoTracking()
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                AvgRating = g.Average(r => (double)r.Rating),
-                Total = g.Count()
-            })
-            .FirstOrDefaultAsync();
-
-        if (reviewStats != null && reviewStats.Total > 0)
-        {
-            vm.AverageRating = Math.Round(reviewStats.AvgRating, 1);
-            vm.TotalReviews = reviewStats.Total;
-        }
-        else
-        {
-            vm.AverageRating = 4.8;
-            vm.TotalReviews = 0;
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        // 4. TV2 (Dung): Doanh thu tháng & Giờ chơi
+        // 3. TV2 (Dung): Doanh thu tháng & Giờ chơi
         // ══════════════════════════════════════════════════════════════
         if (vm.MonthRevenue > 0)
         {

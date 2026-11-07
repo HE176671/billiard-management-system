@@ -38,12 +38,6 @@ public class LoyaltyTestViewModel
     public decimal PaymentFinalAmount { get; set; } = 100000;
     public decimal BillAmount { get; set; } = 200000;
 
-    // Dữ liệu form giả lập khách hàng gửi đánh giá
-    public int ReviewSessionId { get; set; } = 999;
-    public byte ReviewRating { get; set; } = 5;
-    public string ReviewComment { get; set; } = "Bàn chơi rất êm, nhân viên nhiệt tình, giá hợp lý!";
-
-    public List<SimulatedReviewItemViewModel> RecentReviews { get; set; } = new();
     public List<SimulatedNotificationItemViewModel> CustomerNotifications { get; set; } = new();
 }
 
@@ -67,18 +61,6 @@ public class SessionOrderLineViewModel
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal Subtotal { get; set; }
-}
-
-public class SimulatedReviewItemViewModel
-{
-    public int Id { get; set; }
-    public int SessionId { get; set; }
-    public string CustomerId { get; set; } = string.Empty;
-    public string CustomerName { get; set; } = string.Empty;
-    public byte Rating { get; set; }
-    public string? Comment { get; set; }
-    public string? AdminReply { get; set; }
-    public DateTime CreatedAtUtc { get; set; }
 }
 
 public class SimulatedNotificationItemViewModel

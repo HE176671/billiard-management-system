@@ -30,8 +30,19 @@
                 <i class="bi bi-megaphone me-2 text-danger"></i>Tạo chương trình gửi ưu đãi
             </h2>
 
-            <form method="post">
+            <form method="post" id="campaignForm">
                 @Html.AntiForgeryToken()
+
+                @if (!ViewData.ModelState.IsValid)
+                {
+                    <div class="alert alert-danger py-2 mb-3" style="font-size:0.84rem">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        @foreach (var err in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                        {
+                            <div>@err.ErrorMessage</div>
+                        }
+                    </div>
+                }
 
                 <div class="mb-3">
                     <label class="form-label">Tên chương trình <span class="text-danger">*</span></label>
@@ -60,33 +71,55 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Hạng thành viên</label>
-                        <select name="TargetTierId" class="form-select">
-                            <option value="">Tất cả hạng</option>
-                            @foreach (var t in Model.Tiers)
+                        <select name="TargetTierId" id="cmpTierSelect" class="form-select">
+                            <option value="" data-rank="-1">Tất cả hạng</option>
+                            @for (int i = 0; i < Model.Tiers.Count; i++)
                             {
-                                <option value="@t.Id" selected="@(f.TargetTierId == t.Id)">Hạng @t.Name</option>
+                                var t = Model.Tiers[i];
+                                <option value="@t.Id" data-rank="@i" selected="@(f.TargetTierId == t.Id)">Hạng @t.Name</option>
                             }
                         </select>
                     </div>
                 </div>
 
-                <div class="row g-2 mb-3">
-                    <div class="col-md-7">
-                        <label class="form-label">Voucher tặng kèm (không bắt buộc)</label>
-                        <select name="RewardItemId" class="form-select">
-                            <option value="">-- Không tặng kèm voucher --</option>
-                            @foreach (var r in Model.RewardItems)
-                            {
-                                <option value="@r.Id" selected="@(f.RewardItemId == r.Id)">
-                                    @r.Name (@VnFormat.RewardTypeLabel(r.RewardType)@(r.DiscountValue.HasValue ? " — " + VnFormat.Money(r.DiscountValue.Value) : ""))
-                                </option>
-                            }
-                        </select>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-1">Voucher tặng kèm (lấy từ danh mục Quà đổi điểm)</label>
+                        <a asp-controller="RewardItem" asp-action="Index" class="text-decoration-none" style="font-size:0.78rem">
+                            <i class="bi bi-gift me-1"></i>Quản lý voucher
+                        </a>
                     </div>
-                    <div class="col-md-5">
-                        <label class="form-label">Điểm thưởng tặng thêm</label>
-                        <input type="number" name="BonusPoints" class="form-control" min="0" value="@f.BonusPoints" />
-                    </div>
+                    <select name="RewardItemId" id="cmpVoucherSelect" class="form-select">
+                        <option value="">-- Không tặng kèm voucher --</option>
+                        @foreach (var r in Model.RewardItems)
+                        {
+                            var minRank = r.MinTierId.HasValue ? Model.Tiers.FindIndex(t => t.Id == r.MinTierId.Value) : -1;
+                            <option value="@r.Id" selected="@(f.RewardItemId == r.Id)"
+                                    data-code="@r.Code"
+                                    data-name="@r.Name"
+                                    data-type="@VnFormat.RewardTypeLabel(r.RewardType)"
+                                    data-value="@(r.DiscountValue.HasValue ? VnFormat.Money(r.DiscountValue.Value) : "—")"
+                                    data-points="@r.PointCost"
+                                    data-days="@(r.ValidDays > 0 ? r.ValidDays : 7)"
+                                    data-min-tier="@(r.MinTier?.TierName ?? "")"
+                                    data-min-rank="@minRank">
+                                [@r.Code] @r.Name — @VnFormat.RewardTypeLabel(r.RewardType)@(r.DiscountValue.HasValue ? " " + VnFormat.Money(r.DiscountValue.Value) : "") · @(r.MinTier != null ? "Từ hạng " + r.MinTier.TierName : "Mọi hạng")
+                            </option>
+                        }
+                    </select>
+                    @if (!Model.RewardItems.Any())
+                    {
+                        <div class="form-text text-warning">
+                            Chưa có voucher nào đang mở. Hãy tạo hoặc mở mã tại <a asp-controller="RewardItem" asp-action="Index">Quà đổi điểm</a>.
+                        </div>
+                    }
+                    <div id="cmpVoucherInfo" class="mt-2 p-2 px-3 rounded-3 d-none" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.8rem"></div>
+                    <div id="cmpTierWarn" class="mt-2 text-danger fw-semibold d-none" style="font-size:0.8rem"></div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Điểm thưởng tặng thêm</label>
+                    <input type="number" name="BonusPoints" class="form-control" min="0" value="@f.BonusPoints" data-field-label="Điểm thưởng tặng thêm" />
                 </div>
 
                 <div class="mb-3">
@@ -109,6 +142,15 @@
                         <div class="fw-semibold text-primary mb-1">
                             <i class="bi bi-people me-1"></i>Danh sách dự kiến nhận: <strong>@prv.TotalEligibleCount hội viên phù hợp</strong>
                         </div>
+                        @{
+                            var selVoucher = f.RewardItemId.HasValue ? Model.RewardItems.FirstOrDefault(x => x.Id == f.RewardItemId.Value) : null;
+                        }
+                        @if (selVoucher?.MinTier != null)
+                        {
+                            <div class="text-muted mb-1" style="font-size:0.76rem">
+                                <i class="bi bi-funnel me-1"></i>Đã tự động loại hội viên dưới Hạng @selVoucher.MinTier.TierName (điều kiện của voucher "@selVoucher.Name").
+                            </div>
+                        }
                         @if (prv.SampleRecipients.Any())
                         {
                             <div class="text-muted mb-1" style="font-size:0.76rem">Một số hội viên trong danh sách:</div>
@@ -174,7 +216,14 @@
                                         }
                                     </td>
                                     <td style="font-size:0.8rem">
-                                        @if (c.RewardItem != null) { <div>@c.RewardItem.Name</div> }
+                                        @if (c.RewardItem != null)
+                                        {
+                                            <div><code>@c.RewardItem.Code</code> @c.RewardItem.Name</div>
+                                            @if (!c.RewardItem.IsActive)
+                                            {
+                                                <span class="badge-inactive" style="font-size:0.68rem">Voucher đã đóng</span>
+                                            }
+                                        }
                                         @if (c.BonusPoints > 0) { <div class="text-success fw-semibold">+@c.BonusPoints điểm</div> }
                                     </td>
                                     <td class="text-end fw-semibold">@c.RecipientCount người</td>
@@ -199,4 +248,67 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    (function () {
+        const vSel = document.getElementById('cmpVoucherSelect');
+        const tSel = document.getElementById('cmpTierSelect');
+        const info = document.getElementById('cmpVoucherInfo');
+        const warn = document.getElementById('cmpTierWarn');
+        const form = document.getElementById('campaignForm');
+        if (!vSel || !tSel || !info || !warn) return;
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
+        // Trả về thông báo lỗi nếu hạng đích thấp hơn Hạng tối thiểu của voucher, ngược lại trả về ''
+        function tierConflict() {
+            const v = vSel.options[vSel.selectedIndex];
+            const t = tSel.options[tSel.selectedIndex];
+            if (!v || !v.value || !t || !t.value) return '';
+            const minRank = parseInt(v.dataset.minRank || '-1', 10);
+            const tierRank = parseInt(t.dataset.rank || '-1', 10);
+            if (minRank >= 0 && tierRank >= 0 && tierRank < minRank) {
+                return `Voucher "${v.dataset.name}" chỉ áp dụng từ Hạng ${v.dataset.minTier} trở lên — không thể gửi cho ${t.textContent.trim()}.`;
+            }
+            return '';
+        }
+
+        function render() {
+            const v = vSel.options[vSel.selectedIndex];
+            if (!v || !v.value) {
+                info.classList.add('d-none');
+                info.innerHTML = '';
+            } else {
+                const tierText = v.dataset.minTier ? `Từ Hạng ${esc(v.dataset.minTier)}` : 'Mọi hạng';
+                info.innerHTML =
+                    `<div class="fw-semibold mb-1"><i class="bi bi-ticket-perforated me-1 text-danger"></i>${esc(v.dataset.name)} <code>${esc(v.dataset.code)}</code></div>` +
+                    `<div class="text-muted">Loại: <strong>${esc(v.dataset.type)}</strong> · Giá trị: <strong>${esc(v.dataset.value)}</strong> · ` +
+                    `Hạng áp dụng: <strong>${tierText}</strong> · Hạn dùng: <strong>${esc(v.dataset.days)} ngày</strong> kể từ khi gửi</div>` +
+                    `<div class="text-muted mt-1" style="font-size:0.74rem">Voucher gửi qua chương trình được tặng miễn phí (không trừ ${esc(v.dataset.points)} điểm đổi quà) và chỉ phát cho hội viên đạt hạng áp dụng.</div>`;
+                info.classList.remove('d-none');
+            }
+
+            const msg = tierConflict();
+            warn.textContent = msg;
+            warn.classList.toggle('d-none', !msg);
+        }
+
+        vSel.addEventListener('change', render);
+        tSel.addEventListener('change', render);
+        form && form.addEventListener('submit', function (e) {
+            if (tierConflict()) {
+                e.preventDefault();
+                render();
+                warn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+        render();
+    })();
+</script>
+}
 

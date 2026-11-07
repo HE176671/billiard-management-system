@@ -75,7 +75,7 @@ public class ProfileController : Controller
         {
             FullName = user.FullName, PhoneNumber = user.PhoneNumber, UserName = user.UserName,
             Email = user.Email, EmployeeCode = user.EmployeeCode,
-            RoleLabel = roles.Contains("Admin") ? "Quản trị viên" : roles.Contains("Staff") ? "Nhân viên" : "Khách hàng"
+            RoleLabel = roles.Contains("Manager") ? "Manager (Quản lý)" : roles.Contains("Admin") ? "Quản trị viên" : roles.Contains("Staff") ? "Nhân viên" : "Khách hàng"
         };
     }
 

@@ -19,6 +19,32 @@ public class PricingListViewModel
     public List<ComboRowViewModel> Combos { get; set; } = new();
     public List<Product> AvailableBonusProducts { get; set; } = new();
     public SaveComboInputModel? EditCombo { get; set; }
+
+    // 4. Quản lý Danh sách Bàn Bi-a (Manager tạo thêm bàn & điều chỉnh trạng thái bàn)
+    public List<BilliardTableRowViewModel> Tables { get; set; } = new();
+    public SaveBilliardTableInputModel? EditTable { get; set; }
+}
+
+public class BilliardTableRowViewModel
+{
+    public int Id { get; set; }
+    public string TableCode { get; set; } = string.Empty;
+    public int TableTypeId { get; set; }
+    public string TableTypeName { get; set; } = string.Empty;
+    public decimal HourlyRate { get; set; }
+    public int FloorNumber { get; set; } = 1;
+    public string Status { get; set; } = "Available";
+    public bool IsComboOverdue { get; set; }
+    public bool CanModifyStatus => Status is "Available" or "Maintenance";
+}
+
+public class SaveBilliardTableInputModel
+{
+    public int Id { get; set; }
+    public string TableCode { get; set; } = string.Empty;
+    public int TableTypeId { get; set; }
+    public int FloorNumber { get; set; } = 1;
+    public string Status { get; set; } = "Available";
 }
 
 public class PricingRowViewModel

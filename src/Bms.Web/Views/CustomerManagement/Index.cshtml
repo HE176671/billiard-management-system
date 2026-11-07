@@ -6,6 +6,8 @@
     var form = Model.Form;
     var selectedId = form?.Id;
     var maxAdultBirthDate = DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("yyyy-MM-dd");
+    var isManager = User.IsInRole("Manager");
+    var canCashierAndEnroll = User.IsInRole("Staff") && !isManager;
 
     string TierStyle(string? name) => name switch
     {
@@ -38,12 +40,15 @@
             <div class="data-card-header">
                 <span class="data-card-title"><i class="bi bi-people me-2"></i>Tra cứu hội viên (@Model.TotalCount)</span>
                 <div class="d-flex gap-2 flex-wrap">
-                    <button type="button" class="btn-primary-bms" data-bs-toggle="modal" data-bs-target="#quickEnrollModal">
-                        <i class="bi bi-person-plus"></i> + Đăng ký hội viên mới (CCCD 18+)
-                    </button>
-                    <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-outline-bms">
-                        <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
-                    </a>
+                    @if (canCashierAndEnroll)
+                    {
+                        <button type="button" class="btn-primary-bms" data-bs-toggle="modal" data-bs-target="#quickEnrollModal">
+                            <i class="bi bi-person-plus"></i> + Đăng ký hội viên mới (CCCD 18+)
+                        </button>
+                        <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-outline-bms">
+                            <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
+                        </a>
+                    }
                     <a asp-action="ExportCsv"
                        asp-route-search="@Model.Search"
                        asp-route-tierId="@Model.TierId"
@@ -131,10 +136,13 @@
                                     </td>
                                     <td class="text-end fw-semibold">@VnFormat.Number(c.RewardPoints)</td>
                                     <td class="text-end text-nowrap">
-                                        <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@c.Id" asp-route-customerMode="member"
-                                           class="btn-outline-bms py-1 px-2 me-1" style="font-size:0.75rem" title="Chuyển sang Thanh toán cho hội viên này">
-                                            <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
-                                        </a>
+                                        @if (canCashierAndEnroll)
+                                        {
+                                            <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@c.Id" asp-route-customerMode="member"
+                                               class="btn-outline-bms py-1 px-2 me-1" style="font-size:0.75rem" title="Chuyển sang Thanh toán cho hội viên này">
+                                                <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
+                                            </a>
+                                        }
                                         <a asp-action="Profile" asp-route-id="@c.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem" title="Xem và sửa thông tin trong Hồ sơ hội viên">
                                             <i class="bi bi-person-vcard"></i> Hồ sơ hội viên
                                         </a>
@@ -166,6 +174,8 @@
 </div>
 
 <!-- ═══════════ Modal Đăng ký tài khoản hội viên mới tại màn Danh sách hội viên (Kiểm tra CCCD >= 18 tuổi) ═══════════ -->
+@if (canCashierAndEnroll)
+{
 <div class="modal fade" id="quickEnrollModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-3 border-0 shadow">
@@ -235,6 +245,7 @@
         </div>
     </div>
 </div>
+}
 
 @section Scripts {
 <script>

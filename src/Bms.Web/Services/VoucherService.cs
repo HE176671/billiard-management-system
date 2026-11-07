@@ -74,6 +74,22 @@ public class VoucherService : IVoucherService
                 null, user.RewardPoints);
         }
 
+        if (item.PointCost == 0)
+        {
+            var nowCheck = DateTime.UtcNow;
+            bool hasActiveFreeVoucher = await _db.CustomerVouchers.AsNoTracking()
+                .AnyAsync(v => v.CustomerId == customerId
+                            && v.RewardItemId == item.Id
+                            && v.Status == CustomerVoucher.StatusActive
+                            && v.ExpiresAtUtc > nowCheck, ct);
+            if (hasActiveFreeVoucher)
+            {
+                return new VoucherActionResult(false,
+                    $"Hội viên đang có mã ưu đãi \"{item.Name}\" (0 điểm) còn hiệu lực chưa sử dụng.",
+                    null, user.RewardPoints);
+            }
+        }
+
         var ownTx = _db.Database.CurrentTransaction == null
             ? await _db.Database.BeginTransactionAsync(ct)
             : null;
@@ -152,6 +168,9 @@ public class VoucherService : IVoucherService
 
         var voucher = await _db.CustomerVouchers
             .Include(v => v.Customer)
+                .ThenInclude(u => u!.Tier)
+            .Include(v => v.RewardItem)
+                .ThenInclude(r => r!.MinTier)
             .FirstOrDefaultAsync(v => v.Code == norm, ct);
 
         if (voucher == null)
@@ -172,6 +191,25 @@ public class VoucherService : IVoucherService
                 await _db.SaveChangesAsync(ct);
             }
             return new VoucherActionResult(false, $"Voucher {norm} đã hết hạn vào {voucher.ExpiresAtUtc.ToVn():dd/MM/yyyy}.", voucher, voucher.Customer?.RewardPoints ?? 0);
+        }
+
+        if (voucher.RewardItem != null && !voucher.RewardItem.IsActive)
+        {
+            return new VoucherActionResult(false,
+                $"Voucher {norm} ({voucher.Title}) thuộc danh mục quà tặng đang tạm đóng, không thể sử dụng.",
+                voucher, voucher.Customer?.RewardPoints ?? 0);
+        }
+
+        if (voucher.RewardItem?.MinTier != null)
+        {
+            decimal userThreshold = voucher.Customer?.Tier?.SpendThreshold ?? 0m;
+            if (userThreshold < voucher.RewardItem.MinTier.SpendThreshold)
+            {
+                string currentTierName = voucher.Customer?.Tier?.TierName ?? "Member";
+                return new VoucherActionResult(false,
+                    $"Không thể sử dụng voucher {norm} ({voucher.Title}): Voucher này yêu cầu từ Hạng {voucher.RewardItem.MinTier.TierName} trở lên, nhưng hội viên hiện đang ở Hạng {currentTierName}.",
+                    voucher, voucher.Customer?.RewardPoints ?? 0);
+            }
         }
 
         if (voucher.VoucherType != RewardItemEntity.TypeGift)

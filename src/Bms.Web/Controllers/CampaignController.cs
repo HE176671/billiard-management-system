@@ -22,9 +22,9 @@ public class CampaignController : Controller
 
     private string CurrentActorId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
-    // GET /Campaign?segment=...
+    // GET /Campaign?segment=...&rewardItemId=...
     [HttpGet]
-    public async Task<IActionResult> Index(string? segment = null)
+    public async Task<IActionResult> Index(string? segment = null, int? rewardItemId = null)
     {
         var form = new CampaignCreateInputModel();
         if (!string.IsNullOrWhiteSpace(segment))
@@ -39,6 +39,23 @@ public class CampaignController : Controller
             }
         }
 
+        // Mở từ màn Quà đổi điểm ("Gửi ưu đãi với voucher này") -> chọn sẵn voucher đang mở
+        if (rewardItemId.HasValue)
+        {
+            var item = await _db.RewardItems.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == rewardItemId.Value && r.IsActive);
+            if (item != null)
+            {
+                form.RewardItemId = item.Id;
+                if (string.IsNullOrWhiteSpace(form.Name))
+                    form.Name = $"Tặng voucher {item.Name} ({DateTime.UtcNow.ToVn():MM/yyyy})";
+            }
+            else
+            {
+                TempData["Error"] = "Voucher đã chọn không tồn tại hoặc đang ở trạng thái Đã đóng trong danh mục Quà đổi điểm.";
+            }
+        }
+
         return View(await BuildViewModelAsync(form, preview: true));
     }
 
@@ -47,6 +64,7 @@ public class CampaignController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Preview(CampaignCreateInputModel form)
     {
+        await ValidateVoucherSelectionAsync(form);
         return View("Index", await BuildViewModelAsync(form, preview: true));
     }
 
@@ -55,6 +73,7 @@ public class CampaignController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateAndSend(CampaignCreateInputModel form, bool sendImmediately = true)
     {
+        await ValidateVoucherSelectionAsync(form);
         if (!ModelState.IsValid)
             return View("Index", await BuildViewModelAsync(form, preview: true));
 
@@ -110,6 +129,40 @@ public class CampaignController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    /// <summary>
+    /// Đồng bộ với danh mục Quà đổi điểm: voucher phải tồn tại, đang mở,
+    /// và hạng đích (nếu chọn) không được thấp hơn Hạng tối thiểu của voucher.
+    /// </summary>
+    private async Task ValidateVoucherSelectionAsync(CampaignCreateInputModel form)
+    {
+        if (form.BonusPoints < 0)
+            ModelState.AddModelError(nameof(form.BonusPoints), "Điểm thưởng tặng thêm không được là số âm.");
+
+        if (!form.RewardItemId.HasValue) return;
+
+        var item = await _db.RewardItems.AsNoTracking()
+            .Include(r => r.MinTier)
+            .FirstOrDefaultAsync(r => r.Id == form.RewardItemId.Value);
+
+        if (item == null || !item.IsActive)
+        {
+            ModelState.AddModelError(nameof(form.RewardItemId),
+                "Voucher đã chọn không tồn tại hoặc đang ở trạng thái Đã đóng trong danh mục Quà đổi điểm.");
+            return;
+        }
+
+        if (item.MinTier != null && form.TargetTierId.HasValue)
+        {
+            var targetTier = await _db.MembershipTiers.AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == form.TargetTierId.Value);
+            if (targetTier != null && targetTier.SpendThreshold < item.MinTier.SpendThreshold)
+            {
+                ModelState.AddModelError(nameof(form.TargetTierId),
+                    $"Voucher \"{item.Name}\" chỉ áp dụng từ Hạng {item.MinTier.TierName} trở lên, không thể gửi cho Hạng {targetTier.TierName}.");
+            }
+        }
+    }
+
     private async Task<CampaignIndexViewModel> BuildViewModelAsync(CampaignCreateInputModel form, bool preview)
     {
         var campaigns = await _db.Campaigns.AsNoTracking()
@@ -124,15 +177,18 @@ public class CampaignController : Controller
             .Select(t => new TierOptionViewModel { Id = t.Id, Name = t.TierName })
             .ToListAsync();
 
+        // Lấy trực tiếp danh mục voucher đang mở từ Quà đổi điểm (kèm Hạng tối thiểu) để đồng bộ
         var rewardItems = await _db.RewardItems.AsNoTracking()
+            .Include(r => r.MinTier)
             .Where(r => r.IsActive)
             .OrderBy(r => r.PointCost)
+            .ThenBy(r => r.Id)
             .ToListAsync();
 
         CampaignPreviewResult? previewRes = null;
         if (preview)
         {
-            previewRes = await _campaignService.PreviewRecipientsAsync(form.TargetSegment, form.TargetTierId);
+            previewRes = await _campaignService.PreviewRecipientsAsync(form.TargetSegment, form.TargetTierId, form.RewardItemId);
         }
 
         return new CampaignIndexViewModel

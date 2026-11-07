@@ -109,9 +109,6 @@
                 <a class="sidebar-link @Active("RewardItem")" asp-controller="RewardItem" asp-action="Index">
                     <i class="bi bi-gift"></i> Quà đổi điểm
                 </a>
-                <a class="sidebar-link @Active("Review")" asp-controller="Review" asp-action="Index">
-                    <i class="bi bi-star-half"></i> Đánh giá dịch vụ
-                </a>
             }
 
             @if (isStaff || (!isAdmin && !isManager))
@@ -131,7 +128,6 @@
                 </a>
 
                 <div class="nav-section-label">Nghiệp vụ ca làm</div>
-                <a class="sidebar-link @Active("Staff")" asp-controller="Staff" asp-action="Index"><i class="bi bi-house"></i> Trang nhân viên</a>
                 <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
                 <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
                 <a class="sidebar-link @Active("Menu")" href="#"><i class="bi bi-cup-straw"></i> Thực đơn</a>
@@ -189,6 +185,7 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
     <script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+    <script src="~/js/bms-number-validator.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

@@ -117,7 +117,11 @@ public class CustomerLookupItemViewModel
 public class OpenSessionRequest
 {
     public int TableId { get; set; }
-    public string? CustomerId { get; set; }
+    /// <summary>
+    /// Chế độ mở bàn: "hourly" (Mở bàn tính tiền theo giờ đến khi đóng bàn) hoặc "combo" (Mở bàn áp dụng 1 gói Combo).
+    /// </summary>
+    public string BillingMode { get; set; } = "hourly";
+    public int? ComboId { get; set; }
 }
 
 public class CloseSessionRequest

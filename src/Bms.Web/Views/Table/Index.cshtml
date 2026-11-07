@@ -2,6 +2,12 @@
 @{
     Layout = "_StaffLayout";
     ViewData["Title"] = "Quản lý bàn";
+    var allTables = Model?.Tables ?? new List<Bms.Web.Models.TableCardViewModel>();
+    var totalTableCount = allTables.Count;
+    var overdueComboCount = allTables.Count(t => t.DisplayStatus == "Đã hết giờ Combo (Tính vượt giờ)");
+    var inUseTableCount = allTables.Count(t => t.Status == "InUse") - overdueComboCount;
+    var availableTableCount = allTables.Count(t => t.Status == "Available");
+    var maintenanceTableCount = allTables.Count(t => t.Status == "Maintenance");
 }
 
 <!-- ===================================================================== -->
@@ -27,19 +33,48 @@
             <h2 class="section-box-title">Sơ đồ bàn</h2>
         </div>
 
-        <!-- Dải chú giải trạng thái -->
+        <!-- Bộ lọc nhanh trạng thái bàn: Tất cả / Đang sử dụng / Còn trống / Đã hết giờ Combo (Tính vượt giờ) / Bảo trì -->
+        <div class="table-quick-filter-bar" role="radiogroup" aria-label="Bộ lọc trạng thái bàn">
+            <label class="quick-filter-radio active" for="table-filter-all">
+                <input type="radio" name="tableQuickFilter" id="table-filter-all" value="all" checked />
+                <span class="radio-ring" aria-hidden="true"></span>
+                <span class="radio-text">Tất cả (<span id="filter-count-all">@totalTableCount</span>)</span>
+            </label>
+            <label class="quick-filter-radio" for="table-filter-inuse">
+                <input type="radio" name="tableQuickFilter" id="table-filter-inuse" value="inuse" />
+                <span class="radio-ring" aria-hidden="true"></span>
+                <span class="radio-text">Đang sử dụng (<span id="filter-count-inuse">@inUseTableCount</span>)</span>
+            </label>
+            <label class="quick-filter-radio" for="table-filter-available">
+                <input type="radio" name="tableQuickFilter" id="table-filter-available" value="available" />
+                <span class="radio-ring" aria-hidden="true"></span>
+                <span class="radio-text">Còn trống (<span id="filter-count-available">@availableTableCount</span>)</span>
+            </label>
+            <label class="quick-filter-radio" for="table-filter-overdue">
+                <input type="radio" name="tableQuickFilter" id="table-filter-overdue" value="overdue" />
+                <span class="radio-ring" aria-hidden="true"></span>
+                <span class="radio-text">Đã hết giờ Combo (Tính vượt giờ) (<span id="filter-count-overdue">@overdueComboCount</span>)</span>
+            </label>
+            <label class="quick-filter-radio" for="table-filter-maintenance">
+                <input type="radio" name="tableQuickFilter" id="table-filter-maintenance" value="maintenance" />
+                <span class="radio-ring" aria-hidden="true"></span>
+                <span class="radio-text">Bảo trì (<span id="filter-count-maintenance">@maintenanceTableCount</span>)</span>
+            </label>
+        </div>
+
+        <!-- Dải chú giải 4 trạng thái chuẩn -->
         <div class="status-legend-bar" aria-label="Chú giải trạng thái">
-            <span class="legend-item"><span class="legend-dot status-dot-available"></span>Trống</span>
-            <span class="legend-item"><span class="legend-dot status-dot-inuse"></span>Đang chơi</span>
-            <span class="legend-item"><span class="legend-dot status-dot-warning"></span>Sắp hết giờ Combo</span>
+            <span class="legend-item"><span class="legend-dot status-dot-available"></span>Còn trống</span>
+            <span class="legend-item"><span class="legend-dot status-dot-inuse"></span>Đang sử dụng</span>
             <span class="legend-item"><span class="legend-dot status-dot-overdue"></span>Đã hết giờ Combo (Tính vượt giờ)</span>
-            <span class="legend-item"><span class="legend-dot status-dot-awaitingpayment"></span>Chờ thanh toán</span>
             <span class="legend-item"><span class="legend-dot status-dot-maintenance"></span>Bảo trì</span>
-            <span class="legend-item"><span class="legend-dot status-dot-inactive"></span>Ngừng hoạt động</span>
         </div>
 
         <div id="table-grid-container" class="table-grid-container">
-            <partial name="_TableGridPartial" model="Model.Tables" />
+            <partial name="_TableGridPartial" model="allTables" />
+        </div>
+        <div id="table-filter-empty" class="no-tables-message d-none">
+            Hiện không có bàn nào thuộc bộ lọc đã chọn.
         </div>
     </section>
 
@@ -131,19 +166,10 @@
                 </div>
             </div>
 
-            <!-- Nhóm (f): Khách hàng -->
-            <div class="panel-card-box">
-                <div class="panel-group-title">Khách hàng</div>
-                <div class="detail-data-row">
-                    <span class="detail-key">Khách hàng:</span>
-                    <span class="detail-val" id="detail-customer">--</span>
-                </div>
-            </div>
-
             <!-- ========================================================= -->
-            <!-- PHẦN 4: 4 FORM THAO TÁC NỘI TUYẾN (MỞ, ĐÓNG, CHUYỂN, COMBO)-->
+            <!-- PHẦN 4: 3 FORM THAO TÁC NỘI TUYẾN (MỞ BÀN + CHẾ ĐỘ, ĐÓNG, CHUYỂN) -->
             <!-- ========================================================= -->
-            <!-- Form Mở bàn -->
+            <!-- Form Mở bàn (Chọn 1 trong 2 chế độ: Tính giờ chơi HOẶC Gói Combo) -->
             <div class="panel-card-box open-session-form d-none" id="open-session-form">
                 <div class="form-section-title mb-2 fw-bold">Mở bàn mới</div>
                 <div class="time-preview-box p-2 mb-2 rounded bg-light border">
@@ -152,75 +178,70 @@
                     </div>
                 </div>
 
-                <!-- Chọn tài khoản Khách hàng (tùy chọn) -->
+                <!-- Chọn chế độ tính tiền (1 trong 2, không chạy song song) -->
                 <div class="mb-2">
-                    <label class="form-label d-block text-muted small fw-bold mb-1" for="input-customer-search">
-                        Khách hàng / Hội viên (tùy chọn):
+                    <label class="form-label d-block text-muted small fw-bold mb-1">
+                        Chế độ tính tiền (Chọn 1 trong 2):
                     </label>
-                    <input type="text" class="form-control form-control-sm mb-1" id="input-customer-search"
-                           placeholder="Tìm theo tên hoặc SĐT khách hàng..." autocomplete="off" />
-                    <select class="form-select form-select-sm" id="select-open-customer">
-                        <option value="">-- Khách vãng lai (Không chọn tài khoản) --</option>
-                    </select>
+                    <div class="d-grid gap-2" id="open-billing-mode-group">
+                        <label class="border rounded p-2 d-flex align-items-start gap-2 bg-light" style="cursor:pointer" id="lbl-mode-hourly">
+                            <input type="radio" class="form-check-input mt-1" name="openBillingMode" id="mode-hourly" value="hourly" checked />
+                            <div>
+                                <div class="fw-bold small text-dark">1. Mở bàn &amp; Tính giờ chơi đến khi đóng bàn</div>
+                                <div class="text-muted" style="font-size:0.75rem">Đếm giờ liên tục từ lúc mở đến khi đóng bàn, tính tiền theo số phút thực tế.</div>
+                            </div>
+                        </label>
+                        <label class="border rounded p-2 d-flex align-items-start gap-2" style="cursor:pointer" id="lbl-mode-combo">
+                            <input type="radio" class="form-check-input mt-1" name="openBillingMode" id="mode-combo" value="combo" />
+                            <div>
+                                <div class="fw-bold small text-dark">2. Chế độ Gói Combo giờ chơi</div>
+                                <div class="text-muted" style="font-size:0.75rem">Mỗi phiên chỉ áp dụng 1 gói Combo; khi hết giờ Combo mới tự động chuyển sang đếm giờ tính tiền theo phút.</div>
+                            </div>
+                        </label>
+                    </div>
                 </div>
 
-                <div class="action-btn-row">
+                <!-- Khối chọn gói Combo (chỉ hiển thị khi chọn chế độ 2 - Combo) -->
+                <div id="open-combo-section" class="d-none border-top pt-2 mt-1">
+                    <div id="combo-list-loading" class="text-muted small py-2 d-none">
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        Đang tải danh sách gói Combo...
+                    </div>
+
+                    <div id="combo-list-empty" class="alert alert-warning p-2 small mb-2 d-none">
+                        Hiện chưa có gói Combo nào đang mở bán trong danh mục.
+                    </div>
+
+                    <div id="combo-form-fields">
+                        <div class="mb-2">
+                            <label class="form-label d-block text-muted small fw-bold mb-1" for="select-combo-package">Chọn gói Combo:</label>
+                            <select class="form-select form-select-sm" id="select-combo-package">
+                                <option value="">-- Chọn gói Combo --</option>
+                            </select>
+                        </div>
+
+                        <div class="time-preview-box p-2 mb-2 rounded bg-light border d-none" id="combo-preview-box">
+                            <div class="small text-muted">
+                                Thời lượng gói: <strong id="preview-combo-hours">--</strong>
+                            </div>
+                            <div class="small text-muted">
+                                Thành tiền gói: <strong class="text-success" id="preview-combo-price">--</strong>
+                            </div>
+                            <div class="small text-muted mt-1" id="preview-combo-items-row">
+                                Món đi kèm: <span class="fw-semibold text-dark" id="preview-combo-items">--</span>
+                            </div>
+                            <div class="small text-info-emphasis mt-1" style="font-size: 0.75rem;">
+                                <i class="bi bi-info-circle me-1"></i>Trong thời gian Combo không tính tiền giờ; khi hết giờ Combo hệ thống tự động chuyển sang đếm giờ tính tiền theo phút.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-btn-row mt-2">
                     <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-confirm-open">
                         Xác nhận mở bàn
                     </button>
                     <button type="button" class="btn btn-wireframe btn-action-main" id="btn-cancel-open">
-                        Hủy
-                    </button>
-                </div>
-            </div>
-
-            <!-- Form Chọn Combo -->
-            <div class="panel-card-box combo-session-form d-none" id="combo-session-form">
-                <div class="form-section-title mb-2 fw-bold">Chọn gói Combo cho bàn</div>
-
-                <div id="combo-list-loading" class="text-muted small py-2 d-none">
-                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                    Đang tải danh sách gói Combo...
-                </div>
-
-                <div id="combo-list-empty" class="alert alert-warning p-2 small mb-2 d-none">
-                    Hiện chưa có gói Combo nào đang mở bán trong danh mục.
-                </div>
-
-                <div id="combo-form-fields">
-                    <div class="mb-2">
-                        <label class="form-label d-block text-muted small fw-bold mb-1" for="select-combo-package">Chọn gói Combo:</label>
-                        <select class="form-select form-select-sm" id="select-combo-package">
-                            <option value="">-- Chọn gói Combo --</option>
-                        </select>
-                    </div>
-
-                    <div class="mb-2">
-                        <label class="form-label d-block text-muted small fw-bold mb-1" for="input-combo-quantity">Số lượng gói:</label>
-                        <input type="number" class="form-control form-control-sm" id="input-combo-quantity" value="1" min="1" max="20" />
-                    </div>
-
-                    <div class="time-preview-box p-2 mb-3 rounded bg-light border d-none" id="combo-preview-box">
-                        <div class="small text-muted">
-                            Thời lượng gói: <strong id="preview-combo-hours">--</strong>
-                        </div>
-                        <div class="small text-muted">
-                            Thành tiền gói: <strong class="text-success" id="preview-combo-price">--</strong>
-                        </div>
-                        <div class="small text-muted mt-1" id="preview-combo-items-row">
-                            Món đi kèm: <span class="fw-semibold text-dark" id="preview-combo-items">--</span>
-                        </div>
-                        <div class="small text-info-emphasis mt-1" style="font-size: 0.75rem;">
-                            <i class="bi bi-info-circle me-1"></i>Tiền Combo được cộng ngay vào tiền bàn. Trong thời gian Combo sẽ không tính tiền theo giờ; hết giờ Combo tự động tính tiền giờ như bình thường.
-                        </div>
-                    </div>
-                </div>
-
-                <div class="action-btn-row">
-                    <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-confirm-combo" disabled>
-                        Xác nhận chọn Combo
-                    </button>
-                    <button type="button" class="btn btn-wireframe btn-action-main" id="btn-cancel-combo">
                         Hủy
                     </button>
                 </div>
@@ -324,7 +345,7 @@
             </div>
 
             <!-- ========================================================= -->
-            <!-- PHẦN 5: KHỐI 4 NÚT LỆNH CHÍNH (OPEN / CLOSE / CHUYỂN / COMBO) -->
+            <!-- PHẦN 5: KHỐI 3 NÚT LỆNH CHÍNH (OPEN / CLOSE / CHUYỂN BÀN) -->
             <!-- ========================================================= -->
             <!-- Khối nút hành động -->
             <div class="panel-card-box action-buttons-container" id="action-buttons-box">
@@ -335,11 +356,8 @@
                     <button type="button" class="btn btn-danger-bms btn-action-main" id="btn-close-table" disabled>
                         CLOSE TABLE
                     </button>
-                    <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe h-100" id="btn-transfer" disabled>
+                    <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe h-100" id="btn-transfer" style="grid-column: span 2;" disabled>
                         CHUYỂN BÀN
-                    </button>
-                    <button type="button" class="btn btn-warning-bms btn-action-main" id="btn-select-combo" disabled>
-                        CHỌN COMBO
                     </button>
                 </div>
             </div>

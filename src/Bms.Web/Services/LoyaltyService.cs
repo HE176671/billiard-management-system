@@ -65,18 +65,48 @@ public class LoyaltyService : ILoyaltyService
         decimal tierDiscountAmount = Math.Round(Math.Max(0m, req.PlaytimeAmount) * (tierDiscountPercent / 100m), 0, MidpointRounding.AwayFromZero);
         decimal remainingAfterTier = Math.Max(0m, subtotal - tierDiscountAmount);
 
-        // Bước 2: Voucher (tối đa 1 voucher/hóa đơn)
+        // Bước 2: Voucher (tối đa 1 voucher/hóa đơn) — kiểm tra đồng bộ danh mục quà & điều kiện Hạng tối thiểu (MinTier)
         decimal voucherDiscountAmount = 0m;
         if (!string.IsNullOrWhiteSpace(req.VoucherCode))
         {
             var code = req.VoucherCode.Trim().ToUpperInvariant();
             var voucher = await _db.CustomerVouchers.AsNoTracking()
+                .Include(v => v.RewardItem)
+                    .ThenInclude(r => r!.MinTier)
                 .FirstOrDefaultAsync(v => v.Code == code && v.CustomerId == user.Id, ct);
 
             var now = DateTime.UtcNow;
+            decimal userTierThreshold = currentTier?.SpendThreshold ?? 0m;
+
             if (voucher == null)
             {
-                errors.Add($"Voucher \"{code}\" không tồn tại hoặc không thuộc về khách hàng này.");
+                var templateItem = await _db.RewardItems.AsNoTracking()
+                    .Include(r => r.MinTier)
+                    .FirstOrDefaultAsync(r => r.Code == code, ct);
+                var otherVoucher = await _db.CustomerVouchers.AsNoTracking()
+                    .Include(v => v.RewardItem)
+                        .ThenInclude(r => r!.MinTier)
+                    .FirstOrDefaultAsync(v => v.Code == code, ct);
+
+                if (templateItem != null)
+                {
+                    if (templateItem.MinTier != null && userTierThreshold < templateItem.MinTier.SpendThreshold)
+                    {
+                        errors.Add($"Không thể áp dụng mã \"{code}\" ({templateItem.Name}): Ưu đãi này yêu cầu từ Hạng {templateItem.MinTier.TierName} trở lên, nhưng hội viên hiện đang ở Hạng {tierName}.");
+                    }
+                    else
+                    {
+                        errors.Add($"Mã \"{code}\" ({templateItem.Name}) là mã danh mục quà tặng — hội viên chưa sở hữu voucher khả dụng cho mã này.");
+                    }
+                }
+                else if (otherVoucher?.RewardItem?.MinTier != null && userTierThreshold < otherVoucher.RewardItem.MinTier.SpendThreshold)
+                {
+                    errors.Add($"Không thể áp dụng voucher \"{code}\" ({otherVoucher.Title}): Voucher yêu cầu từ Hạng {otherVoucher.RewardItem.MinTier.TierName} trở lên (hạng hiện tại: Hạng {tierName}) và không thuộc về khách hàng này.");
+                }
+                else
+                {
+                    errors.Add($"Voucher \"{code}\" không tồn tại hoặc không thuộc về khách hàng này.");
+                }
             }
             else if (voucher.Status != CustomerVoucher.StatusActive)
             {
@@ -86,21 +116,35 @@ public class LoyaltyService : ILoyaltyService
             {
                 errors.Add($"Voucher \"{code}\" đã hết hạn vào {voucher.ExpiresAtUtc.ToVn():dd/MM/yyyy}.");
             }
-            else if (voucher.VoucherType == RewardItemEntity.TypeGift)
+            else if (voucher.RewardItem != null && !voucher.RewardItem.IsActive)
             {
-                decimal val = voucher.DiscountValue ?? 0m;
-                voucherDiscountAmount = Math.Min(remainingAfterTier, val);
+                errors.Add($"Voucher \"{code}\" ({voucher.Title}) thuộc danh mục quà đổi điểm đang tạm khóa, không thể áp dụng.");
             }
-            else if (voucher.VoucherType == RewardItemEntity.TypeFreeHour)
+            else if (voucher.RewardItem?.MinTier != null && userTierThreshold < voucher.RewardItem.MinTier.SpendThreshold)
             {
-                decimal playAfterTier = Math.Max(0m, req.PlaytimeAmount - tierDiscountAmount);
-                decimal cap = voucher.DiscountValue ?? 80000m;
-                voucherDiscountAmount = Math.Min(playAfterTier, cap);
+                errors.Add($"Không thể áp dụng voucher \"{code}\" ({voucher.Title}): Loại voucher này yêu cầu từ Hạng {voucher.RewardItem.MinTier.TierName} trở lên, nhưng hội viên hiện đang ở Hạng {tierName}.");
             }
-            else // BillDiscount
+            else
             {
-                decimal val = voucher.DiscountValue ?? 0m;
-                voucherDiscountAmount = Math.Min(remainingAfterTier, val);
+                string effectiveType = voucher.RewardItem?.RewardType ?? voucher.VoucherType;
+                decimal? effectiveDiscount = voucher.RewardItem?.DiscountValue ?? voucher.DiscountValue;
+
+                if (effectiveType == RewardItemEntity.TypeGift)
+                {
+                    decimal val = effectiveDiscount ?? 0m;
+                    voucherDiscountAmount = Math.Min(remainingAfterTier, val);
+                }
+                else if (effectiveType == RewardItemEntity.TypeFreeHour)
+                {
+                    decimal playAfterTier = Math.Max(0m, req.PlaytimeAmount - tierDiscountAmount);
+                    decimal cap = effectiveDiscount ?? 80000m;
+                    voucherDiscountAmount = Math.Min(playAfterTier, cap);
+                }
+                else // BillDiscount
+                {
+                    decimal val = effectiveDiscount ?? 0m;
+                    voucherDiscountAmount = Math.Min(remainingAfterTier, val);
+                }
             }
         }
 

@@ -116,7 +116,7 @@ public class AccountController : Controller
         if (await _userManager.IsInRoleAsync(user, "Manager"))
             return RedirectToAction("Index", "Dashboard");
         if (await _userManager.IsInRoleAsync(user, "Staff"))
-            return RedirectToAction("Index", "Staff");
+            return RedirectToAction("Index", "Shift");
         return RedirectToAction("Login", "Account");
     }
 

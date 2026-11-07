@@ -146,8 +146,6 @@ public class Customer360ViewModel
     public List<RewardItemEntity> AvailableRewards { get; set; } = new();
     public List<PointTransaction> LedgerEntries { get; set; } = new();
     public List<HistoryItemViewModel> VisitHistory { get; set; } = new();
-    public List<CustomerAuditLog> AuditLogs { get; set; } = new();
-    public List<CustomerSelectItemViewModel> MergeCandidates { get; set; } = new();
 }
 
 // ── Điều chỉnh điểm thủ công (F2) ──
@@ -157,6 +155,10 @@ public class PointAdjustmentIndexViewModel
     public List<PointAdjustmentRequest> RecentHistory { get; set; } = new();
     public List<CustomerSelectItemViewModel> Customers { get; set; } = new();
     public string? SelectedCustomerId { get; set; }
+    public Dictionary<string, string> RequesterRoleLabels { get; set; } = new();
+    public string CurrentRequesterName { get; set; } = string.Empty;
+    public string CurrentRequesterRoleLabel { get; set; } = string.Empty;
+    public bool IsManagerRequester { get; set; }
 }
 
 // ── CRM Dashboard (F6) ──
@@ -174,7 +176,15 @@ public class CrmDashboardViewModel
     public List<TierDistributionPoint> TierCounts { get; set; } = new();
     public List<MonthlyPointsFlowPoint> MonthlyPointsFlow { get; set; } = new();
     public List<CustomerRfmProfile> TopSpenders12M { get; set; } = new();
+    public int TopSpendersPage { get; set; } = 1;
+    public int TopSpendersTotalPages { get; set; } = 1;
+    public int TopSpendersTotalCount { get; set; }
+
     public List<CustomerRfmProfile> HighValueAtRisk { get; set; } = new();
+    public int AtRiskPage { get; set; } = 1;
+    public int AtRiskTotalPages { get; set; } = 1;
+    public int AtRiskTotalCount { get; set; }
+    public int PageSize { get; set; } = 10;
 }
 
 public class MonthlyPointsFlowPoint

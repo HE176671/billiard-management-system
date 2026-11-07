@@ -246,12 +246,15 @@
                             <datalist id="memberVoucherList">
                                 @foreach (var v in Model.AvailableVouchers)
                                 {
+                                    var minTier = v.RewardItem?.MinTier;
+                                    var tierSuffix = minTier != null ? $" · Hạng {minTier.TierName}+" : "";
                                     <option value="@v.Code">
-                                        @v.Title (@(v.DiscountValue.HasValue ? "-" + VnFormat.Money(v.DiscountValue.Value) : VnFormat.RewardTypeLabel(v.VoucherType)))
+                                        @v.Title (@(v.DiscountValue.HasValue ? "-" + VnFormat.Money(v.DiscountValue.Value) : VnFormat.RewardTypeLabel(v.VoucherType))@tierSuffix)
                                     </option>
                                 }
                             </datalist>
-                            <div class="form-text">Nhập trực tiếp mã voucher khuyến mãi hoặc chọn từ danh sách voucher hiệu lực của hội viên.</div>
+                            <div id="lblVoucherWarning" class="alert alert-danger py-1 px-2 mt-2 mb-0 d-none" style="font-size:0.78rem"></div>
+                            <div class="form-text">Nhập trực tiếp mã voucher khuyến mãi hoặc chọn từ danh sách voucher hiệu lực của hội viên (hệ thống tự động kiểm tra điều kiện hạng thành viên).</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label d-flex justify-content-between">
@@ -740,12 +743,28 @@
                     document.getElementById('rcpEarn').textContent = '+' + d.pointsToEarn + ' điểm';
 
                     const errBox = document.getElementById('rcpErrors');
+                    const voucherWarnBox = document.getElementById('lblVoucherWarning');
                     if (!d.isValid && d.errors && d.errors.length > 0) {
                         errBox.classList.remove('d-none');
                         errBox.innerHTML = d.errors.map(e => `<div>• ${e}</div>`).join('');
+                        const vErrs = d.errors.filter(e => e.toLowerCase().includes('voucher') || e.toLowerCase().includes('hạng') || e.toLowerCase().includes('mã'));
+                        if (voucherWarnBox && vErrs.length > 0 && voucherInput && voucherInput.value.trim() !== '') {
+                            voucherWarnBox.classList.remove('d-none');
+                            voucherWarnBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>` + vErrs.join('<br/>');
+                            voucherInput.classList.add('is-invalid');
+                        } else if (voucherWarnBox) {
+                            voucherWarnBox.classList.add('d-none');
+                            voucherWarnBox.innerHTML = '';
+                            voucherInput && voucherInput.classList.remove('is-invalid');
+                        }
                     } else {
                         errBox.classList.add('d-none');
                         errBox.innerHTML = '';
+                        if (voucherWarnBox) {
+                            voucherWarnBox.classList.add('d-none');
+                            voucherWarnBox.innerHTML = '';
+                        }
+                        voucherInput && voucherInput.classList.remove('is-invalid');
                     }
 
                     const statusBox = document.getElementById('rcpTierStatus');

@@ -113,7 +113,15 @@ public class TableController : Controller
             return Unauthorized();
         }
 
-        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, request.CustomerId);
+        bool isComboMode = string.Equals(request.BillingMode, "combo", StringComparison.OrdinalIgnoreCase);
+        if (isComboMode && (!request.ComboId.HasValue || request.ComboId.Value <= 0))
+        {
+            return Json(TableOperationResult.Fail(null, "Vui lòng chọn gói Combo khi mở bàn ở chế độ Combo.", false));
+        }
+
+        int? selectedComboId = isComboMode ? request.ComboId : null;
+
+        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, null, selectedComboId);
         return Json(result);
     }
 
@@ -155,20 +163,17 @@ public class TableController : Controller
     // POST: /Table/AddSessionCombo
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddSessionCombo([FromForm] AddSessionComboRequest request)
+    public Task<IActionResult> AddSessionCombo([FromForm] AddSessionComboRequest request)
     {
-        if (!ModelState.IsValid)
-        {
-            return Json(TableOperationResult.Fail(null, "Dữ liệu gửi lên không hợp lệ.", false));
-        }
-
         var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(staffId))
         {
-            return Unauthorized();
+            return Task.FromResult<IActionResult>(Unauthorized());
         }
 
-        var result = await _tableSessionService.AddSessionComboAsync(request.SessionId, request.ComboId, request.Quantity, staffId);
-        return Json(result);
+        return Task.FromResult<IActionResult>(Json(TableOperationResult.Fail(
+            51715,
+            "Chế độ Combo chỉ được chọn ngay lúc mở bàn (mỗi phiên chỉ áp dụng 1 gói Combo).",
+            true)));
     }
 }

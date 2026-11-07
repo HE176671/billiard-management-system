@@ -8,7 +8,7 @@ public interface ITableSessionService
     Task<TableDetailViewModel?> GetTableDetailAsync(int tableId);
     Task<List<ActiveComboOptionViewModel>> GetActiveCombosAsync();
     Task<List<CustomerLookupItemViewModel>> SearchCustomersAsync(string? keyword);
-    Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string? customerId = null);
+    Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string? customerId = null, int? comboId = null);
     Task<TableOperationResult> CloseSessionAsync(int sessionId, string staffId);
     Task<CloseSummaryViewModel?> GetCloseSummaryAsync(int sessionId);
     Task<TableOperationResult> TransferSessionAsync(int sessionId, int newTableId, string staffId);

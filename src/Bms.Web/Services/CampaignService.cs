@@ -15,6 +15,8 @@ public record DailyJobRunSummary(
 public interface ICampaignService
 {
     Task<CampaignPreviewResult> PreviewRecipientsAsync(string? targetSegment, int? targetTierId, CancellationToken ct = default);
+    /// <summary>Xem trước người nhận, đồng thời loại bỏ khách chưa đạt Hạng tối thiểu của voucher (đồng bộ với Quà đổi điểm).</summary>
+    Task<CampaignPreviewResult> PreviewRecipientsAsync(string? targetSegment, int? targetTierId, int? rewardItemId, CancellationToken ct = default);
     Task<CampaignSendResult> SendCampaignAsync(int campaignId, string actorId, CancellationToken ct = default);
     Task<int> IssueBirthdayVouchersAsync(DateOnly? vnToday = null, CancellationToken ct = default);
     Task<int> SendExpiryWarningNotificationsAsync(DateTime? nowUtc = null, CancellationToken ct = default);
@@ -46,7 +48,10 @@ public class CampaignService : ICampaignService
         _tierEval = tierEval;
     }
 
-    public async Task<CampaignPreviewResult> PreviewRecipientsAsync(string? targetSegment, int? targetTierId, CancellationToken ct = default)
+    public Task<CampaignPreviewResult> PreviewRecipientsAsync(string? targetSegment, int? targetTierId, CancellationToken ct = default)
+        => PreviewRecipientsAsync(targetSegment, targetTierId, null, ct);
+
+    public async Task<CampaignPreviewResult> PreviewRecipientsAsync(string? targetSegment, int? targetTierId, int? rewardItemId, CancellationToken ct = default)
     {
         var eligibleIds = (await _db.Users.AsNoTracking()
             .Where(u => u.IsActive && u.MarketingOptIn)
@@ -67,14 +72,41 @@ public class CampaignService : ICampaignService
             filtered = filtered.Where(p => p.TierId == targetTierId.Value);
         }
 
+        if (rewardItemId.HasValue)
+        {
+            var item = await _db.RewardItems.AsNoTracking()
+                .Include(r => r.MinTier)
+                .FirstOrDefaultAsync(r => r.Id == rewardItemId.Value, ct);
+            filtered = await FilterByVoucherMinTierAsync(filtered, item, ct);
+        }
+
         var list = filtered.OrderByDescending(p => p.Monetary12M).ToList();
         return new CampaignPreviewResult(list.Count, list.Take(5).ToList());
+    }
+
+    /// <summary>
+    /// Đồng bộ điều kiện Hạng tối thiểu (MinTier) của voucher trong danh mục Quà đổi điểm:
+    /// chỉ giữ lại hội viên có hạng hiện tại >= hạng tối thiểu để voucher phát ra luôn dùng được khi thanh toán.
+    /// </summary>
+    private async Task<IEnumerable<CustomerRfmProfile>> FilterByVoucherMinTierAsync(
+        IEnumerable<CustomerRfmProfile> source, RewardItemEntity? item, CancellationToken ct)
+    {
+        if (item?.MinTier == null) return source;
+
+        var thresholds = await _db.MembershipTiers.AsNoTracking()
+            .ToDictionaryAsync(t => t.Id, t => t.SpendThreshold, ct);
+        var minThreshold = item.MinTier.SpendThreshold;
+
+        return source.Where(p => p.TierId.HasValue
+                                 && thresholds.TryGetValue(p.TierId.Value, out var th)
+                                 && th >= minThreshold);
     }
 
     public async Task<CampaignSendResult> SendCampaignAsync(int campaignId, string actorId, CancellationToken ct = default)
     {
         var campaign = await _db.Campaigns
             .Include(c => c.RewardItem)
+                .ThenInclude(r => r!.MinTier)
             .FirstOrDefaultAsync(c => c.Id == campaignId, ct);
 
         if (campaign == null)
@@ -82,6 +114,12 @@ public class CampaignService : ICampaignService
 
         if (campaign.Status == Campaign.StatusCancelled)
             return new CampaignSendResult(false, "Chiến dịch đã bị hủy.", 0, 0);
+
+        // Đồng bộ với danh mục Quà đổi điểm: voucher đã bị đóng/xóa thì không được phát hành qua chiến dịch
+        if (campaign.RewardItemId.HasValue && (campaign.RewardItem == null || !campaign.RewardItem.IsActive))
+            return new CampaignSendResult(false,
+                $"Voucher \"{campaign.RewardItem?.Name ?? "đã chọn"}\" đang ở trạng thái Đã đóng trong danh mục Quà đổi điểm. Vui lòng mở lại mã hoặc chọn voucher khác.",
+                0, 0);
 
         var eligibleIds = (await _db.Users.AsNoTracking()
             .Where(u => u.IsActive && u.MarketingOptIn)
@@ -102,7 +140,13 @@ public class CampaignService : ICampaignService
             recipients = recipients.Where(p => p.TierId == campaign.TargetTierId.Value);
         }
 
+        // Chỉ phát voucher cho hội viên đạt Hạng tối thiểu của voucher (giống điều kiện khi đổi điểm & khi thanh toán)
+        recipients = await FilterByVoucherMinTierAsync(recipients, campaign.RewardItem, ct);
+
         var targetList = recipients.ToList();
+        var voucherValidDays = campaign.RewardItem != null && campaign.RewardItem.ValidDays > 0
+            ? campaign.RewardItem.ValidDays
+            : 7;
 
         var ownTx = _db.Database.CurrentTransaction == null
             ? await _db.Database.BeginTransactionAsync(ct)
@@ -146,7 +190,7 @@ public class CampaignService : ICampaignService
                         DiscountValue = campaign.RewardItem.DiscountValue,
                         Status = CustomerVoucher.StatusActive,
                         IssuedAtUtc = now,
-                        ExpiresAtUtc = now.AddDays(7)
+                        ExpiresAtUtc = now.AddDays(voucherValidDays)
                     });
                 }
 
@@ -176,7 +220,7 @@ public class CampaignService : ICampaignService
                 string resolvedContent = ReplacePlaceholders(campaign.MessageContent, r.FullName, r.TierName, newPointsBalance);
                 if (issuedVoucherCode != null)
                 {
-                    resolvedContent += $" Mã voucher ưu đãi của bạn: {issuedVoucherCode}.";
+                    resolvedContent += $" Mã voucher \"{campaign.RewardItem!.Name}\" của bạn: {issuedVoucherCode} (hạn dùng {now.AddDays(voucherValidDays).ToVn():dd/MM/yyyy}).";
                 }
 
                 _db.Notifications.Add(new Notification

@@ -26,19 +26,9 @@ public class StaffController : Controller
         _users = users;
     }
 
-    // GET /Staff
-    public async Task<IActionResult> Index()
+    // GET /Staff (Đã gộp về trang Ca của tôi /Shift)
+    public IActionResult Index()
     {
-        ViewData["Title"] = "Trang nhân viên";
-        var active = await _shifts.GetActiveShiftAsync(_users.GetUserId(User)!);
-        var vm = new StaffHomeViewModel
-        {
-            FullName = (await _users.GetUserAsync(User))?.FullName ?? User.Identity?.Name ?? "",
-            ActiveShift = active == null ? null : await _shifts.GetSummaryAsync(active.Id),
-            TableCounts = await _db.BilliardTables.AsNoTracking()
-                .GroupBy(t => t.Status).Select(g => new { g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.Key, x => x.Count)
-        };
-        return View(vm);
+        return RedirectToAction("Index", "Shift");
     }
 }

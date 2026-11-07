@@ -95,7 +95,7 @@ BEGIN CATCH
     INSERT INTO @Results VALUES ('MinuteBilling', N'17 phút giá 120k/h = 34.000đ', 'FAIL', '34000.00', 'ERROR', ERROR_MESSAGE());
 END CATCH;
 
--- 1.3: 1 minute at 100.000/h => minimum 15 minutes = 25.000 VND right from the start
+-- 1.3: 1 minute at 100.000/h => actual 1 minute = 1.667 => rounded to 2.000 VND (no 15-min minimum)
 BEGIN TRY
     BEGIN TRANSACTION;
     INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Type_M3', 100000);
@@ -110,15 +110,15 @@ BEGIN TRY
     VALUES (@S_3, @T_3, 100000, '2026-10-08T09:00:00', '2026-10-08T09:01:00');
 
     DECLARE @Amt_3 decimal(18,2) = dbo.fn_CalcPlaytimeAmount(@S_3, '2026-10-08T09:01:00');
-    IF @Amt_3 = 25000
-        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tối thiểu 15p = 25.000đ', 'PASS', '25000.00', CAST(@Amt_3 AS varchar(30)), N'Tính tiền ngay từ phút đầu theo mức tối thiểu 15p');
+    IF @Amt_3 = 2000
+        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tính đúng 1 phút = 2.000đ', 'PASS', '2000.00', CAST(@Amt_3 AS varchar(30)), N'Chơi bao lâu tính bấy nhiêu, không ép tối thiểu 15p');
     ELSE
-        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tối thiểu 15p = 25.000đ', 'FAIL', '25000.00', CAST(@Amt_3 AS varchar(30)), N'Lệch giá trị');
+        INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tính đúng 1 phút = 2.000đ', 'FAIL', '2000.00', CAST(@Amt_3 AS varchar(30)), N'Lệch giá trị');
     ROLLBACK TRANSACTION;
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-    INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tối thiểu 15p = 25.000đ', 'FAIL', '25000.00', 'ERROR', ERROR_MESSAGE());
+    INSERT INTO @Results VALUES ('MinuteBilling', N'1 phút giá 100k/h => Tính đúng 1 phút = 2.000đ', 'FAIL', '2000.00', 'ERROR', ERROR_MESSAGE());
 END CATCH;
 
 -------------------------------------------------------------------------------
@@ -196,6 +196,52 @@ END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     INSERT INTO @Results VALUES ('ComboBilling', N'Vượt giờ Combo + Chuyển bàn FIFO (180k + 15p*120k/h = 210.000đ)', 'FAIL', '210000.00', 'ERROR', ERROR_MESSAGE());
+END CATCH;
+
+-------------------------------------------------------------------------------
+-- GROUP 3: Standardized Table Statuses (Available, InUse, Maintenance) & CloseSession
+-------------------------------------------------------------------------------
+-- 3.1: CK_Table_Status rejects 'AwaitingPayment' and 'Inactive'
+BEGIN TRY
+    BEGIN TRANSACTION;
+    INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Type_ST1', 100000);
+    DECLARE @TT_ST1 int = SCOPE_IDENTITY();
+    INSERT INTO dbo.BilliardTables (TableCode, TableTypeId, Status) VALUES (N'ZZ-ST1', @TT_ST1, 'AwaitingPayment');
+    ROLLBACK TRANSACTION;
+    INSERT INTO @Results VALUES ('TableStatus', N'CK_Table_Status chặn trạng thái AwaitingPayment', 'FAIL', 'REJECTED', 'ALLOWED', N'Ràng buộc không chặn AwaitingPayment');
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    INSERT INTO @Results VALUES ('TableStatus', N'CK_Table_Status chặn trạng thái AwaitingPayment', 'PASS', 'REJECTED', 'REJECTED', N'Chỉ cho phép Available, InUse, Maintenance');
+END CATCH;
+
+-- 3.2: usp_CloseSession closes session and immediately returns table Status to 'Available'
+BEGIN TRY
+    BEGIN TRANSACTION;
+    INSERT INTO dbo.TableTypes (Name, HourlyRate) VALUES (N'ZZ_Type_ST2', 120000);
+    DECLARE @TT_ST2 int = SCOPE_IDENTITY();
+    INSERT INTO dbo.BilliardTables (TableCode, TableTypeId, Status) VALUES (N'ZZ-ST2', @TT_ST2, 'Available');
+    DECLARE @T_ST2 int = SCOPE_IDENTITY();
+
+    EXEC dbo.usp_OpenSession @TableId = @T_ST2, @StaffId = @TestStaffId;
+
+    DECLARE @OpenedSessionId int = (SELECT TOP (1) Id FROM dbo.PlaySessions WHERE TableId = @T_ST2 AND Status = 'Active' ORDER BY Id DESC);
+    DECLARE @StatusWhilePlaying varchar(20) = (SELECT Status FROM dbo.BilliardTables WHERE Id = @T_ST2);
+
+    EXEC dbo.usp_CloseSession @SessionId = @OpenedSessionId, @StaffId = @TestStaffId;
+
+    DECLARE @StatusAfterClose varchar(20) = (SELECT Status FROM dbo.BilliardTables WHERE Id = @T_ST2);
+    DECLARE @SessionStatusAfterClose varchar(20) = (SELECT Status FROM dbo.PlaySessions WHERE Id = @OpenedSessionId);
+
+    IF @StatusWhilePlaying = 'InUse' AND @StatusAfterClose = 'Available' AND @SessionStatusAfterClose = 'Closed'
+        INSERT INTO @Results VALUES ('TableStatus', N'usp_CloseSession chuyển bàn về Available & đóng phiên Closed', 'PASS', 'InUse->Available / Closed', @StatusWhilePlaying + '->' + @StatusAfterClose + ' / ' + @SessionStatusAfterClose, N'Không qua trạng thái AwaitingPayment');
+    ELSE
+        INSERT INTO @Results VALUES ('TableStatus', N'usp_CloseSession chuyển bàn về Available & đóng phiên Closed', 'FAIL', 'InUse->Available / Closed', @StatusWhilePlaying + '->' + @StatusAfterClose + ' / ' + @SessionStatusAfterClose, N'Sai trạng thái sau khi đóng phiên');
+    ROLLBACK TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    INSERT INTO @Results VALUES ('TableStatus', N'usp_CloseSession chuyển bàn về Available & đóng phiên Closed', 'FAIL', 'InUse->Available / Closed', 'ERROR', ERROR_MESSAGE());
 END CATCH;
 
 SELECT * FROM @Results;

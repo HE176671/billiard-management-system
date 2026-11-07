@@ -94,6 +94,16 @@ public class TableSessionService : ITableSessionService
                 comboSummary = cInfo.SummaryText;
             }
 
+            DateTime? sessionStartUtc = x.SessionStartUtc.HasValue
+                ? DateTime.SpecifyKind(x.SessionStartUtc.Value, DateTimeKind.Utc)
+                : null;
+
+            bool isComboOverdue = x.Status == "InUse"
+                && hasCombo
+                && totalComboMinutes > 0
+                && sessionStartUtc.HasValue
+                && (serverTimeUtc - sessionStartUtc.Value).TotalSeconds >= totalComboMinutes * 60.0;
+
             return new TableCardViewModel
             {
                 Id = x.Id,
@@ -102,11 +112,9 @@ public class TableSessionService : ITableSessionService
                 HourlyRate = x.HourlyRate,
                 FloorNumber = x.FloorNumber,
                 Status = x.Status,
-                DisplayStatus = MapDisplayStatus(x.Status),
+                DisplayStatus = MapDisplayStatus(x.Status, isComboOverdue),
                 ActiveSessionId = x.ActiveSessionId,
-                SessionStartUtc = x.SessionStartUtc.HasValue
-                    ? DateTime.SpecifyKind(x.SessionStartUtc.Value, DateTimeKind.Utc)
-                    : null,
+                SessionStartUtc = sessionStartUtc,
                 HasCombo = hasCombo,
                 TotalComboMinutes = totalComboMinutes,
                 ComboSummaryText = comboSummary,
@@ -174,43 +182,6 @@ public class TableSessionService : ITableSessionService
                 .SqlQuery<decimal?>($"SELECT dbo.fn_CalcPlaytimeAmount({activeSessionId}, CAST(SYSUTCDATETIME() AS datetime2(0))) AS [Value]")
                 .FirstOrDefaultAsync();
         }
-        else if (raw.Status == "AwaitingPayment")
-        {
-            var latestClosed = await (from s in _context.PlaySessions.AsNoTracking()
-                                      where s.TableId == tableId && s.Status == "Closed"
-                                      orderby s.EndAtUtc descending, s.Id descending
-                                      join user in _context.Users.AsNoTracking()
-                                          on s.CustomerId equals user.Id into userGroup
-                                      from customerUser in userGroup.DefaultIfEmpty()
-                                      select new
-                                      {
-                                          s.Id,
-                                          s.StartAtUtc,
-                                          s.EndAtUtc,
-                                          s.HourlyRateSnapshot,
-                                          s.PlaytimeAmount,
-                                          s.CustomerId,
-                                          CustomerFullName = customerUser != null ? customerUser.FullName : null,
-                                          CustomerPhone = customerUser != null ? customerUser.PhoneNumber : null
-                                      }).FirstOrDefaultAsync();
-
-            if (latestClosed != null)
-            {
-                targetSessionIdForHistory = latestClosed.Id;
-                startAtUtc = DateTime.SpecifyKind(latestClosed.StartAtUtc, DateTimeKind.Utc);
-                endAtUtc = latestClosed.EndAtUtc.HasValue
-                    ? DateTime.SpecifyKind(latestClosed.EndAtUtc.Value, DateTimeKind.Utc)
-                    : null;
-                hourlyRateSnapshot = latestClosed.HourlyRateSnapshot;
-                playtimeAmount = latestClosed.PlaytimeAmount;
-                estimatedAmount = latestClosed.PlaytimeAmount;
-                customerId = latestClosed.CustomerId;
-                customerFullName = latestClosed.CustomerFullName;
-                customerPhone = latestClosed.CustomerPhone;
-            }
-
-            sessionId = null;
-        }
 
         if (targetSessionIdForHistory.HasValue)
         {
@@ -237,8 +208,13 @@ public class TableSessionService : ITableSessionService
         decimal comboAmount = combos.Sum(c => c.Subtotal);
         int totalComboMinutes = combos.Sum(c => c.TotalMinutes);
         bool hasCombo = combos.Count > 0;
-        decimal baseTotal = (raw.Status == "AwaitingPayment" ? playtimeAmount : estimatedAmount) ?? 0m;
+        decimal baseTotal = estimatedAmount ?? 0m;
         decimal overtimeAmount = hasCombo ? Math.Max(0m, baseTotal - comboAmount) : 0m;
+        bool isComboOverdue = raw.Status == "InUse"
+            && hasCombo
+            && totalComboMinutes > 0
+            && startAtUtc.HasValue
+            && (serverTimeUtc - startAtUtc.Value).TotalSeconds >= totalComboMinutes * 60.0;
 
         return new TableDetailViewModel
         {
@@ -247,7 +223,7 @@ public class TableSessionService : ITableSessionService
             TableTypeName = raw.TableTypeName,
             HourlyRate = raw.HourlyRate,
             Status = raw.Status,
-            DisplayStatus = MapDisplayStatus(raw.Status),
+            DisplayStatus = MapDisplayStatus(raw.Status, isComboOverdue),
             SessionId = sessionId,
             StartAtUtc = startAtUtc,
             EndAtUtc = endAtUtc,
@@ -400,32 +376,35 @@ public class TableSessionService : ITableSessionService
             .ToListAsync();
     }
 
-    public static string MapDisplayStatus(string status) => status switch
+    public static string MapDisplayStatus(string status, bool isComboOverdue = false)
     {
-        "Available" => "Trống",
-        "InUse" => "Đang chơi",
-        "AwaitingPayment" => "Chờ thanh toán",
-        "Maintenance" => "Bảo trì",
-        "Inactive" => "Ngừng hoạt động",
-        _ => status
-    };
+        if (status == "InUse" && isComboOverdue)
+        {
+            return "Đã hết giờ Combo (Tính vượt giờ)";
+        }
+
+        return status switch
+        {
+            "Available" => "Còn trống",
+            "InUse" => "Đang sử dụng",
+            "Maintenance" => "Bảo trì",
+            _ => status
+        };
+    }
 
     /// <summary>
-    /// Tính số phút tính tiền theo quy tắc thực tế tại quán Bi-a:
-    /// - Không có Combo: tối thiểu 15 phút đầu, trên 15 phút tính theo phút thực tế.
-    /// - Có Combo: tính theo số phút thực tế đã chơi.
+    /// Tính số phút tính tiền theo đúng số phút thực tế đã chơi (chơi bao lâu tính bấy nhiêu, không áp mức tối thiểu 15 phút).
     /// </summary>
     public static int CalculateBilledMinutes(double elapsedSeconds, bool hasCombo = false)
     {
-        int actualMinutes = Math.Max(1, (int)Math.Ceiling(elapsedSeconds / 60.0));
-        return hasCombo ? actualMinutes : Math.Max(15, actualMinutes);
+        return Math.Max(1, (int)Math.Ceiling(elapsedSeconds / 60.0));
     }
 
     // =========================================================================
     // PHẦN 3: THAO TÁC GHI DỮ LIỆU QUA STORED PROCEDURES (MỞ, ĐÓNG, CHUYỂN BÀN, CHỌN COMBO)
     // =========================================================================
 
-    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string? customerId = null)
+    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string? customerId = null, int? comboId = null)
     {
         if (tableId <= 0)
         {
@@ -435,6 +414,16 @@ public class TableSessionService : ITableSessionService
         if (string.IsNullOrWhiteSpace(staffId))
         {
             return TableOperationResult.Fail(null, "Thông tin nhân viên thực hiện không hợp lệ.", autoReload: false);
+        }
+
+        if (comboId.HasValue && comboId.Value > 0)
+        {
+            bool isValidCombo = await _context.Combos.AsNoTracking()
+                .AnyAsync(c => c.Id == comboId.Value && c.IsActive);
+            if (!isValidCombo)
+            {
+                return TableOperationResult.Fail(51714, "Gói Combo đã chọn không tồn tại hoặc đã ngừng bán.", autoReload: false);
+            }
         }
 
         var normalizedCustomerId = string.IsNullOrWhiteSpace(customerId) ? null : customerId.Trim();
@@ -449,32 +438,58 @@ public class TableSessionService : ITableSessionService
                 await conn.OpenAsync();
             }
 
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "dbo.usp_OpenSession";
-            cmd.CommandType = CommandType.StoredProcedure;
+            int sessionId = 0;
+            DateTime startAtUtc = DateTime.UtcNow;
 
-            cmd.Parameters.Add(new SqlParameter("@TableId", SqlDbType.Int) { Value = tableId });
-            cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
-            cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = DBNull.Value });
-            cmd.Parameters.Add(new SqlParameter("@CustomerId", SqlDbType.NVarChar, 450) { Value = (object?)normalizedCustomerId ?? DBNull.Value });
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
+            using (var cmd = conn.CreateCommand())
             {
-                int sessionIdOrdinal = reader.GetOrdinal("SessionId");
-                int startOrdinal = reader.GetOrdinal("StartAtUtc");
+                cmd.CommandText = "dbo.usp_OpenSession";
+                cmd.CommandType = CommandType.StoredProcedure;
 
-                int sessionId = reader.GetInt32(sessionIdOrdinal);
-                DateTime startAtUtc = DateTime.SpecifyKind(reader.GetDateTime(startOrdinal), DateTimeKind.Utc);
+                cmd.Parameters.Add(new SqlParameter("@TableId", SqlDbType.Int) { Value = tableId });
+                cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
+                cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = DBNull.Value });
+                cmd.Parameters.Add(new SqlParameter("@CustomerId", SqlDbType.NVarChar, 450) { Value = (object?)normalizedCustomerId ?? DBNull.Value });
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    int sessionIdOrdinal = reader.GetOrdinal("SessionId");
+                    int startOrdinal = reader.GetOrdinal("StartAtUtc");
+
+                    sessionId = reader.GetInt32(sessionIdOrdinal);
+                    startAtUtc = DateTime.SpecifyKind(reader.GetDateTime(startOrdinal), DateTimeKind.Utc);
+                }
+            }
+
+            if (sessionId <= 0)
+            {
+                return TableOperationResult.Fail(null, "Không nhận được phản hồi từ hệ thống cơ sở dữ liệu khi mở phiên.", autoReload: true);
+            }
+
+            if (comboId.HasValue && comboId.Value > 0)
+            {
+                var comboRes = await AddSessionComboAsync(sessionId, comboId.Value, 1, staffId);
+                if (!comboRes.Success)
+                {
+                    return comboRes;
+                }
 
                 return TableOperationResult.Ok(new
                 {
                     SessionId = sessionId,
-                    StartAtUtc = startAtUtc
-                });
+                    StartAtUtc = startAtUtc,
+                    HasCombo = true,
+                    ComboData = comboRes.Data
+                }, comboRes.Message);
             }
 
-            return TableOperationResult.Fail(null, "Không nhận được phản hồi từ hệ thống cơ sở dữ liệu khi mở phiên.", autoReload: true);
+            return TableOperationResult.Ok(new
+            {
+                SessionId = sessionId,
+                StartAtUtc = startAtUtc,
+                HasCombo = false
+            });
         }
         catch (SqlException ex)
         {
@@ -762,14 +777,21 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
             return TableOperationResult.Fail(null, "Vui lòng chọn gói Combo hợp lệ.", autoReload: false);
         }
 
-        if (quantity <= 0)
+        if (quantity != 1)
         {
-            return TableOperationResult.Fail(51712, "Số lượng gói Combo phải lớn hơn 0.", autoReload: false);
+            return TableOperationResult.Fail(51712, "Mỗi phiên chơi chỉ áp dụng 1 gói Combo.", autoReload: false);
         }
 
         if (string.IsNullOrWhiteSpace(staffId))
         {
             return TableOperationResult.Fail(null, "Thông tin nhân viên thực hiện không hợp lệ.", autoReload: false);
+        }
+
+        bool alreadyHasCombo = await _context.SessionCombos.AsNoTracking()
+            .AnyAsync(sc => sc.SessionId == sessionId);
+        if (alreadyHasCombo)
+        {
+            return TableOperationResult.Fail(51715, "Phiên chơi chỉ được áp dụng 1 gói Combo duy nhất.", autoReload: true);
         }
 
         var conn = (SqlConnection)_context.Database.GetDbConnection();
@@ -788,7 +810,7 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
 
             cmd.Parameters.Add(new SqlParameter("@SessionId", SqlDbType.Int) { Value = sessionId });
             cmd.Parameters.Add(new SqlParameter("@ComboId", SqlDbType.Int) { Value = comboId });
-            cmd.Parameters.Add(new SqlParameter("@Quantity", SqlDbType.Int) { Value = quantity });
+            cmd.Parameters.Add(new SqlParameter("@Quantity", SqlDbType.Int) { Value = 1 });
             cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
 
             using var reader = await cmd.ExecuteReaderAsync();
@@ -817,7 +839,7 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
                     PlaytimeHours = playtimeHours,
                     PurchasedAtUtc = purchasedAtUtc,
                     EstimatedAmount = estimatedAmount
-                }, $"Đã thêm {resQuantity}x {comboName} vào phiên chơi.");
+                }, $"Đã mở bàn áp dụng gói {comboName}.");
             }
 
             return TableOperationResult.Fail(null, "Không nhận được phản hồi từ hệ thống cơ sở dữ liệu khi chọn Combo.", autoReload: true);
@@ -873,13 +895,13 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
 
     private static bool IsKnownDomainError(int errorNumber) => errorNumber switch
     {
-        51401 or 51402 or 51403 or 51408 or 51501 or 51502 or 51611 or 51612 or 51613 or 51614 or 51616 or 51699 or 51711 or 51712 or 51713 or 51714 => true,
+        51401 or 51402 or 51403 or 51408 or 51501 or 51502 or 51611 or 51612 or 51613 or 51614 or 51616 or 51699 or 51711 or 51712 or 51713 or 51714 or 51715 => true,
         _ => false
     };
 
     private static bool IsAutoReloadError(int errorNumber) => errorNumber switch
     {
-        51402 or 51403 or 51502 or 51612 or 51613 or 51699 or 51713 or 51714 => true,
+        51402 or 51403 or 51502 or 51612 or 51613 or 51699 or 51713 or 51714 or 51715 => true,
         _ => false
     };
 
@@ -898,9 +920,10 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         51616 => "Phiên này không thể chuyển bàn.",
         51699 => "Dữ liệu phiên chơi không nhất quán (không có đoạn bàn đang mở). Vui lòng báo quản trị viên.",
         51711 => "Thao tác chọn Combo yêu cầu tài khoản Nhân viên hoặc Quản trị viên đang hoạt động.",
-        51712 => "Số lượng gói Combo phải lớn hơn 0.",
+        51712 => "Mỗi phiên chơi chỉ áp dụng 1 gói Combo.",
         51713 => "Chỉ được chọn Combo cho phiên đang hoạt động (phiên có thể đã kết thúc).",
         51714 => "Gói Combo đã chọn không tồn tại hoặc đã ngừng bán.",
+        51715 => "Phiên chơi chỉ được áp dụng 1 gói Combo duy nhất.",
         _ => "Đã xảy ra lỗi khi kết nối hoặc xử lý cơ sở dữ liệu. Vui lòng thử lại sau."
     };
 }

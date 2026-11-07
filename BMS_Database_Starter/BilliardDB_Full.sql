@@ -144,7 +144,7 @@ BEGIN TRY
         CONSTRAINT FK_Table_Type FOREIGN KEY (TableTypeId) REFERENCES dbo.TableTypes(Id),
         CONSTRAINT CK_Table_Code CHECK (LEN(LTRIM(RTRIM(TableCode))) > 0),
         CONSTRAINT CK_Table_Floor CHECK (FloorNumber >= 0),
-        CONSTRAINT CK_Table_Status CHECK (Status IN ('Available','InUse','AwaitingPayment','Maintenance','Inactive'))
+        CONSTRAINT CK_Table_Status CHECK (Status IN ('Available','InUse','Maintenance'))
     );
     CREATE INDEX IX_BilliardTables_Type_Status ON dbo.BilliardTables(TableTypeId, Status);
 
@@ -429,7 +429,7 @@ BEGIN
         BEGIN TRANSACTION;
         DECLARE @TableStatus varchar(20);
         SELECT @TableStatus = Status FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TableId;
-        IF @TableStatus IS NULL OR @TableStatus IN ('Maintenance','Inactive')
+        IF @TableStatus IS NULL OR @TableStatus = 'Maintenance'
             THROW 51103, N'Table is not bookable.', 1;
         IF EXISTS (SELECT 1 FROM dbo.Bookings
             WHERE TableId = @TableId AND Status IN ('Confirmed','CheckedIn')
@@ -591,7 +591,7 @@ BEGIN
         UPDATE dbo.PlaySessions SET EndAtUtc = @Now, ClosedById = @StaffId, Status = 'Closed',
             PlaytimeAmount = ROUND(CONVERT(decimal(18,2),DATEDIFF_BIG(second,@Start,@Now)) * @Rate / 3600.0, 0)
             WHERE Id = @SessionId;
-        UPDATE dbo.BilliardTables SET Status = 'AwaitingPayment' WHERE Id = @TableId;
+        UPDATE dbo.BilliardTables SET Status = 'Available' WHERE Id = @TableId;
         IF @BookingId IS NOT NULL UPDATE dbo.Bookings SET Status = 'Completed' WHERE Id = @BookingId;
         COMMIT;
         SELECT Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status
@@ -652,7 +652,7 @@ BEGIN TRY
     DECLARE @Carom int = (SELECT Id FROM dbo.TableTypes WHERE Name=N'Carom');
     INSERT dbo.BilliardTables(TableCode,TableTypeId,FloorNumber,Status) VALUES
         (N'B01',@Pool,1,'InUse'),(N'B02',@Pool,1,'Available'),
-        (N'B03',@Pool,1,'Available'),(N'B04',@Carom,2,'AwaitingPayment'),
+        (N'B03',@Pool,1,'Available'),(N'B04',@Carom,2,'Available'),
         (N'B05',@Carom,2,'Maintenance'),(N'B06',@Carom,2,'Available');
     DECLARE @B01 int=(SELECT Id FROM dbo.BilliardTables WHERE TableCode=N'B01');
     DECLARE @B02 int=(SELECT Id FROM dbo.BilliardTables WHERE TableCode=N'B02');

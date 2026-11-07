@@ -19,27 +19,17 @@
     --text-main: #0f172a;
     --text-muted: #64748b;
     
-    /* 5 trạng thái bàn theo SCOPE.md mục 6 */
-    --status-available: #10b981;        /* Trống - Xanh lá */
-    --status-inuse: #e94560;            /* Đang chơi - Đỏ */
-    --status-awaitingpayment: #f59e0b;  /* Chờ thanh toán - Vàng */
+    /* 4 trạng thái bàn chuẩn: Còn trống, Đang sử dụng, Đã hết giờ Combo (Tính vượt giờ), Bảo trì */
+    --status-available: #10b981;        /* Còn trống - Xanh lá */
+    --status-inuse: #2563eb;            /* Đang sử dụng - Xanh dương */
+    --status-overdue: #dc2626;          /* Đã hết giờ Combo (Tính vượt giờ) - Đỏ đậm */
     --status-maintenance: #94a3b8;      /* Bảo trì - Xám */
-    --status-inactive: #475569;         /* Ngừng hoạt động - Xám đậm */
-    
-    /* Các trạng thái thời gian và pha tính tiền */
-    --status-pending-billing: #0284c7;  /* Chờ tính giờ - Xanh lam */
-    --status-warning: #d97706;          /* Sắp hết giờ - Cam đậm */
-    --status-overdue: #dc2626;          /* Hết giờ - Đỏ đậm */
 
     /* Màu chữ trạng thái đảm bảo độ tương phản WCAG AA >= 4.5:1 */
-    --status-available-text: #047857;        /* Tương phản 5.48:1 trên nền trắng */
-    --status-inuse-text: #be123c;            /* Tương phản 6.08:1 trên nền #fffafb */
-    --status-awaitingpayment-text: #92400e;  /* Tương phản 6.96:1 trên nền #fffdf5 */
-    --status-maintenance-text: #475569;      /* Tương phản 7.24:1 trên nền #f8fafc */
-    --status-inactive-text: #334155;         /* Tương phản 9.45:1 trên nền #f1f5f9 */
-    --status-pending-billing-text: #0369a1;  /* Tương phản 5.57:1 trên nền #f0f9ff */
-    --status-warning-text: #b45309;          /* Tương phản 4.84:1 trên nền #fffbeb */
-    --status-overdue-text: #b91c1c;          /* Tương phản 5.91:1 trên nền #fef2f2 */
+    --status-available-text: #047857;   /* Tương phản 5.48:1 trên nền trắng */
+    --status-inuse-text: #1d4ed8;       /* Tương phản 6.32:1 trên nền #eff6ff */
+    --status-overdue-text: #b91c1c;     /* Tương phản 5.91:1 trên nền #fef2f2 */
+    --status-maintenance-text: #475569; /* Tương phản 7.24:1 trên nền #f8fafc */
 }
 
 * {
@@ -305,6 +295,73 @@ body.staff-layout-body {
 }
 
 /* ==========================================================================
+   Bộ lọc nhanh trạng thái bàn (Tất cả / Sử dụng / Còn trống)
+   ========================================================================== */
+.table-quick-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.65rem 1rem;
+    margin-bottom: 0.75rem;
+    background-color: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.quick-filter-radio {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-main);
+    position: relative;
+}
+
+.quick-filter-radio input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+}
+
+.quick-filter-radio .radio-ring {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #94a3b8;
+    background-color: #ffffff;
+    display: inline-block;
+    flex-shrink: 0;
+    transition: border-color 0.15s ease, border-width 0.15s ease, box-shadow 0.15s ease;
+}
+
+.quick-filter-radio:hover .radio-ring {
+    border-color: #2563eb;
+}
+
+.quick-filter-radio input[type="radio"]:checked + .radio-ring {
+    border: 6px solid #0066cc;
+    background-color: #ffffff;
+}
+
+.quick-filter-radio input[type="radio"]:focus-visible + .radio-ring {
+    outline: 2px solid #0066cc;
+    outline-offset: 2px;
+}
+
+.quick-filter-radio.active .radio-text,
+.quick-filter-radio input[type="radio"]:checked ~ .radio-text {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+/* ==========================================================================
    Dải Chú giải trạng thái (Status Legend)
    ========================================================================== */
 .status-legend-bar {
@@ -337,13 +394,9 @@ body.staff-layout-body {
 }
 
 .status-dot-available { background-color: var(--status-available); }
-.status-dot-pending { background-color: var(--status-pending-billing); }
 .status-dot-inuse { background-color: var(--status-inuse); }
-.status-dot-warning { background-color: var(--status-warning); }
 .status-dot-overdue { background-color: var(--status-overdue); }
-.status-dot-awaitingpayment { background-color: var(--status-awaitingpayment); }
 .status-dot-maintenance { background-color: var(--status-maintenance); }
-.status-dot-inactive { background-color: var(--status-inactive); }
 
 /* ==========================================================================
    Lưới thẻ bàn (Table Grid & Cards)
@@ -473,7 +526,7 @@ body.staff-layout-body {
     visibility: hidden;
 }
 
-/* Định kiểu 5 màu trạng thái bàn với màu chữ tương phản chuẩn WCAG AA >= 4.5:1 */
+/* Định kiểu 4 trạng thái bàn chuẩn với màu chữ tương phản WCAG AA >= 4.5:1 */
 .table-card.status-available {
     border-left: 6px solid var(--status-available);
 }
@@ -483,21 +536,13 @@ body.staff-layout-body {
 
 .table-card.status-inuse {
     border-left: 6px solid var(--status-inuse);
-    background-color: #fffafb;
+    background-color: #eff6ff;
 }
 .table-card.status-inuse .status-text {
     color: var(--status-inuse-text);
 }
 .table-card.status-inuse .table-clock {
     color: var(--status-inuse-text);
-}
-
-.table-card.status-awaitingpayment {
-    border-left: 6px solid var(--status-awaitingpayment);
-    background-color: #fffdf5;
-}
-.table-card.status-awaitingpayment .status-text {
-    color: var(--status-awaitingpayment-text);
 }
 
 .table-card.status-maintenance {
@@ -507,29 +552,6 @@ body.staff-layout-body {
 }
 .table-card.status-maintenance .status-text {
     color: var(--status-maintenance-text);
-}
-
-.table-card.status-inactive {
-    border-left: 6px solid var(--status-inactive);
-    background-color: #f1f5f9;
-    opacity: 0.7;
-}
-.table-card.status-inactive .status-text {
-    color: var(--status-inactive-text);
-}
-
-/* Pha Chờ tính giờ (Pending Billing Phase) - Dùng biến CSS */
-.table-card[data-billing-phase="pending"] {
-    border-left: 6px solid var(--status-pending-billing);
-    background-color: #f0f9ff;
-}
-.table-card[data-billing-phase="pending"] .status-text {
-    color: var(--status-pending-billing-text);
-    font-weight: 600;
-}
-.table-card[data-billing-phase="pending"] .table-clock {
-    color: var(--status-pending-billing-text);
-    font-size: 0.9rem;
 }
 
 .no-tables-message {
@@ -665,7 +687,7 @@ body.staff-layout-body {
 }
 
 .btn-danger-bms {
-    background-color: var(--status-inuse);
+    background-color: var(--primary);
     border-color: var(--primary-dark);
     color: #ffffff;
 }
@@ -872,7 +894,7 @@ html, body {
 }
 
 /* ==========================================================================
-   Thời gian cảnh báo & quá hạn trên thẻ bàn (data-time-state)
+   Trạng thái Đã hết giờ Combo (Tính vượt giờ) trên thẻ bàn (data-time-state)
    ========================================================================== */
 .table-remaining {
     font-family: 'Consolas', 'Monaco', monospace;
@@ -882,34 +904,23 @@ html, body {
     display: inline-block;
 }
 
-/* Khi bình thường: giữ nguyên màu chữ & viền trạng thái bàn */
+/* Khi trong giờ Combo bình thường: giữ nguyên màu chữ & viền trạng thái Đang sử dụng */
 .table-card[data-time-state="normal"] .table-remaining {
     color: #0f172a;
 }
 
-/* Cảnh báo (warning): <= 10 phút (Sử dụng biến CSS đồng bộ) */
-.table-card[data-time-state="warning"] {
-    border-color: var(--status-warning);
-    background-color: #fffbeb;
-}
-.table-card[data-time-state="warning"] .table-remaining {
-    color: var(--status-warning-text);
-    font-weight: 700;
-}
-.table-card[data-time-state="warning"] .remaining-label {
-    color: var(--status-warning-text);
-    font-weight: 600;
-}
-
-/* Quá hạn (overdue): <= 0 (Sử dụng biến CSS đồng bộ) */
+/* Đã hết giờ Combo (Tính vượt giờ): <= 0 */
 .table-card[data-time-state="overdue"] {
     border-color: var(--status-overdue);
+    border-left: 6px solid var(--status-overdue);
     background-color: #fef2f2;
     animation: pulse-overdue 2s infinite ease-in-out;
 }
+.table-card[data-time-state="overdue"] .status-text,
+.table-card[data-time-state="overdue"] .table-clock,
 .table-card[data-time-state="overdue"] .table-remaining {
     color: var(--status-overdue-text);
-    font-weight: 800;
+    font-weight: 700;
 }
 .table-card[data-time-state="overdue"] .remaining-label {
     color: var(--status-overdue-text);

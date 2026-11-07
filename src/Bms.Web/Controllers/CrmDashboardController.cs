@@ -26,8 +26,9 @@ public class CrmDashboardController : Controller
 
     // GET /CrmDashboard
     [HttpGet]
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(int topPage = 1, int riskPage = 1)
     {
+        const int pageSize = 10;
         var now = DateTime.UtcNow;
         var todayVn = VnTime.Today;
         var monthStartUtc = VnTime.StartOfDayUtc(new DateOnly(todayVn.Year, todayVn.Month, 1));
@@ -80,41 +81,26 @@ public class CrmDashboardController : Controller
             ColorHex = tierColors.GetValueOrDefault(t.TierName, "#64748b")
         }).ToList();
 
-        // Line chart Điểm Earn vs Redeem 6 tháng gần nhất
-        var monthlyFlow = new List<MonthlyPointsFlowPoint>();
-        for (int i = -5; i <= 0; i++)
-        {
-            var mDate = new DateOnly(todayVn.Year, todayVn.Month, 1).AddMonths(i);
-            var mStart = VnTime.StartOfDayUtc(mDate);
-            var mEnd = VnTime.StartOfDayUtc(mDate.AddMonths(1));
-
-            var txns = await _db.PointTransactions.AsNoTracking()
-                .Where(t => t.CreatedAt >= mStart && t.CreatedAt < mEnd)
-                .GroupBy(t => t.TransactionType)
-                .Select(g => new { Type = g.Key, Sum = g.Sum(x => x.Amount) })
-                .ToListAsync();
-
-            int earned = txns.Where(x => x.Type == PointTransaction.Earn || x.Type == PointTransaction.Bonus || (x.Type == PointTransaction.Adjust && x.Sum > 0)).Sum(x => Math.Max(0, x.Sum));
-            int redeemed = txns.Where(x => x.Type == PointTransaction.Redeem).Sum(x => Math.Abs(x.Sum));
-
-            monthlyFlow.Add(new MonthlyPointsFlowPoint
-            {
-                MonthLabel = $"{mDate.Month:D2}/{mDate.Year}",
-                EarnedPoints = earned,
-                RedeemedPoints = redeemed
-            });
-        }
-
-        var topSpenders = profiles
+        var allSpenders = profiles
             .Where(p => p.Monetary12M > 0)
             .OrderByDescending(p => p.Monetary12M)
-            .Take(10)
+            .ToList();
+        int topTotalPages = Math.Max(1, (int)Math.Ceiling(allSpenders.Count / (double)pageSize));
+        topPage = Math.Clamp(topPage, 1, topTotalPages);
+        var topSpenders = allSpenders
+            .Skip((topPage - 1) * pageSize)
+            .Take(pageSize)
             .ToList();
 
-        var atRiskTop = profiles
+        var allAtRisk = profiles
             .Where(p => p.Segment == CustomerSegmentService.SegAtRisk)
             .OrderByDescending(p => p.Monetary12M)
-            .Take(10)
+            .ToList();
+        int riskTotalPages = Math.Max(1, (int)Math.Ceiling(allAtRisk.Count / (double)pageSize));
+        riskPage = Math.Clamp(riskPage, 1, riskTotalPages);
+        var atRiskTop = allAtRisk
+            .Skip((riskPage - 1) * pageSize)
+            .Take(pageSize)
             .ToList();
 
         var vm = new CrmDashboardViewModel
@@ -127,9 +113,15 @@ public class CrmDashboardController : Controller
             TotalCirculatingPoints = totalCirculatingPoints,
             SegmentCounts = segCounts,
             TierCounts = tierPoints,
-            MonthlyPointsFlow = monthlyFlow,
             TopSpenders12M = topSpenders,
-            HighValueAtRisk = atRiskTop
+            TopSpendersPage = topPage,
+            TopSpendersTotalPages = topTotalPages,
+            TopSpendersTotalCount = allSpenders.Count,
+            HighValueAtRisk = atRiskTop,
+            AtRiskPage = riskPage,
+            AtRiskTotalPages = riskTotalPages,
+            AtRiskTotalCount = allAtRisk.Count,
+            PageSize = pageSize
         };
 
         return View(vm);

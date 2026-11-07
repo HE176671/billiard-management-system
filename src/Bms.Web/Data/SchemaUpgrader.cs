@@ -174,9 +174,9 @@ public static class SchemaUpgrader
                 Code varchar(30) NOT NULL CONSTRAINT UQ_RewardItems_Code UNIQUE,
                 Name nvarchar(100) NOT NULL,
                 Description nvarchar(300) NULL,
-                PointCost int NOT NULL CONSTRAINT CK_RewardItems_Cost CHECK (PointCost > 0),
+                PointCost int NOT NULL CONSTRAINT CK_RewardItems_Cost CHECK (PointCost >= 0),
                 RewardType varchar(20) NOT NULL CONSTRAINT CK_RewardItems_Type CHECK (RewardType IN ('Gift', 'FreeHour', 'BillDiscount')),
-                DiscountValue decimal(18,2) NULL,
+                DiscountValue decimal(18,2) NULL CONSTRAINT CK_RewardItems_Discount CHECK (DiscountValue IS NULL OR DiscountValue >= 0),
                 ValidDays int NOT NULL CONSTRAINT DF_RewardItems_ValidDays DEFAULT 7,
                 MinTierId int NULL,
                 IsActive bit NOT NULL CONSTRAINT DF_RewardItems_IsActive DEFAULT 1,
@@ -375,7 +375,16 @@ public static class SchemaUpgrader
                     ALTER TABLE dbo.Reviews ADD AdminReply nvarchar(max) NULL;
 
                 IF OBJECT_ID('dbo.RewardItems', 'U') IS NOT NULL
+                BEGIN
                     UPDATE dbo.RewardItems SET ValidDays = 7 WHERE ValidDays <> 7;
+                    UPDATE dbo.RewardItems SET PointCost = 0 WHERE PointCost < 0;
+                    UPDATE dbo.RewardItems SET DiscountValue = 0 WHERE DiscountValue < 0;
+                    IF OBJECT_ID('dbo.CK_RewardItems_Cost', 'C') IS NOT NULL
+                        ALTER TABLE dbo.RewardItems DROP CONSTRAINT CK_RewardItems_Cost;
+                    ALTER TABLE dbo.RewardItems ADD CONSTRAINT CK_RewardItems_Cost CHECK (PointCost >= 0);
+                    IF OBJECT_ID('dbo.CK_RewardItems_Discount', 'C') IS NULL
+                        ALTER TABLE dbo.RewardItems ADD CONSTRAINT CK_RewardItems_Discount CHECK (DiscountValue IS NULL OR DiscountValue >= 0);
+                END;
 
                 IF OBJECT_ID('dbo.ComboItems', 'U') IS NULL
                 BEGIN
@@ -485,6 +494,39 @@ public static class SchemaUpgrader
                    AND NOT EXISTS (SELECT 1 FROM dbo.AspNetUserRoles WHERE UserId = @mgrUserId AND RoleId = @mgrRoleId)
                 BEGIN
                     INSERT INTO dbo.AspNetUserRoles(UserId, RoleId) VALUES (@mgrUserId, @mgrRoleId);
+                END;
+
+                -- Đồng bộ toàn bộ dữ liệu nghiệp vụ điều chỉnh điểm / chiến dịch từ Admin mẫu sang Manager mẫu
+                IF @mgrUserId IS NOT NULL AND OBJECT_ID('dbo.PointAdjustmentRequests', 'U') IS NOT NULL
+                BEGIN
+                    UPDATE dbo.PointAdjustmentRequests
+                    SET RequestedById = @mgrUserId
+                    WHERE RequestedById = N'demo-admin'
+                       OR RequestedById IN (
+                           SELECT ur.UserId FROM dbo.AspNetUserRoles ur
+                           JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+                           WHERE r.NormalizedName = N'ADMIN'
+                       );
+
+                    UPDATE dbo.PointAdjustmentRequests
+                    SET ReviewedById = @mgrUserId
+                    WHERE ReviewedById = N'demo-admin'
+                       OR ReviewedById IN (
+                           SELECT ur.UserId FROM dbo.AspNetUserRoles ur
+                           JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+                           WHERE r.NormalizedName = N'ADMIN'
+                       );
+
+                    UPDATE dbo.PointAdjustmentRequests
+                    SET ReviewNote = REPLACE(ReviewNote, N'Admin', N'Manager')
+                    WHERE ReviewNote LIKE N'%Admin%';
+                END;
+
+                IF @mgrUserId IS NOT NULL AND OBJECT_ID('dbo.Campaigns', 'U') IS NOT NULL
+                BEGIN
+                    UPDATE dbo.Campaigns
+                    SET CreatedById = @mgrUserId
+                    WHERE CreatedById = N'demo-admin';
                 END;
 
                 -- Danh mục Gậy cho thuê & dữ liệu mẫu

@@ -2,12 +2,10 @@ namespace Bms.Web.Models;
 
 public class DashboardViewModel
 {
-    // --- TV2 (Dung) Loyalty & Reviews & Charts ---
+    // --- TV2 (Dung) Loyalty & Charts ---
     public decimal MonthlyRevenue { get; set; }
     public decimal TotalPlaytimeHours { get; set; }
     public int TotalCustomerMembers { get; set; }
-    public double AverageRating { get; set; }
-    public int TotalReviews { get; set; }
 
     // Mock indicators
     public bool IsRevenueMocked { get; set; }

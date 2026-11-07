@@ -1,7 +1,7 @@
 @model Bms.Web.Models.PointAdjustmentIndexViewModel
 @using Bms.Web.Services
 @{
-    ViewData["Title"] = "Lập phiếu điều chỉnh điểm (Staff)";
+    ViewData["Title"] = Model.IsManagerRequester ? "Lập phiếu điều chỉnh điểm (Manager)" : "Lập phiếu điều chỉnh điểm (Staff)";
     Layout = "_AdminLayout";
 }
 
@@ -21,16 +21,35 @@
 }
 
 <div class="row g-3">
-    <!-- Trái: Nhân viên (Staff) lập phiếu đề xuất điều chỉnh điểm -->
+    <!-- Trái: Lập phiếu đề xuất điều chỉnh điểm (Staff / Manager) -->
     <div class="col-lg-5">
         <div class="data-card p-4">
             <h2 class="h6 fw-bold mb-2"><i class="bi bi-sliders me-2 text-danger"></i>Lập phiếu đề xuất điều chỉnh điểm</h2>
             <p class="text-muted mb-3" style="font-size:0.8rem">
-                Nhân viên tại quầy lập phiếu cộng/trừ điểm cho hội viên. Sau khi gửi, phiếu sẽ chuyển sang trạng thái <strong>Chờ Manager phê duyệt</strong> trước khi ghi nhận vào sổ cái điểm.
+                @if (Model.IsManagerRequester)
+                {
+                    <span>Phiếu do <strong>Manager</strong> lập sẽ tự động gắn tên Manager yêu cầu và được phê duyệt ghi nhận trực tiếp vào sổ cái điểm hội viên.</span>
+                }
+                else
+                {
+                    <span>Nhân viên tại quầy lập phiếu cộng/trừ điểm cho hội viên. Sau khi gửi, phiếu sẽ gắn tên nhân viên yêu cầu và chuyển sang trạng thái <strong>Chờ Manager phê duyệt</strong>.</span>
+                }
             </p>
 
             <form asp-action="Create" method="post">
                 @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label">Người gửi đơn yêu cầu</label>
+                    <div class="d-flex align-items-center justify-content-between p-2 px-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0">
+                        <div class="fw-semibold" style="color:@(Model.IsManagerRequester ? "#1e40af" : "#15803d");font-size:0.88rem">
+                            <i class="bi bi-person-badge me-1"></i>@Model.CurrentRequesterName
+                        </div>
+                        <span style="background:@(Model.IsManagerRequester ? "#2563eb" : "#16a34a");color:#ffffff;font-size:0.72rem;font-weight:600;padding:3px 9px;border-radius:6px">
+                            @Model.CurrentRequesterRoleLabel
+                        </span>
+                    </div>
+                </div>
+
                 <div class="mb-3">
                     <label class="form-label">Tìm kiếm &amp; Chọn hội viên <span class="text-danger">*</span></label>
                     <div class="input-group mb-2">
@@ -53,7 +72,7 @@
 
                 <div class="mb-3">
                     <label class="form-label">Số điểm cộng / trừ <span class="text-danger">*</span></label>
-                    <input type="number" name="points" class="form-control" placeholder="Số dương để cộng (vd: 50), số âm để trừ (vd: -30)" required />
+                    <input type="number" name="points" class="form-control" data-allow-signed="true" data-field-label="Số điểm điều chỉnh" placeholder="Số dương để cộng (vd: 50), số âm để trừ (vd: -30)" required />
                 </div>
 
                 <div class="mb-3">
@@ -67,13 +86,13 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">Ghi chú chi tiết gửi Manager <span class="text-danger">*</span></label>
+                    <label class="form-label">Ghi chú chi tiết <span class="text-danger">*</span></label>
                     <textarea name="reasonNote" class="form-control" rows="2" maxlength="250"
-                              placeholder="Nhập mã hóa đơn, số bàn hoặc nội dung sự cố để Manager đối chiếu..." required></textarea>
+                              placeholder="Nhập mã hóa đơn, số bàn hoặc nội dung sự cố để đối chiếu..." required></textarea>
                 </div>
 
                 <button type="submit" class="btn-primary-bms w-100 justify-content-center">
-                    <i class="bi bi-send-check"></i> Gửi phiếu chờ Manager phê duyệt
+                    <i class="bi bi-send-check"></i> @(Model.IsManagerRequester ? "Gửi yêu cầu & Điều chỉnh điểm (Manager)" : "Gửi phiếu chờ Manager phê duyệt")
                 </button>
             </form>
         </div>
@@ -101,13 +120,16 @@
                                 <th>Hội viên</th>
                                 <th class="text-end">Số điểm</th>
                                 <th>Lý do đề xuất</th>
-                                <th>Nhân viên lập</th>
+                                <th>Người gửi đơn yêu cầu</th>
                                 <th class="text-end">Trạng thái</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var r in Model.PendingRequests)
                             {
+                                var reqRoleLabel = Model.RequesterRoleLabels.GetValueOrDefault(r.RequestedById, "Nhân viên yêu cầu");
+                                var isMgrReq = reqRoleLabel.StartsWith("Manager") || reqRoleLabel.StartsWith("Admin");
+                                var reqCode = !string.IsNullOrWhiteSpace(r.RequestedBy?.EmployeeCode) ? $" ({r.RequestedBy.EmployeeCode})" : "";
                                 <tr>
                                     <td>#@r.Id</td>
                                     <td>
@@ -120,8 +142,13 @@
                                     </td>
                                     <td>@r.Reason</td>
                                     <td>
-                                        <div>@(r.RequestedBy?.FullName ?? r.RequestedById)</div>
-                                        <small class="text-muted">@r.RequestedAtUtc.ToVn().ToString("dd/MM HH:mm")</small>
+                                        <div class="fw-semibold" style="color:@(isMgrReq ? "#1e40af" : "#15803d")">@(r.RequestedBy?.FullName ?? r.RequestedById)@reqCode</div>
+                                        <div class="mt-1">
+                                            <span style="background:@(isMgrReq ? "#2563eb" : "#16a34a");color:#ffffff;font-size:0.72rem;font-weight:600;padding:3px 9px;border-radius:6px;display:inline-block">
+                                                @reqRoleLabel
+                                            </span>
+                                        </div>
+                                        <small class="text-muted d-block mt-1">@r.RequestedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</small>
                                     </td>
                                     <td class="text-end">
                                         <span class="badge bg-warning text-dark">Chờ Manager duyệt</span>
@@ -151,7 +178,8 @@
                                 <th>Mã</th>
                                 <th>Hội viên</th>
                                 <th class="text-end">Số điểm</th>
-                                <th>Lý do & Phản hồi Manager</th>
+                                <th>Lý do &amp; Phản hồi Manager</th>
+                                <th>Người gửi đơn yêu cầu</th>
                                 <th>Kết quả</th>
                                 <th>Manager duyệt</th>
                             </tr>
@@ -159,6 +187,9 @@
                         <tbody>
                             @foreach (var h in Model.RecentHistory)
                             {
+                                var hRoleLabel = Model.RequesterRoleLabels.GetValueOrDefault(h.RequestedById, "Nhân viên yêu cầu");
+                                var isMgrHist = hRoleLabel.StartsWith("Manager") || hRoleLabel.StartsWith("Admin");
+                                var hCode = !string.IsNullOrWhiteSpace(h.RequestedBy?.EmployeeCode) ? $" ({h.RequestedBy.EmployeeCode})" : "";
                                 <tr>
                                     <td>#@h.Id</td>
                                     <td>@(h.Customer?.FullName ?? h.CustomerId)</td>
@@ -173,6 +204,15 @@
                                         }
                                     </td>
                                     <td>
+                                        <div class="fw-semibold" style="color:@(isMgrHist ? "#1e40af" : "#15803d")">@(h.RequestedBy?.FullName ?? h.RequestedById)@hCode</div>
+                                        <div class="mt-1">
+                                            <span style="background:@(isMgrHist ? "#2563eb" : "#16a34a");color:#ffffff;font-size:0.72rem;font-weight:600;padding:3px 9px;border-radius:6px;display:inline-block">
+                                                @hRoleLabel
+                                            </span>
+                                        </div>
+                                        <small class="text-muted d-block mt-1">@h.RequestedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</small>
+                                    </td>
+                                    <td>
                                         @if (h.Status == Bms.Web.Data.PointAdjustmentRequest.StatusApproved)
                                         {
                                             <span class="badge-active">Đã duyệt</span>
@@ -184,7 +224,7 @@
                                     </td>
                                     <td>
                                         <div>@(h.ReviewedBy?.FullName ?? "Manager")</div>
-                                        <small class="text-muted">@((h.ReviewedAtUtc ?? h.RequestedAtUtc).ToVn().ToString("dd/MM HH:mm"))</small>
+                                        <small class="text-muted">@((h.ReviewedAtUtc ?? h.RequestedAtUtc).ToVn().ToString("dd/MM/yyyy HH:mm"))</small>
                                     </td>
                                 </tr>
                             }
