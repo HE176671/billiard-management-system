@@ -50,12 +50,11 @@ public class CustomerManagementController : Controller
     // F1: TRA CỨU TẠI QUẦY (LOOKUP) & ĐĂNG KÝ HỘI VIÊN KÈM KIỂM TRA CCCD >= 18 TUỔI
     // ═════════════════════════════════════════════════════════════════════
 
-    // GET /CustomerManagement/Lookup
+    // GET /CustomerManagement/Lookup (Đã bỏ màn Tra cứu tại quầy -> tự động điều hướng về Danh sách hội viên)
     [HttpGet]
     public IActionResult Lookup(string? q = null)
     {
-        ViewData["InitialQuery"] = q;
-        return View();
+        return RedirectToAction(nameof(Index), new { search = q });
     }
 
     // GET /CustomerManagement/Search?q=... (AJAX trả JSON tối đa 8 kết quả, SĐT che giữa 090****567)
@@ -106,7 +105,7 @@ public class CustomerManagementController : Controller
         IActionResult RedirectBackOnError() =>
             string.Equals(input.ReturnTo, "checkout", StringComparison.OrdinalIgnoreCase)
                 ? RedirectToAction("Index", "LoyaltyTest", new { customerMode = "guest", sessionId = input.SessionId })
-                : RedirectToAction(nameof(Lookup), new { q = input.PhoneNumber });
+                : RedirectToAction(nameof(Index), new { search = input.PhoneNumber });
 
         var syntaxErrors = new List<string>();
         if (string.IsNullOrWhiteSpace(input.PhoneNumber) || !StrictPhoneRegex.IsMatch(input.PhoneNumber))
@@ -509,10 +508,10 @@ public class CustomerManagementController : Controller
         return RedirectToAction(nameof(Profile), new { id = customerId });
     }
 
-    // POST /CustomerManagement/ConfirmVoucher (F4: Nhân viên xác nhận giao quà)
+    // POST /CustomerManagement/ConfirmVoucher (F4: Nhân viên xác nhận giao quà hoặc nhập mã voucher tại quầy)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ConfirmVoucher(string voucherCode, string? returnCustomerId = null)
+    public async Task<IActionResult> ConfirmVoucher(string voucherCode, string? returnCustomerId = null, string? returnTo = null)
     {
         var actorId = CurrentActorId ?? (await _context.Users.Select(u => u.Id).FirstAsync());
         var res = await _voucherService.ConfirmGiftDeliveryAsync(voucherCode, actorId);
@@ -520,10 +519,13 @@ public class CustomerManagementController : Controller
         else TempData["Error"] = res.Message;
 
         var targetCustomerId = returnCustomerId ?? res.Voucher?.CustomerId;
+        if (string.Equals(returnTo, "checkout", StringComparison.OrdinalIgnoreCase))
+            return RedirectToAction("Index", "LoyaltyTest", new { customerId = targetCustomerId, customerMode = string.IsNullOrEmpty(targetCustomerId) ? "guest" : "member" });
+
         if (!string.IsNullOrEmpty(targetCustomerId))
             return RedirectToAction(nameof(Profile), new { id = targetCustomerId });
 
-        return RedirectToAction(nameof(Lookup));
+        return RedirectToAction("Index", "LoyaltyTest");
     }
 
     // POST /CustomerManagement/CancelVoucher (F4: Manager hủy voucher -> hoàn điểm Reverse)
