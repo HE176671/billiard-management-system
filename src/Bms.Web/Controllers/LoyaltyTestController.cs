@@ -286,10 +286,38 @@ public class LoyaltyTestController : Controller
             VoucherCode: string.IsNullOrWhiteSpace(voucherCode) ? null : voucherCode,
             CashierId: CurrentActorId));
 
+        var user = await _context.Users.AsNoTracking()
+            .Include(u => u.Tier)
+            .FirstOrDefaultAsync(u => u.Id == customerId);
+        var spend12M = user != null ? await _tierEval.GetSpendLast12MonthsAsync(user.Id) : 0m;
+        var nowUtc = DateTime.UtcNow;
+        var vouchers = user != null
+            ? await _context.CustomerVouchers.AsNoTracking()
+                .Where(v => v.CustomerId == user.Id
+                         && v.Status == CustomerVoucher.StatusActive
+                         && v.ExpiresAtUtc > nowUtc
+                         && v.VoucherType != RewardItemEntity.TypeGift)
+                .OrderBy(v => v.ExpiresAtUtc)
+                .Select(v => new
+                {
+                    code = v.Code,
+                    label = $"{v.Code} — {v.Title} ({(v.DiscountValue.HasValue ? "-" + VnFormat.Money(v.DiscountValue.Value) : VnFormat.RewardTypeLabel(v.VoucherType))})"
+                })
+                .ToListAsync()
+            : null;
+
         return Json(new
         {
             isValid = res.IsValid,
             errors = res.Errors,
+            customerId = user?.Id ?? customerId,
+            customerName = user?.FullName ?? "—",
+            customerPhone = user?.PhoneNumber ?? "—",
+            rewardPoints = user?.RewardPoints ?? 0,
+            spend12Months = spend12M,
+            pointMultiplier = user?.Tier?.PointMultiplier ?? 1,
+            tierBadgeStyle = VnFormat.TierBadgeStyle(res.TierName),
+            availableVouchers = vouchers,
             tierName = res.TierName,
             tierDiscountPercent = res.TierDiscountPercent,
             subtotal = playtimeAmount + fandBAmount,
@@ -461,7 +489,7 @@ public class LoyaltyTestController : Controller
                     s.Status AS Status
                 FROM dbo.PlaySessions s
                 LEFT JOIN dbo.BilliardTables t ON t.Id = s.TableId
-                LEFT JOIN dbo.Users u ON u.Id = s.CustomerId
+                LEFT JOIN dbo.AspNetUsers u ON u.Id = s.CustomerId
                 WHERE NOT EXISTS (SELECT 1 FROM dbo.Invoices i WHERE i.SessionId = s.Id AND i.Status = 'Paid')
                 ORDER BY CASE WHEN s.Status = 'Open' THEN 0 ELSE 1 END, s.StartAtUtc DESC, s.Id DESC
             ").ToListAsync();

@@ -169,13 +169,17 @@
                     <form method="get" asp-action="Index" id="selectMemberForm">
                         <input type="hidden" name="customerMode" value="member" />
                         <input type="hidden" name="sessionId" value="@Model.SelectedSessionId" />
-                        <input type="hidden" name="playtimeAmount" value="@Model.PlaytimeAmount" />
-                        <input type="hidden" name="fandBAmount" value="@Model.FandBAmount" />
+                        <input type="hidden" name="playtimeAmount" id="frmMemberPlaytime" value="@Model.PlaytimeAmount" />
+                        <input type="hidden" name="fandBAmount" id="frmMemberFnb" value="@Model.FandBAmount" />
                         <div class="d-flex gap-2">
-                            <select name="customerId" id="customerIdSelect" class="form-select" onchange="this.form.submit()">
+                            <select name="customerId" id="customerIdSelect" class="form-select">
                                 @foreach (var c in Model.Customers)
                                 {
                                     <option value="@c.Id"
+                                            data-name="@c.FullName"
+                                            data-phone="@(c.PhoneNumber ?? "—")"
+                                            data-tier="@(c.TierName ?? "Member")"
+                                            data-points="@c.RewardPoints"
                                             data-search="@($"{c.FullName} {c.PhoneNumber} {c.Email}".ToLowerInvariant())"
                                             selected="@(c.Id == Model.SelectedCustomerId)">
                                         @c.FullName — SĐT: @(c.PhoneNumber ?? "—") | Hạng @(c.TierName ?? "Member") | @VnFormat.Number(c.RewardPoints) điểm
@@ -184,7 +188,7 @@
                             </select>
                             @if (detail != null)
                             {
-                                <a asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@detail.Id"
+                                <a id="btnMemberProfile" asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@detail.Id"
                                    class="btn-outline-bms text-nowrap" title="Xem hồ sơ hội viên">
                                     <i class="bi bi-person-vcard"></i> Hồ sơ
                                 </a>
@@ -198,15 +202,15 @@
                     <div class="p-3 rounded-3 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2"
                          style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.84rem">
                         <div>
-                            <strong>@detail.FullName</strong>
-                            <span class="text-muted ms-1">(@(detail.PhoneNumber ?? "—"))</span>
-                            <span class="ms-2" style="@(VnFormat.TierBadgeStyle(detail.TierName));padding:2px 8px;border-radius:6px;font-weight:600">
+                            <strong id="lblMemberName">@detail.FullName</strong>
+                            <span class="text-muted ms-1">(<span id="lblMemberPhone">@(detail.PhoneNumber ?? "—")</span>)</span>
+                            <span id="lblMemberTierBadge" class="ms-2" style="@(VnFormat.TierBadgeStyle(detail.TierName));padding:2px 8px;border-radius:6px;font-weight:600">
                                 Hạng @detail.TierName (-@detail.DiscountPercent.ToString("0.##")% giờ · ×@detail.PointMultiplier)
                             </span>
                         </div>
                         <div>
-                            Điểm hiện có: <strong class="text-danger">@VnFormat.Number(detail.RewardPoints) điểm</strong>
-                            <span class="ms-2 text-muted">| Chi tiêu 12T: <strong>@VnFormat.Money(detail.Spend12Months)</strong></span>
+                            Điểm hiện có: <strong class="text-danger" id="lblMemberPoints">@VnFormat.Number(detail.RewardPoints) điểm</strong>
+                            <span class="ms-2 text-muted">| Chi tiêu 12T: <strong id="lblMemberSpend12M">@VnFormat.Money(detail.Spend12Months)</strong></span>
                         </div>
                     </div>
                 }
@@ -366,7 +370,7 @@
                     <div class="fw-bold">PHIẾU THANH TOÁN HÓA ĐƠN</div>
                     <div class="text-muted" style="font-size:0.78rem">Mã HĐ: <code id="rcpRef">@Model.ReferenceCode</code></div>
                 </div>
-                <span class="badge @(isGuest ? "bg-secondary" : "bg-danger")">
+                <span id="rcpMemberBadge" class="badge @(isGuest ? "bg-secondary" : "bg-danger")">
                     @(isGuest ? "KHÁCH LẺ" : $"HỘI VIÊN: {detail?.FullName}")
                 </span>
             </div>
@@ -566,20 +570,46 @@
         const rcpCashChange = document.getElementById('rcpCashChange');
         const btnCommitCheckout = document.getElementById('btnCommitCheckout');
 
-        // Tìm kiếm nhanh hội viên theo Tên hoặc SĐT ngay trong dropdown
+        // Tìm kiếm nhanh hội viên theo Tên hoặc SĐT ngay trong dropdown & tự động đồng bộ thông tin bên dưới + phiếu bên phải
         const memberSearchBox = document.getElementById('memberSearchBox');
         const customerSelect = document.getElementById('customerIdSelect');
+        const lblMemberName = document.getElementById('lblMemberName');
+        const lblMemberPhone = document.getElementById('lblMemberPhone');
+        const lblMemberTierBadge = document.getElementById('lblMemberTierBadge');
+        const lblMemberPoints = document.getElementById('lblMemberPoints');
+        const lblMemberSpend12M = document.getElementById('lblMemberSpend12M');
+        const btnMemberProfile = document.getElementById('btnMemberProfile');
+        const rcpMemberBadge = document.getElementById('rcpMemberBadge');
+
+        function syncSelectedCustomerToForm(newCustomerId, resetVoucherAndPoints) {
+            if (!newCustomerId || !custInput) return;
+            const changed = custInput.value !== newCustomerId;
+            custInput.value = newCustomerId;
+            if (btnMemberProfile) {
+                btnMemberProfile.href = `/CustomerManagement/Profile/${encodeURIComponent(newCustomerId)}`;
+            }
+            if (changed && resetVoucherAndPoints) {
+                if (voucherInput) voucherInput.value = '';
+                if (pointsInput) pointsInput.value = '0';
+            }
+            refreshPreview(changed);
+        }
+
         if (memberSearchBox && customerSelect) {
             const allOptions = Array.from(customerSelect.options).map(opt => ({
                 value: opt.value,
                 text: opt.text,
+                name: opt.getAttribute('data-name') || '',
+                phone: opt.getAttribute('data-phone') || '—',
+                tier: opt.getAttribute('data-tier') || 'Member',
+                points: opt.getAttribute('data-points') || '0',
                 search: (opt.getAttribute('data-search') || opt.text).toLowerCase(),
                 selected: opt.selected
             }));
 
             memberSearchBox.addEventListener('input', function () {
                 const term = (memberSearchBox.value || '').trim().toLowerCase();
-                const currentVal = customerSelect.value;
+                const currentVal = custInput ? custInput.value : customerSelect.value;
                 customerSelect.innerHTML = '';
                 const matched = allOptions.filter(o => !term || o.search.includes(term));
                 if (matched.length === 0) {
@@ -589,22 +619,58 @@
                     customerSelect.appendChild(emptyOpt);
                     return;
                 }
+                let pickedVal = '';
                 matched.forEach((o, idx) => {
                     const opt = document.createElement('option');
                     opt.value = o.value;
                     opt.text = o.text;
-                    if (o.value === currentVal || (idx === 0 && !matched.some(m => m.value === currentVal))) {
+                    opt.setAttribute('data-name', o.name);
+                    opt.setAttribute('data-phone', o.phone);
+                    opt.setAttribute('data-tier', o.tier);
+                    opt.setAttribute('data-points', o.points);
+                    if ((!term && o.value === currentVal) || (term && idx === 0)) {
                         opt.selected = true;
+                        pickedVal = o.value;
                     }
                     customerSelect.appendChild(opt);
                 });
+                if (!pickedVal && matched.length > 0) {
+                    customerSelect.options[0].selected = true;
+                    pickedVal = matched[0].value;
+                }
+                if (pickedVal) {
+                    const pickedObj = matched.find(m => m.value === pickedVal);
+                    if (pickedObj) {
+                        if (lblMemberName) lblMemberName.textContent = pickedObj.name;
+                        if (lblMemberPhone) lblMemberPhone.textContent = pickedObj.phone;
+                        if (lblMemberPoints) lblMemberPoints.textContent = Number(pickedObj.points || 0).toLocaleString('vi-VN') + ' điểm';
+                        if (rcpMemberBadge) rcpMemberBadge.textContent = 'HỘI VIÊN: ' + pickedObj.name;
+                    }
+                    syncSelectedCustomerToForm(pickedVal, true);
+                }
+            });
+
+            customerSelect.addEventListener('change', function () {
+                const val = customerSelect.value;
+                if (!val) return;
+                const selOpt = customerSelect.options[customerSelect.selectedIndex];
+                if (selOpt) {
+                    const name = selOpt.getAttribute('data-name');
+                    const phone = selOpt.getAttribute('data-phone');
+                    const pts = selOpt.getAttribute('data-points');
+                    if (name && lblMemberName) lblMemberName.textContent = name;
+                    if (phone && lblMemberPhone) lblMemberPhone.textContent = phone;
+                    if (pts && lblMemberPoints) lblMemberPoints.textContent = Number(pts || 0).toLocaleString('vi-VN') + ' điểm';
+                    if (name && rcpMemberBadge) rcpMemberBadge.textContent = 'HỘI VIÊN: ' + name;
+                }
+                syncSelectedCustomerToForm(val, true);
             });
 
             memberSearchBox.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     if (customerSelect.value) {
-                        document.getElementById('selectMemberForm').submit();
+                        syncSelectedCustomerToForm(customerSelect.value, true);
                     }
                 }
             });
@@ -687,7 +753,7 @@
             });
         });
 
-        function refreshPreview() {
+        function refreshPreview(reloadVouchers) {
             const url = `/CashierSimulator/Preview?customerId=${encodeURIComponent(custInput ? custInput.value : '')}&customerMode=${encodeURIComponent(modeInput ? modeInput.value : 'member')}&playtimeAmount=${playInput.value || 0}&fandBAmount=${fnbInput.value || 0}&pointsToRedeem=${pointsInput ? (pointsInput.value || 0) : 0}&voucherCode=${encodeURIComponent(voucherInput ? (voucherInput.value || '') : '')}&referenceCode=${encodeURIComponent(refInput.value || '')}`;
             fetch(url)
                 .then(r => r.json())
@@ -695,6 +761,29 @@
                     maxAllowed = d.maxRedeemablePoints || 0;
                     if (lblMaxPts) lblMaxPts.textContent = maxAllowed;
                     currentFinalAmount = d.finalAmount || 0;
+
+                    if (d.customerName && modeInput && modeInput.value !== 'guest') {
+                        if (lblMemberName) lblMemberName.textContent = d.customerName;
+                        if (lblMemberPhone) lblMemberPhone.textContent = d.customerPhone || '—';
+                        if (lblMemberPoints) lblMemberPoints.textContent = Number(d.rewardPoints || 0).toLocaleString('vi-VN') + ' điểm';
+                        if (lblMemberSpend12M) lblMemberSpend12M.textContent = fmtMoney(d.spend12Months || 0);
+                        if (lblMemberTierBadge) {
+                            lblMemberTierBadge.setAttribute('style', `${d.tierBadgeStyle || 'background:#dbeafe;color:#1d4ed8'};padding:2px 8px;border-radius:6px;font-weight:600`);
+                            lblMemberTierBadge.textContent = `Hạng ${d.tierName} (-${d.tierDiscountPercent}% giờ · ×${d.pointMultiplier || 1})`;
+                        }
+                        if (rcpMemberBadge) {
+                            rcpMemberBadge.textContent = 'HỘI VIÊN: ' + d.customerName;
+                        }
+                        if (reloadVouchers === true && voucherInput && voucherInput.tagName === 'SELECT' && Array.isArray(d.availableVouchers)) {
+                            voucherInput.innerHTML = '<option value="">-- Không áp dụng voucher --</option>';
+                            d.availableVouchers.forEach(v => {
+                                const opt = document.createElement('option');
+                                opt.value = v.code;
+                                opt.text = v.label;
+                                voucherInput.appendChild(opt);
+                            });
+                        }
+                    }
 
                     document.getElementById('rcpRef').textContent = refInput.value;
                     document.getElementById('rcpPlay').textContent = fmtMoney(playInput.value);
@@ -732,8 +821,8 @@
         }
 
         document.querySelectorAll('.calc-trigger').forEach(el => {
-            el.addEventListener('input', refreshPreview);
-            el.addEventListener('change', refreshPreview);
+            el.addEventListener('input', () => refreshPreview(false));
+            el.addEventListener('change', () => refreshPreview(false));
         });
 
         refInput.addEventListener('input', () => {
