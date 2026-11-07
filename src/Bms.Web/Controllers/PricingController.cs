@@ -152,7 +152,7 @@ public class PricingController : Controller
         tableType.HourlyRate = hourlyRate;
         await _context.SaveChangesAsync();
 
-        TempData["Success"] = $"Đã cập nhật giá chuẩn bàn [{tableType.Name}] thành {hourlyRate:N0} ₫/giờ.";
+        TempData["Success"] = $"Đã cập nhật giá chuẩn bàn [{tableType.Name}] thành {hourlyRate:N0} VND/giờ.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -195,7 +195,7 @@ public class PricingController : Controller
                 StockQuantity = stockQuantity,
                 IsActive = isActive
             });
-            TempData["Success"] = $"Đã thêm gậy cho thuê \"{name}\" ({price:N0} ₫/lượt).";
+            TempData["Success"] = $"Đã thêm gậy cho thuê \"{name}\" ({price:N0} VND/lượt).";
         }
         else
         {
@@ -206,7 +206,7 @@ public class PricingController : Controller
             existing.Price = price;
             existing.StockQuantity = stockQuantity;
             existing.IsActive = isActive;
-            TempData["Success"] = $"Đã cập nhật giá gậy cho thuê \"{name}\" ({price:N0} ₫/lượt).";
+            TempData["Success"] = $"Đã cập nhật giá gậy cho thuê \"{name}\" ({price:N0} VND/lượt).";
         }
 
         await _context.SaveChangesAsync();
@@ -296,7 +296,7 @@ public class PricingController : Controller
         }
 
         TempData["Success"] = id == 0
-            ? $"Đã tạo khuyến mãi \"{name}\" ({playtimeHours:0.#} giờ chơi — {price:N0} ₫)."
+            ? $"Đã tạo khuyến mãi \"{name}\" ({playtimeHours:0.#} giờ chơi — {price:N0} VND)."
             : $"Đã cập nhật khuyến mãi \"{name}\".";
 
         return RedirectToAction(nameof(Index));

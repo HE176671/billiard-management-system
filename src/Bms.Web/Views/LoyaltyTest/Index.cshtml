@@ -213,7 +213,7 @@
 
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label">Tiền giờ chơi bàn (VNĐ) <span class="text-danger">*</span></label>
+                        <label class="form-label">Tiền giờ chơi bàn (VND) <span class="text-danger">*</span></label>
                         <input type="number" name="playtimeAmount" id="inpPlaytime" class="form-control calc-trigger"
                                min="0" step="1000" value="@Model.PlaytimeAmount" required />
                         <div class="form-text">
@@ -221,7 +221,7 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Tiền đồ ăn &amp; nước uống F&amp;B (VNĐ)</label>
+                        <label class="form-label">Tiền đồ ăn &amp; nước uống F&amp;B (VND)</label>
                         <input type="number" name="fandBAmount" id="inpFnb" class="form-control calc-trigger"
                                min="0" step="1000" value="@Model.FandBAmount" required />
                         <div class="form-text">Tự động cộng từ thực đơn F&amp;B của bàn hoặc nhập tại quầy.</div>
@@ -255,7 +255,7 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label d-flex justify-content-between">
-                                <span>Đổi điểm trừ tiền (1 điểm = 1.000₫)</span>
+                                <span>Đổi điểm trừ tiền (1 điểm = 1.000 VND)</span>
                                 <a href="javascript:void(0)" id="btnMaxPoints" class="text-danger fw-semibold text-decoration-none" style="font-size:0.78rem">
                                     Dùng tối đa (<span id="lblMaxPts">@(p?.MaxRedeemablePoints ?? 0)</span> điểm)
                                 </a>
@@ -316,16 +316,16 @@
                     <div class="row g-3 align-items-center">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold text-success mb-1">
-                                <i class="bi bi-cash-coin me-1"></i>Số tiền khách đưa (VNĐ) <span class="text-danger">*</span>
+                                <i class="bi bi-cash-coin me-1"></i>Số tiền khách đưa (VND) <span class="text-danger">*</span>
                             </label>
                             <input type="number" name="cashReceived" id="inpCashReceived" class="form-control fw-bold"
                                    min="0" step="1000" value="@Model.CashReceived" />
                             <div class="d-flex flex-wrap gap-1 mt-2">
                                 <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 quick-cash-btn" data-exact="true" style="font-size:0.72rem">Khách đưa vừa đủ</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="100000" style="font-size:0.72rem">100.000₫</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="200000" style="font-size:0.72rem">200.000₫</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="500000" style="font-size:0.72rem">500.000₫</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="1000000" style="font-size:0.72rem">1.000.000₫</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="100000" style="font-size:0.72rem">100.000 VND</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="200000" style="font-size:0.72rem">200.000 VND</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="500000" style="font-size:0.72rem">500.000 VND</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="1000000" style="font-size:0.72rem">1.000.000 VND</button>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -470,26 +470,6 @@
                     }
                 </div>
             </div>
-
-            <!-- Nhập mã voucher quà tặng / khuyến mãi tại quầy để xác nhận giao quà (nước uống / đồ ăn miễn phí) -->
-            <div class="mt-3 p-3 rounded-3" style="background:#fff;border:1px solid #e2e8f0">
-                <div class="fw-bold mb-1" style="font-size:0.86rem">
-                    <i class="bi bi-ticket-perforated me-1 text-danger"></i>Nhập mã voucher quà tặng tại quầy
-                </div>
-                <div class="text-muted mb-2" style="font-size:0.76rem">
-                    Dùng cho mã voucher đổi quà tặng hiện vật (nước uống / đồ ăn miễn phí). Với voucher giảm tiền giờ hoặc giảm hóa đơn, nhập ở ô <strong>"Nhập mã voucher khuyến mãi"</strong> bên trái.
-                </div>
-                <form asp-controller="CustomerManagement" asp-action="ConfirmVoucher" method="post" class="d-flex gap-2">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="returnTo" value="checkout" />
-                    <input type="hidden" name="returnCustomerId" id="inpConfirmVoucherCustomerId" value="@(isGuest ? "" : detail?.Id)" />
-                    <input type="text" name="voucherCode" class="form-control form-control-sm font-monospace text-uppercase"
-                           placeholder="VD: BMS-7KQ2-9XHD" required />
-                    <button type="submit" class="btn-primary-bms py-1 px-3 text-nowrap" style="font-size:0.8rem">
-                        <i class="bi bi-check2-circle"></i> Xác nhận mã
-                    </button>
-                </form>
-            </div>
         </div>
     </div>
 </div>
@@ -534,7 +514,6 @@
         const lblMemberSpend12M = document.getElementById('lblMemberSpend12M');
         const btnMemberProfile = document.getElementById('btnMemberProfile');
         const rcpMemberBadge = document.getElementById('rcpMemberBadge');
-        const inpConfirmVoucherCustomerId = document.getElementById('inpConfirmVoucherCustomerId');
         const memberVoucherList = document.getElementById('memberVoucherList');
         const btnClearVoucher = document.getElementById('btnClearVoucher');
 
@@ -542,7 +521,6 @@
             if (!newCustomerId || !custInput) return;
             const changed = custInput.value !== newCustomerId;
             custInput.value = newCustomerId;
-            if (inpConfirmVoucherCustomerId) inpConfirmVoucherCustomerId.value = newCustomerId;
             if (btnMemberProfile) {
                 btnMemberProfile.href = `/CustomerManagement/Profile/${encodeURIComponent(newCustomerId)}`;
             }
@@ -645,7 +623,7 @@
         let currentFinalAmount = @((long)finalAmt);
 
         function fmtMoney(n) {
-            return Math.round(n || 0).toLocaleString('vi-VN') + ' ₫';
+            return Math.round(n || 0).toLocaleString('vi-VN') + ' VND';
         }
 
         function updateQrAndCashUI() {

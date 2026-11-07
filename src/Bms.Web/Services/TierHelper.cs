@@ -46,11 +46,11 @@ public static class TierHelper
     }
 }
 
-/// <summary>Định dạng tiền VNĐ.</summary>
+/// <summary>Định dạng tiền VND.</summary>
 public static class VnFormat
 {
     private static readonly CultureInfo Vi = new("vi-VN");
-    public static string Money(decimal value) => value.ToString("N0", Vi) + " ₫";
+    public static string Money(decimal value) => value.ToString("N0", Vi) + " VND";
     public static string Number(decimal value) => value.ToString("N0", Vi);
 
     /// <summary>UTC (từ DB) → giờ địa phương, dạng dd/MM/yyyy HH:mm.</summary>

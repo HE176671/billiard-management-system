@@ -54,7 +54,7 @@ public class ShiftController : Controller
         try
         {
             var shift = await _shifts.OpenShiftAsync(CurrentUserId, model.StartingCash!.Value, model.Notes);
-            TempData["Success"] = $"Đã mở ca #{shift.Id} với {shift.StartingCash:N0} ₫ đầu ca.";
+            TempData["Success"] = $"Đã mở ca #{shift.Id} với {shift.StartingCash:N0} VND đầu ca.";
         }
         catch (ShiftException ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index));
@@ -83,8 +83,8 @@ public class ShiftController : Controller
             var summary = await _shifts.CloseShiftAsync(shift.Id, CurrentUserId, model.EndingCash!.Value, model.Notes);
             var diff = summary.Difference ?? 0;
             TempData["Success"] = diff == 0
-                ? $"Đã đóng ca #{shift.Id}. Tiền mặt khớp ({summary.ExpectedCash:N0} ₫)."
-                : $"Đã đóng ca #{shift.Id}. Chênh lệch {(diff > 0 ? "thừa" : "thiếu")} {Math.Abs(diff):N0} ₫ đã được ghi nhận.";
+                ? $"Đã đóng ca #{shift.Id}. Tiền mặt khớp ({summary.ExpectedCash:N0} VND)."
+                : $"Đã đóng ca #{shift.Id}. Chênh lệch {(diff > 0 ? "thừa" : "thiếu")} {Math.Abs(diff):N0} VND đã được ghi nhận.";
             return RedirectToAction(nameof(Details), new { id = shift.Id });
         }
         catch (ShiftException ex)
