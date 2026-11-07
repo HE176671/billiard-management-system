@@ -441,12 +441,69 @@ try
     var approveAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Approve))?.GetCustomAttribute<AuthorizeAttribute>();
     var pendingAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Pending))?.GetCustomAttribute<AuthorizeAttribute>();
     var rewardAuth = typeof(RewardItemController).GetCustomAttribute<AuthorizeAttribute>();
-    Check(crmAuth?.Roles == "Admin"
-        && campAuth?.Roles == "Admin"
-        && approveAuth?.Roles == "Admin"
-        && pendingAuth?.Roles == "Admin"
-        && rewardAuth?.Roles == "Admin",
-        "T16: CrmDashboard, Campaign, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Admin)]");
+    var roleMgmtAuth = typeof(RoleManagementController).GetCustomAttribute<AuthorizeAttribute>();
+    Check(crmAuth?.Roles == "Manager,Admin"
+        && campAuth?.Roles == "Manager,Admin"
+        && approveAuth?.Roles == "Manager,Admin"
+        && pendingAuth?.Roles == "Manager,Admin"
+        && rewardAuth?.Roles == "Manager,Admin"
+        && roleMgmtAuth?.Roles == "Admin",
+        "T16: CrmDashboard, Campaign, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Manager,Admin)] while RoleManagement enforces [Authorize(Roles = Admin)]");
+
+    // T17: Admin phân quyền tài khoản nội bộ (RoleManagementController: tạo/chuyển quyền Staff <-> Manager)
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var roleCtrl = Prepare(new RoleManagementController(users, roleManager, db), checkerPrincipal);
+    var roleIndexRes = (ViewResult)await roleCtrl.Index(null, null);
+    var roleVm = (RoleManagementViewModel)roleIndexRes.Model!;
+    await roleCtrl.ChangeRole(staff.Id, "Manager");
+    var isStaffNowManager = await users.IsInRoleAsync(staff, "Manager") && !await users.IsInRoleAsync(staff, "Staff");
+    await roleCtrl.ChangeRole(staff.Id, "Staff");
+    var isBackToStaff = await users.IsInRoleAsync(staff, "Staff") && !await users.IsInRoleAsync(staff, "Manager");
+    Check(roleVm.Users.Count >= 1 && isStaffNowManager && isBackToStaff,
+        "T17: Admin RoleManagementController assigns and switches internal roles (Staff <-> Manager) cleanly");
+
+    // T18: Luồng Staff lập phiếu điều chỉnh điểm -> Manager vào màn riêng (/PointAdjustment/Pending - View 'Manage') phê duyệt
+    var managerUser = new ApplicationUser { UserName = "manager.tv2." + key, Email = "mgr." + key + "@example.invalid", FullName = "TV2 Manager Checker" };
+    Check((await users.CreateAsync(managerUser, "SmokeManager!123")).Succeeded && (await users.AddToRoleAsync(managerUser, "Manager")).Succeeded, "TV2 Manager fixture creation");
+    var managerPrincipal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+    {
+        new Claim(ClaimTypes.NameIdentifier, managerUser.Id),
+        new Claim(ClaimTypes.Role, "Manager")
+    }, "TestAuth"));
+    await staffAdjCtrl.Create(tv2Customer.Id, 75, "Khiếu nại dịch vụ", "Staff lập phiếu chờ Manager duyệt T18", null);
+    var reqT18 = await db.PointAdjustmentRequests.OrderByDescending(r => r.Id).FirstAsync(r => r.CustomerId == tv2Customer.Id && r.Points == 75);
+    var managerAdjCtrl = Prepare(new PointAdjustmentController(db, ledger), managerPrincipal);
+    var pendingView = (ViewResult)await managerAdjCtrl.Pending();
+    var pendingVm = (PointAdjustmentIndexViewModel)pendingView.Model!;
+    await managerAdjCtrl.Approve(reqT18.Id, "Manager đã duyệt phiếu T18");
+    var reqT18After = await db.PointAdjustmentRequests.AsNoTracking().SingleAsync(r => r.Id == reqT18.Id);
+    Check(pendingView.ViewName == "Manage"
+        && pendingVm.PendingRequests.Any(x => x.Id == reqT18.Id)
+        && reqT18After.Status == PointAdjustmentRequest.StatusApproved
+        && reqT18After.ReviewedById == managerUser.Id,
+        "T18: Staff creates pending point adjustment and Manager approves it on dedicated Manage screen");
+
+    // T19: Manager cấu hình Giá Bàn chuẩn, Giá Gậy cho thuê theo lượt & Khuyến mãi Combo Giờ chơi tặng nước
+    var mgrPricingCtrl = Prepare(new PricingController(db), managerPrincipal);
+    await mgrPricingCtrl.UpdateTableBaseRate(testType.Id, 65000m);
+    var updatedTableRate = (await db.TableTypes.AsNoTracking().SingleAsync(t => t.Id == testType.Id)).HourlyRate;
+    var cueName = "Gậy Carbon Smoke " + key[..6];
+    var comboName = "Combo 2H Tặng Nước " + key[..6];
+    await mgrPricingCtrl.SaveRentalCue(0, cueName, 45000m, 12, true);
+    var savedCue = await db.Products.AsNoTracking().SingleAsync(p => p.Name == cueName);
+    var drinkProd = await db.Products.AsNoTracking().FirstOrDefaultAsync();
+    await mgrPricingCtrl.SaveCombo(0, comboName, 2.0m, 185000m, drinkProd?.Id, 2, true);
+    var savedCombo = await db.Combos.Include(c => c.Items).AsNoTracking().SingleAsync(c => c.Name == comboName);
+    Check(updatedTableRate == 65000m
+        && savedCue.Price == 45000m && savedCue.StockQuantity == 12
+        && savedCombo.PlaytimeHours == 2.0m && savedCombo.Price == 185000m
+        && (drinkProd == null || savedCombo.Items.Any(i => i.ProductId == drinkProd.Id && i.Quantity == 2)),
+        "T19: Manager configures table base hourly rate, rental cue per-turn pricing, and 2-hour playtime combo with free drinks");
+
+
+
+
+
 
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }
