@@ -1,0 +1,207 @@
+@model Bms.Web.Models.PointAdjustmentIndexViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Quản lý & Phê duyệt phiếu điều chỉnh điểm (Manager)";
+    Layout = "_AdminLayout";
+    var curUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    int approvedCount = Model.RecentHistory.Count(x => x.Status == Bms.Web.Data.PointAdjustmentRequest.StatusApproved);
+    int rejectedCount = Model.RecentHistory.Count(x => x.Status == Bms.Web.Data.PointAdjustmentRequest.StatusRejected);
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- 3 Thẻ thống kê dành cho Manager -->
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon yellow"><i class="bi bi-hourglass-split"></i></div>
+            <div>
+                <div class="stat-label">Phiếu chờ Manager duyệt</div>
+                <div class="stat-value">@Model.PendingRequests.Count phiếu</div>
+                <small class="text-muted">Do nhân viên (Staff) gửi lên từ quầy</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon green"><i class="bi bi-check2-all"></i></div>
+            <div>
+                <div class="stat-label">Phiếu đã phê duyệt</div>
+                <div class="stat-value">@approvedCount phiếu</div>
+                <small class="text-muted">Đã tự động cộng/trừ vào sổ cái điểm</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-x-octagon"></i></div>
+            <div>
+                <div class="stat-label">Phiếu đã từ chối</div>
+                <div class="stat-value">@rejectedCount phiếu</div>
+                <small class="text-muted">Không hợp lệ hoặc thiếu chứng từ đối chiếu</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bảng 1: Danh sách phiếu chờ Manager phê duyệt -->
+<div class="data-card mb-3">
+    <div class="data-card-header">
+        <span class="data-card-title">
+            <i class="bi bi-clipboard2-check-fill me-2 text-danger"></i>Danh sách phiếu điều chỉnh điểm chờ Manager phê duyệt (@Model.PendingRequests.Count)
+        </span>
+    </div>
+    @if (!Model.PendingRequests.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-check2-circle fs-2 d-block mb-2 text-success"></i>
+            Tất cả các phiếu điều chỉnh điểm do nhân viên lập đã được xử lý xong.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã phiếu</th>
+                        <th>Hội viên thụ hưởng</th>
+                        <th class="text-end">Điểm đề xuất</th>
+                        <th>Lý do & Nội dung đối chiếu</th>
+                        <th>Nhân viên lập (Staff)</th>
+                        <th style="min-width:290px">Ghi chú & Quyết định của Manager</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model.PendingRequests)
+                    {
+                        <tr>
+                            <td class="fw-bold">#@r.Id</td>
+                            <td>
+                                <a asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@r.CustomerId" class="fw-semibold text-dark text-decoration-none">
+                                    @(r.Customer?.FullName ?? r.CustomerId)
+                                </a>
+                                <div class="text-muted" style="font-size:0.75rem">Số dư hiện tại: @VnFormat.Number(r.Customer?.RewardPoints ?? 0) điểm</div>
+                            </td>
+                            <td class="text-end fw-bold fs-6 @(r.Points > 0 ? "text-success" : "text-danger")">
+                                @(r.Points > 0 ? "+" : "")@VnFormat.Number(r.Points) đ
+                            </td>
+                            <td>@r.Reason</td>
+                            <td>
+                                <div class="fw-semibold">@(r.RequestedBy?.FullName ?? r.RequestedById)</div>
+                                <small class="text-muted">@r.RequestedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</small>
+                            </td>
+                            <td>
+                                @if (r.RequestedById == curUserId)
+                                {
+                                    <span class="badge bg-secondary">Cần Manager khác duyệt (Maker ≠ Checker)</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-column gap-1">
+                                        <form asp-action="Approve" method="post" class="d-flex gap-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@r.Id" />
+                                            <input type="text" name="reviewNote" class="form-control form-control-sm" placeholder="Ghi chú duyệt (tùy chọn)..." maxlength="200" />
+                                            <button type="submit" class="btn-primary-bms py-1 px-2 text-nowrap" style="font-size:0.78rem">
+                                                <i class="bi bi-check-lg"></i> Duyệt
+                                            </button>
+                                        </form>
+                                        <form asp-action="Reject" method="post" class="d-flex gap-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@r.Id" />
+                                            <input type="text" name="reviewNote" class="form-control form-control-sm" placeholder="Lý do từ chối..." maxlength="200" />
+                                            <button type="submit" class="btn-outline-bms py-1 px-2 text-nowrap" style="font-size:0.78rem">
+                                                <i class="bi bi-x-lg"></i> Từ chối
+                                            </button>
+                                        </form>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<!-- Bảng 2: Lịch sử phê duyệt đối soát -->
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-journal-check me-2"></i>Nhật ký các phiếu đã được Manager xét duyệt (@Model.RecentHistory.Count)</span>
+    </div>
+    @if (!Model.RecentHistory.Any())
+    {
+        <div class="text-center py-4 text-muted">Chưa có lịch sử xét duyệt phiếu điều chỉnh điểm.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Mã</th>
+                        <th>Hội viên</th>
+                        <th class="text-end">Biến động điểm</th>
+                        <th>Lý do nhân viên lập</th>
+                        <th>Nhân viên lập</th>
+                        <th>Trạng thái</th>
+                        <th>Manager xét duyệt & Ghi chú</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var h in Model.RecentHistory)
+                    {
+                        <tr>
+                            <td>#@h.Id</td>
+                            <td>
+                                <a asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@h.CustomerId" class="fw-semibold text-dark text-decoration-none">
+                                    @(h.Customer?.FullName ?? h.CustomerId)
+                                </a>
+                            </td>
+                            <td class="text-end fw-bold @(h.Points > 0 ? "text-success" : "text-danger")">
+                                @(h.Points > 0 ? "+" : "")@VnFormat.Number(h.Points)
+                            </td>
+                            <td>@h.Reason</td>
+                            <td>
+                                <div>@(h.RequestedBy?.FullName ?? h.RequestedById)</div>
+                                <small class="text-muted">@h.RequestedAtUtc.ToVn().ToString("dd/MM HH:mm")</small>
+                            </td>
+                            <td>
+                                @if (h.Status == Bms.Web.Data.PointAdjustmentRequest.StatusApproved)
+                                {
+                                    <span class="badge-active">Đã phê duyệt</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-inactive">Đã từ chối</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@(h.ReviewedBy?.FullName ?? "Manager")</div>
+                                <small class="text-muted">
+                                    @((h.ReviewedAtUtc ?? h.RequestedAtUtc).ToVn().ToString("dd/MM HH:mm"))
+                                    @(!string.IsNullOrEmpty(h.ReviewNote) ? $"• {h.ReviewNote}" : "")
+                                </small>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

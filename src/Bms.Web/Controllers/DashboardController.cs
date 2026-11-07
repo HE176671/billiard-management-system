@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Manager,Admin")]
 public class DashboardController : Controller
 {
     private readonly ApplicationDbContext _context;

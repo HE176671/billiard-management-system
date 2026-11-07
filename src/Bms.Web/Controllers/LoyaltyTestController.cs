@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin,Staff")]
+[Authorize(Roles = "Staff,Manager,Admin")]
 public class LoyaltyTestController : Controller
 {
     private readonly ApplicationDbContext _context;

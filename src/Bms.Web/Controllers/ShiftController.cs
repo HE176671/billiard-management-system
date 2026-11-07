@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Bms.Web.Controllers;
 
 /// <summary>TV5 — BMS-017: mở ca, đóng ca, đối soát tiền mặt, lịch sử ca.</summary>
-[Authorize(Roles = "Staff,Admin")]
+[Authorize(Roles = "Staff,Manager,Admin")]
 public class ShiftController : Controller
 {
     private const int PageSize = 15;
@@ -70,7 +70,7 @@ public class ShiftController : Controller
         var shift = await _db.WorkShifts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == model.ShiftId);
         if (shift == null) return NotFound();
         var isOwner = shift.StaffId == CurrentUserId;
-        if (!isOwner && !User.IsInRole("Admin")) return Forbid();
+        if (!isOwner && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
 
         var back = isOwner ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Details), new { id = shift.Id });
         if (!ModelState.IsValid)
@@ -104,7 +104,7 @@ public class ShiftController : Controller
     {
         var summary = await _shifts.GetSummaryAsync(id);
         if (summary == null) return NotFound();
-        if (summary.Shift.StaffId != CurrentUserId && !User.IsInRole("Admin")) return Forbid();
+        if (summary.Shift.StaffId != CurrentUserId && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
 
         var vm = new ShiftDetailsViewModel
         {
@@ -140,7 +140,7 @@ public class ShiftController : Controller
     #region Admin: quan ly moi ca
 
     // GET /Shift/Manage
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Manage(DateOnly? from, DateOnly? to, string? staffId, string? status,
         bool onlyDifference = false, int page = 1)
     {

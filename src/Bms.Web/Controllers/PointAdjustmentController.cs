@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin,Staff")]
+[Authorize(Roles = "Staff,Manager,Admin")]
 public class PointAdjustmentController : Controller
 {
     private readonly ApplicationDbContext _db;
@@ -22,21 +22,21 @@ public class PointAdjustmentController : Controller
     }
 
     private string CurrentActorId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-    private bool IsAdmin => User.IsInRole("Admin");
+    private bool IsManagerOrAdmin => User.IsInRole("Manager") || User.IsInRole("Admin");
 
-    // GET /PointAdjustment?customerId=...
+    // GET /PointAdjustment?customerId=... (Màn hình dành cho Staff lập phiếu điều chỉnh điểm)
     [HttpGet]
     public async Task<IActionResult> Index(string? customerId = null)
     {
         return View(await BuildViewModelAsync(customerId));
     }
 
-    // GET /PointAdjustment/Pending (Admin duyệt các yêu cầu Pending)
+    // GET /PointAdjustment/Pending (Màn hình riêng dành cho Manager quản lý & phê duyệt phiếu điều chỉnh điểm của Staff)
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Pending()
     {
-        return View("Index", await BuildViewModelAsync(null));
+        return View("Manage", await BuildViewModelAsync(null));
     }
 
     // POST /PointAdjustment/Create
@@ -77,8 +77,8 @@ public class PointAdjustmentController : Controller
 
         var now = DateTime.UtcNow;
 
-        // BR-F2-1: |điểm| <= 50 và người tạo là Admin -> tự duyệt, ghi ledger ngay
-        if (IsAdmin && Math.Abs(points) <= 50)
+        // BR-F2-1: Nếu người lập là Manager/Admin và |điểm| <= 50 -> tự động duyệt ngay
+        if (IsManagerOrAdmin && Math.Abs(points) <= 50)
         {
             var ownTx = _db.Database.CurrentTransaction == null
                 ? await _db.Database.BeginTransactionAsync()
@@ -95,7 +95,7 @@ public class PointAdjustmentController : Controller
                     RequestedAtUtc = now,
                     ReviewedById = actorId,
                     ReviewedAtUtc = now,
-                    ReviewNote = "Tự động duyệt (Admin, |điểm| <= 50)"
+                    ReviewNote = "Tự động duyệt (Manager, |điểm| <= 50)"
                 };
                 _db.PointAdjustmentRequests.Add(req);
                 await _db.SaveChangesAsync();
@@ -130,7 +130,7 @@ public class PointAdjustmentController : Controller
             }
         }
 
-        // BR-F2-2: Còn lại -> Pending chờ Admin duyệt (maker != checker)
+        // BR-F2-2: Phiếu do Staff lập -> luôn chuyển sang trạng thái Pending chờ Manager phê duyệt
         var pendingReq = new PointAdjustmentRequest
         {
             CustomerId = customerId,
@@ -143,14 +143,14 @@ public class PointAdjustmentController : Controller
         _db.PointAdjustmentRequests.Add(pendingReq);
         await _db.SaveChangesAsync();
 
-        TempData["Success"] = $"Đã gửi yêu cầu điều chỉnh {(points > 0 ? "+" : "")}{points} điểm cho {customer.FullName} (Trạng thái: Chờ Admin phê duyệt).";
+        TempData["Success"] = $"Đã lập phiếu điều chỉnh {(points > 0 ? "+" : "")}{points} điểm cho {customer.FullName} (Trạng thái: Đang chờ Manager phê duyệt).";
         return RedirectBack(customerId, returnTo);
     }
 
-    // POST /PointAdjustment/Approve
+    // POST /PointAdjustment/Approve (Manager phê duyệt phiếu điều chỉnh điểm của Staff)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Approve(int id, string? reviewNote = null)
     {
         var req = await _db.PointAdjustmentRequests
@@ -160,17 +160,17 @@ public class PointAdjustmentController : Controller
         if (req == null) return NotFound();
         if (req.Status != PointAdjustmentRequest.StatusPending)
         {
-            TempData["Error"] = $"Yêu cầu #{id} đã được xử lý trước đó ({req.Status}).";
-            return RedirectToAction(nameof(Index));
+            TempData["Error"] = $"Phiếu #{id} đã được xử lý trước đó ({req.Status}).";
+            return RedirectToAction(nameof(Pending));
         }
 
         var reviewerId = CurrentActorId;
 
-        // BR-F2-3: Người tạo không được tự duyệt yêu cầu của mình (maker != checker)
+        // BR-F2-3: Người lập không được tự duyệt yêu cầu của mình (Maker != Checker)
         if (!string.IsNullOrEmpty(reviewerId) && req.RequestedById == reviewerId)
         {
-            TempData["Error"] = "Vi phạm nguyên tắc Maker ≠ Checker: Người tạo yêu cầu không được tự phê duyệt yêu cầu của chính mình.";
-            return RedirectToAction(nameof(Index));
+            TempData["Error"] = "Vi phạm nguyên tắc Maker ≠ Checker: Người lập phiếu không được tự phê duyệt phiếu của chính mình.";
+            return RedirectToAction(nameof(Pending));
         }
 
         if (string.IsNullOrEmpty(reviewerId))
@@ -196,23 +196,23 @@ public class PointAdjustmentController : Controller
             if (!ledgerRes.Success)
             {
                 if (ownTx != null) await ownTx.RollbackAsync();
-                TempData["Error"] = $"Không thể duyệt yêu cầu #{id}: {ledgerRes.Message}";
-                return RedirectToAction(nameof(Index));
+                TempData["Error"] = $"Không thể duyệt phiếu #{id}: {ledgerRes.Message}";
+                return RedirectToAction(nameof(Pending));
             }
 
             var now = DateTime.UtcNow;
             req.Status = PointAdjustmentRequest.StatusApproved;
             req.ReviewedById = reviewerId;
             req.ReviewedAtUtc = now;
-            req.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? "Đã duyệt" : reviewNote.Trim();
+            req.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? "Manager đã phê duyệt" : reviewNote.Trim();
             req.PointTransactionId = ledgerRes.TransactionId;
 
             AppendNotificationAndAudit(req.CustomerId, req.Points, req.Reason, ledgerRes.BalanceAfter, reviewerId, now);
             await _db.SaveChangesAsync();
             if (ownTx != null) await ownTx.CommitAsync();
 
-            TempData["Success"] = $"Đã phê duyệt yêu cầu #{id}: {(req.Points > 0 ? "+" : "")}{req.Points} điểm cho {req.Customer?.FullName}.";
-            return RedirectToAction(nameof(Index));
+            TempData["Success"] = $"Manager đã phê duyệt phiếu #{id}: {(req.Points > 0 ? "+" : "")}{req.Points} điểm cho {req.Customer?.FullName}.";
+            return RedirectToAction(nameof(Pending));
         }
         catch
         {
@@ -225,35 +225,35 @@ public class PointAdjustmentController : Controller
         }
     }
 
-    // POST /PointAdjustment/Reject
+    // POST /PointAdjustment/Reject (Manager từ chối phiếu điều chỉnh điểm của Staff)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Reject(int id, string? reviewNote = null)
     {
         var req = await _db.PointAdjustmentRequests.FirstOrDefaultAsync(r => r.Id == id);
         if (req == null) return NotFound();
         if (req.Status != PointAdjustmentRequest.StatusPending)
         {
-            TempData["Error"] = $"Yêu cầu #{id} đã được xử lý trước đó.";
-            return RedirectToAction(nameof(Index));
+            TempData["Error"] = $"Phiếu #{id} đã được xử lý trước đó.";
+            return RedirectToAction(nameof(Pending));
         }
 
         var reviewerId = CurrentActorId;
         if (!string.IsNullOrEmpty(reviewerId) && req.RequestedById == reviewerId)
         {
-            TempData["Error"] = "Người tạo yêu cầu không được tự duyệt/từ chối yêu cầu của mình.";
-            return RedirectToAction(nameof(Index));
+            TempData["Error"] = "Người lập phiếu không được tự duyệt/từ chối phiếu của mình.";
+            return RedirectToAction(nameof(Pending));
         }
 
         req.Status = PointAdjustmentRequest.StatusRejected;
         req.ReviewedById = string.IsNullOrEmpty(reviewerId) ? null : reviewerId;
         req.ReviewedAtUtc = DateTime.UtcNow;
-        req.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? "Từ chối" : reviewNote.Trim();
+        req.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? "Manager từ chối" : reviewNote.Trim();
         await _db.SaveChangesAsync();
 
-        TempData["Success"] = $"Đã từ chối yêu cầu điều chỉnh điểm #{id}.";
-        return RedirectToAction(nameof(Index));
+        TempData["Success"] = $"Manager đã từ chối phiếu điều chỉnh điểm #{id}.";
+        return RedirectToAction(nameof(Pending));
     }
 
     private void AppendNotificationAndAudit(string customerId, int points, string reason, int balanceAfter, string actorId, DateTime now)

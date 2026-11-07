@@ -360,5 +360,99 @@ public static class SchemaUpgrader
                 logger.LogWarning(ex, "Đã thêm cột CRM V2 nhưng gặp lỗi khi tạo ràng buộc/bảng phụ.");
             }
         }
+
+        // 3. Đảm bảo Role Manager, bảng ComboItems, danh mục Gậy cho thuê & dữ liệu mẫu Combo/Review
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                SET ANSI_NULLS ON;
+                SET QUOTED_IDENTIFIER ON;
+
+                IF COL_LENGTH('dbo.Reviews', 'AdminReply') IS NULL
+                    ALTER TABLE dbo.Reviews ADD AdminReply nvarchar(max) NULL;
+
+                IF OBJECT_ID('dbo.ComboItems', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.ComboItems (
+                        ComboId int NOT NULL,
+                        ProductId int NOT NULL,
+                        Quantity int NOT NULL,
+                        CONSTRAINT PK_ComboItems PRIMARY KEY (ComboId, ProductId),
+                        CONSTRAINT FK_ComboItems_Combo FOREIGN KEY (ComboId) REFERENCES dbo.Combos(Id) ON DELETE CASCADE,
+                        CONSTRAINT FK_ComboItems_Product FOREIGN KEY (ProductId) REFERENCES dbo.Products(Id),
+                        CONSTRAINT CK_ComboItems_Quantity CHECK (Quantity > 0)
+                    );
+                    CREATE INDEX IX_ComboItems_ProductId ON dbo.ComboItems(ProductId);
+                END;
+
+                IF NOT EXISTS (SELECT 1 FROM dbo.AspNetRoles WHERE NormalizedName = N'MANAGER')
+                BEGIN
+                    INSERT INTO dbo.AspNetRoles(Id, Name, NormalizedName, ConcurrencyStamp)
+                    VALUES (N'role-manager', N'Manager', N'MANAGER', CONVERT(nvarchar(36), NEWID()));
+                END;
+
+                IF NOT EXISTS (SELECT 1 FROM dbo.AspNetUsers WHERE NormalizedUserName = N'MANAGER.DEMO')
+                BEGIN
+                    INSERT INTO dbo.AspNetUsers(
+                        Id, UserName, NormalizedUserName, Email, NormalizedEmail, FullName,
+                        PhoneNumber, IsActive, EmployeeCode, HireDate, SecurityStamp, ConcurrencyStamp,
+                        EmailConfirmed, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnabled, AccessFailedCount,
+                        RewardPoints, TotalSpend, MarketingOptIn, AccountSource, CreatedAtUtc)
+                    VALUES (
+                        N'demo-manager', N'manager.demo', N'MANAGER.DEMO', N'manager@example.test', N'MANAGER@EXAMPLE.TEST',
+                        N'Quản lý CLB Mẫu', N'0900000009', 1, N'MG001', '2026-01-01', NEWID(), NEWID(),
+                        1, 1, 0, 1, 0,
+                        0, 0, 1, 'Self', SYSUTCDATETIME());
+                END;
+
+                DECLARE @mgrRoleId nvarchar(450) = (SELECT TOP 1 Id FROM dbo.AspNetRoles WHERE NormalizedName = N'MANAGER');
+                DECLARE @mgrUserId nvarchar(450) = (SELECT TOP 1 Id FROM dbo.AspNetUsers WHERE NormalizedUserName = N'MANAGER.DEMO');
+                IF @mgrRoleId IS NOT NULL AND @mgrUserId IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM dbo.AspNetUserRoles WHERE UserId = @mgrUserId AND RoleId = @mgrRoleId)
+                BEGIN
+                    INSERT INTO dbo.AspNetUserRoles(UserId, RoleId) VALUES (@mgrUserId, @mgrRoleId);
+                END;
+
+                -- Danh mục Gậy cho thuê & dữ liệu mẫu
+                IF NOT EXISTS (SELECT 1 FROM dbo.ProductCategories WHERE Name = N'Gậy cho thuê')
+                BEGIN
+                    INSERT INTO dbo.ProductCategories(Name) VALUES (N'Gậy cho thuê');
+                END;
+
+                DECLARE @CueCatId int = (SELECT TOP 1 Id FROM dbo.ProductCategories WHERE Name = N'Gậy cho thuê');
+                IF @CueCatId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.Products WHERE CategoryId = @CueCatId)
+                BEGIN
+                    INSERT INTO dbo.Products(CategoryId, Name, Price, StockQuantity, IsActive) VALUES
+                        (@CueCatId, N'Gậy Carbon Predator (Thuê theo lượt)', 50000, 10, 1),
+                        (@CueCatId, N'Gậy Cá Nhân Fury (Thuê theo lượt)', 30000, 15, 1),
+                        (@CueCatId, N'Gậy Nhảy / Phá Chuyên Dụng (Thuê theo lượt)', 25000, 8, 1);
+                END;
+
+                -- Dữ liệu mẫu Combo Giờ chơi tặng kèm Nước
+                IF NOT EXISTS (SELECT 1 FROM dbo.Combos)
+                BEGIN
+                    INSERT INTO dbo.Combos(Name, Price, PlaytimeHours, IsActive) VALUES
+                        (N'Combo 2 Giờ Chơi + Tặng 2 Trà Đào', 190000, 2.0, 1),
+                        (N'Combo 3 Giờ Chơi + Tặng 2 Nước Ngọt & Khoai Tây', 280000, 3.0, 1);
+
+                    DECLARE @Combo1 int = (SELECT TOP 1 Id FROM dbo.Combos WHERE Name LIKE N'Combo 2 Giờ%');
+                    DECLARE @Combo2 int = (SELECT TOP 1 Id FROM dbo.Combos WHERE Name LIKE N'Combo 3 Giờ%');
+                    DECLARE @ProdTraDao int = (SELECT TOP 1 Id FROM dbo.Products WHERE Name = N'Trà đào');
+                    DECLARE @ProdNuocNgot int = (SELECT TOP 1 Id FROM dbo.Products WHERE Name = N'Nước ngọt');
+                    DECLARE @ProdKhoai int = (SELECT TOP 1 Id FROM dbo.Products WHERE Name = N'Khoai tây chiên');
+
+                    IF @Combo1 IS NOT NULL AND @ProdTraDao IS NOT NULL
+                        INSERT INTO dbo.ComboItems(ComboId, ProductId, Quantity) VALUES (@Combo1, @ProdTraDao, 2);
+                    IF @Combo2 IS NOT NULL AND @ProdNuocNgot IS NOT NULL
+                        INSERT INTO dbo.ComboItems(ComboId, ProductId, Quantity) VALUES (@Combo2, @ProdNuocNgot, 2);
+                    IF @Combo2 IS NOT NULL AND @ProdKhoai IS NOT NULL
+                        INSERT INTO dbo.ComboItems(ComboId, ProductId, Quantity) VALUES (@Combo2, @ProdKhoai, 1);
+                END;
+                """);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Không thể tự khởi tạo dữ liệu mẫu Role Manager / Gậy cho thuê / Combo.");
+        }
     }
 }

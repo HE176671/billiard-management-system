@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin,Staff")]
+[Authorize(Roles = "Staff,Manager,Admin")]
 public class CustomerManagementController : Controller
 {
     private const int PageSize = 10;
@@ -39,7 +39,7 @@ public class CustomerManagementController : Controller
     }
 
     private string? CurrentActorId => User.FindFirstValue(ClaimTypes.NameIdentifier);
-    private bool IsAdmin => User.IsInRole("Admin");
+    private bool IsAdmin => User.IsInRole("Manager") || User.IsInRole("Admin");
 
     // ═════════════════════════════════════════════════════════════════════
     // F1: TRA CỨU TẠI QUẦY (LOOKUP) & GHI DANH NHANH
@@ -466,10 +466,10 @@ public class CustomerManagementController : Controller
         return RedirectToAction(nameof(Lookup));
     }
 
-    // POST /CustomerManagement/CancelVoucher (F4: Admin hủy voucher -> hoàn điểm Reverse)
+    // POST /CustomerManagement/CancelVoucher (F4: Manager hủy voucher -> hoàn điểm Reverse)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> CancelVoucher(int voucherId, string customerId, string? reason = null)
     {
         var actorId = CurrentActorId ?? (await _context.Users.Select(u => u.Id).FirstAsync());
@@ -480,10 +480,10 @@ public class CustomerManagementController : Controller
         return RedirectToAction(nameof(Profile), new { id = customerId });
     }
 
-    // POST /CustomerManagement/MergeDuplicate (F8: Admin gộp tài khoản trùng)
+    // POST /CustomerManagement/MergeDuplicate (F8: Manager gộp tài khoản trùng)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> MergeDuplicate(string targetCustomerId, string sourceCustomerId)
     {
         if (string.IsNullOrWhiteSpace(targetCustomerId) || string.IsNullOrWhiteSpace(sourceCustomerId) || targetCustomerId == sourceCustomerId)
@@ -805,10 +805,10 @@ public class CustomerManagementController : Controller
         return RedirectToIndex(existing.Id, search, tierId, status, segment, page);
     }
 
-    // POST /CustomerManagement/ToggleLock (BR-F1-2: Chỉ Admin được khóa/mở khóa)
+    // POST /CustomerManagement/ToggleLock (BR-F1-2: Chỉ Manager được khóa/mở khóa)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> ToggleLock(string id, string? search, int? tierId, string? status, string? segment, int page = 1, string? returnTo = null)
     {
         var user = await GetCustomerOrNullAsync(id);

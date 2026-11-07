@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Manager,Admin")]
 public class EmployeeController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;
