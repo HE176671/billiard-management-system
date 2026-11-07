@@ -320,10 +320,6 @@
         @if (isStaff)
         {
             <div class="nav-section-label">Hội viên &amp; Tại quầy</div>
-            <a class="sidebar-link @(curController == "CustomerManagement" && curAction == "Lookup" ? "active" : "")"
-               asp-controller="CustomerManagement" asp-action="Lookup">
-                <i class="bi bi-search"></i> Tra cứu tại quầy
-            </a>
             <a class="sidebar-link @(curController == "CustomerManagement" && (curAction == "Index" || curAction == "Profile") ? "active" : "")"
                asp-controller="CustomerManagement" asp-action="Index">
                 <i class="bi bi-person-lines-fill"></i> Danh sách hội viên
