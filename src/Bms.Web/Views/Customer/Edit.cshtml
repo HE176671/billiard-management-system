@@ -1,0 +1,41 @@
+@model Bms.Web.Models.EditCustomerViewModel
+@{
+    ViewData["Title"] = "Sửa thông tin khách hàng";
+    Layout = "_AdminLayout";
+}
+<div class="d-flex align-items-center gap-2 mb-4">
+    <a asp-action="Details" asp-route-id="@Model.Id" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <h5 class="mb-0">Sửa thông tin — @Model.UserName</h5>
+</div>
+<div class="form-card">
+    <div class="mb-4 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.8rem;color:#64748b">
+        Hạng <strong>@(Model.TierName ?? "—")</strong> · <strong>@Model.RewardPoints.ToString("N0")</strong> điểm.
+        Điểm và hạng được hệ thống tính tự động, không sửa tay ở đây.
+    </div>
+    <form asp-action="Edit" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger rounded-3" style="font-size:0.875rem"></div>
+        <div class="row g-3">
+            <div class="col-12">
+                <label asp-for="FullName" class="form-label"></label>
+                <input asp-for="FullName" class="form-control" />
+                <span asp-validation-for="FullName" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="Email" class="form-label"></label>
+                <input asp-for="Email" class="form-control" />
+                <span asp-validation-for="Email" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="PhoneNumber" class="form-label"></label>
+                <input asp-for="PhoneNumber" class="form-control" placeholder="0901234567" />
+                <span asp-validation-for="PhoneNumber" class="field-error"></span>
+            </div>
+            <div class="col-12 d-flex gap-2 pt-2">
+                <button type="submit" class="btn-primary-bms"><i class="bi bi-floppy"></i> Lưu thay đổi</button>
+                <a asp-action="Details" asp-route-id="@Model.Id" class="btn-outline-bms">Hủy</a>
+            </div>
+        </div>
+    </form>
+</div>

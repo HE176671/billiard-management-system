@@ -51,7 +51,7 @@
             </div>
             <div class="col-md-6">
                 <label asp-for="HireDate" class="form-label"></label>
-                <input asp-for="HireDate" type="date" class="form-control" />
+                <input asp-for="HireDate" type="date" class="form-control" min="2000-01-01" max="@VnTime.Today.ToString("yyyy-MM-dd")" />
                 <span asp-validation-for="HireDate" class="field-error"></span>
             </div>
             <div class="col-md-6">

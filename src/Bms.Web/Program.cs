@@ -1,15 +1,28 @@
 using Bms.Web.Data;
+using Bms.Web.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+#region Cau hinh MVC, SQL Server, Identity va cookie
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<ITableSessionService, TableSessionService>();
 
 // DbContext trỏ vào BilliardDB (connection string trong appsettings)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Loyalty & CRM V2 (TV2)
+builder.Services.AddScoped<IPointLedgerService, PointLedgerService>();
+builder.Services.AddScoped<ITierEvaluationService, TierEvaluationService>();
+builder.Services.AddScoped<IVoucherService, VoucherService>();
+builder.Services.AddScoped<ICustomerSegmentService, CustomerSegmentService>();
+builder.Services.AddScoped<ICampaignService, CampaignService>();
+builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
+builder.Services.AddHostedService<LoyaltyDailyJob>();
 
 // Identity — khớp schema SQL V1, khóa login/token dài 128
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -27,12 +40,35 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
+// Revalidate SecurityStamp va IsActive moi request: khoa tai khoan la mat quyen ngay.
+builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+    options.ValidationInterval = TimeSpan.Zero);
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/Account/Login";
     options.AccessDeniedPath = "/Account/AccessDenied";
+    options.Events.OnValidatePrincipal = async context =>
+    {
+        await SecurityStampValidator.ValidatePrincipalAsync(context);
+        if (context.Principal?.Identity?.IsAuthenticated == true)
+        {
+            var users = context.HttpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.GetUserAsync(context.Principal);
+            if (user == null || !user.IsActive)
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.RequestServices.GetRequiredService<SignInManager<ApplicationUser>>().SignOutAsync();
+            }
+        }
+    };
 });
 
+// TV5: dich vu ca lam dung chung (TV3 goi khi ghi nhan tien mat)
+builder.Services.AddScoped<IShiftService, ShiftService>();
+
+#endregion
+
+#region Thu tu middleware va dinh tuyen MVC
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -54,6 +90,27 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
+#endregion
+
+#region Tu nang cap schema con thieu (script 08 & script 09)
+using (var upgradeScope = app.Services.CreateScope())
+{
+    var upgradeLogger = upgradeScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        await SchemaUpgrader.ApplyAsync(
+            upgradeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), upgradeLogger);
+    }
+    catch (Exception ex)
+    {
+        upgradeLogger.LogError(ex,
+            "Không tự nâng cấp được schema. Hãy chạy tay BMS_Database_Starter/08_AddWorkShiftReconciliation.sql và 09_TV2_CrmLoyaltyV2.sql.");
+    }
+}
+
+#endregion
+
+#region Mat khau admin demo chi trong Development
 // Đặt mật khẩu admin.demo chỉ trong môi trường Development
 if (app.Environment.IsDevelopment())
 {
@@ -63,5 +120,7 @@ if (app.Environment.IsDevelopment())
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DbInitializer.SeedDevelopmentPasswordsAsync(userManager, config, logger);
 }
+
+#endregion
 
 app.Run();

@@ -1,0 +1,37 @@
+@model Bms.Web.Models.EditProfileViewModel
+@{
+    ViewData["Title"] = "Hồ sơ cá nhân";
+    Layout = User.IsInRole("Admin") || User.IsInRole("Staff") ? "_AdminLayout" : "_Layout";
+}
+<partial name="_Alerts" />
+<div class="form-card card p-4">
+    <h6 class="mb-3" style="font-weight:600"><i class="bi bi-person-circle me-2"></i>Hồ sơ cá nhân</h6>
+    <div class="mb-4 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0">
+        <div class="row g-2" style="font-size:0.8rem;color:#64748b">
+            <div class="col-md-4">Tài khoản: <strong>@Model.UserName</strong></div>
+            <div class="col-md-4">Email: <strong>@Model.Email</strong></div>
+            <div class="col-md-4">Vai trò: <strong>@Model.RoleLabel</strong>@(Model.EmployeeCode != null ? $" · {Model.EmployeeCode}" : "")</div>
+        </div>
+        <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px">Muốn đổi tên đăng nhập hoặc email, hãy liên hệ quản trị viên.</div>
+    </div>
+    <form asp-action="Index" method="post">
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger rounded-3" style="font-size:0.875rem"></div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label asp-for="FullName" class="form-label"></label>
+                <input asp-for="FullName" class="form-control" />
+                <span asp-validation-for="FullName" class="field-error text-danger"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="PhoneNumber" class="form-label"></label>
+                <input asp-for="PhoneNumber" class="form-control" placeholder="0901234567" />
+                <span asp-validation-for="PhoneNumber" class="field-error text-danger"></span>
+            </div>
+            <div class="col-12 d-flex gap-2 pt-2">
+                <button type="submit" class="btn-primary-bms btn btn-primary"><i class="bi bi-floppy"></i> Lưu</button>
+                <a asp-action="ChangePassword" class="btn-outline-bms btn btn-outline-secondary">Đổi mật khẩu</a>
+            </div>
+        </div>
+    </form>
+</div>

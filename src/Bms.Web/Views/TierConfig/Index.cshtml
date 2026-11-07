@@ -1,0 +1,232 @@
+@model Bms.Web.Models.TierConfigViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Hạng thành viên";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Không thể lưu cấu hình:</strong>
+        <ul class="mb-0 mt-1">
+            @foreach (var err in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+            {
+                <li>@err.ErrorMessage</li>
+            }
+        </ul>
+    </div>
+}
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+    @foreach (var t in Model.Tiers)
+    {
+        <div class="col-sm-6 col-xl-4">
+            <div class="stat-card">
+                <div class="stat-icon @(t.TierName == "Gold" ? "amber" : t.TierName == "Silver" ? "blue" : "green")">
+                    <i class="bi bi-award"></i>
+                </div>
+                <div>
+                    <div class="stat-value">@t.CustomerCount</div>
+                    <div class="stat-label">Hội viên hạng @t.TierName</div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (Model.ImpactPreview != null)
+{
+    var upCount = Model.ImpactPreview.Count(x => x.ChangeType == "Upgrade");
+    var graceCount = Model.ImpactPreview.Count(x => x.ChangeType == "Grace");
+    <div class="data-card mb-4 border-primary">
+        <div class="data-card-header bg-light">
+            <span class="data-card-title text-primary">
+                <i class="bi bi-eye me-2"></i>Dự kiến thay đổi khi áp dụng:
+                <strong>@upCount hội viên lên hạng ngay</strong> ·
+                <strong>@graceCount hội viên xét gia hạn ở kỳ tiếp theo</strong>
+            </span>
+        </div>
+        @if (Model.ImpactPreview.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Hội viên</th>
+                            <th class="text-end">Tổng mức chi tiêu</th>
+                            <th>Hạng hiện tại</th>
+                            <th>Hạng theo mức mới</th>
+                            <th>Ghi chú</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var imp in Model.ImpactPreview.Take(20))
+                        {
+                            <tr>
+                                <td><strong>@imp.FullName</strong></td>
+                                <td class="text-end">@VnFormat.Money(imp.Spend12Months)</td>
+                                <td>@imp.CurrentTierName</td>
+                                <td><strong>@imp.ProposedTierName</strong></td>
+                                <td>
+                                    @if (imp.ChangeType == "Upgrade")
+                                    {
+                                        <span class="badge-active">Lên hạng ngay</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">Giữ hạng đến kỳ xét định kỳ</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="p-3 text-muted">Không có hội viên nào thay đổi hạng với mức cấu hình này.</div>
+        }
+    </div>
+}
+
+<div class="row g-3">
+    <!-- Cột trái: Thêm hạng thành viên mới -->
+    <div class="col-lg-4">
+        <div class="data-card p-4 h-100">
+            <h2 class="h6 fw-bold mb-3">Thêm hạng thành viên mới</h2>
+            <form asp-action="AddTier" method="post">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label">Tên hạng thành viên <span class="text-danger">*</span></label>
+                    <input type="text" name="tierName" class="form-control" placeholder="VD: Platinum, Diamond, VIP..." maxlength="50" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Tổng mức chi tiêu đạt hạng (VND) <span class="text-danger">*</span></label>
+                    <input type="number" name="spendThreshold" class="form-control" min="0" step="500000" value="10000000" required />
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Giảm tiền giờ (%)</label>
+                        <input type="number" name="discountPercent" class="form-control" min="0" max="100" step="0.5" value="15" required />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Hệ số nhân điểm</label>
+                        <input type="number" name="pointMultiplier" class="form-control" min="1" max="100" step="1" value="2" required />
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Quà sinh nhật (VND)</label>
+                    <input type="number" name="birthdayVoucherValue" class="form-control" min="0" step="10000" value="100000" required />
+                </div>
+                <button type="submit" class="btn-primary-bms w-100 justify-content-center">
+                    <i class="bi bi-plus-lg"></i> Thêm hạng thành viên
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cột phải: Danh sách & điều chỉnh các hạng thành viên -->
+    <div class="col-lg-8">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="data-card-title">Danh sách hạng &amp; quyền lợi hội viên (@Model.Tiers.Count hạng)</span>
+                <span class="text-muted" style="font-size:0.8rem">Xét theo tổng mức chi tiêu</span>
+            </div>
+
+            <form method="post" id="tierForm">
+                @Html.AntiForgeryToken()
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Hạng</th>
+                                <th style="width:190px">Tổng mức chi tiêu (VND)</th>
+                                <th style="width:130px">Giảm giờ (%)</th>
+                                <th style="width:125px">Nhân điểm</th>
+                                <th style="width:170px">Quà sinh nhật (VND)</th>
+                                <th class="text-center" style="width:90px">Hội viên</th>
+                                <th class="text-end" style="width:70px">Xóa</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < Model.Tiers.Count; i++)
+                            {
+                                var t = Model.Tiers[i];
+                                var isBaseTier = decimal.TryParse(t.SpendThreshold, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsedTh) && parsedTh == 0m;
+                                <tr>
+                                    <td>
+                                        <input type="hidden" name="Tiers[@i].Id" value="@t.Id" />
+                                        <input type="hidden" name="Tiers[@i].TierName" value="@t.TierName" />
+                                        <strong>@t.TierName</strong>
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" step="1000" class="form-control form-control-sm"
+                                               name="Tiers[@i].SpendThreshold" value="@t.SpendThreshold" required />
+                                        <div class="form-text" style="font-size:0.72rem">@(decimal.TryParse(t.SpendThreshold, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var th) ? VnFormat.Money(th) : "—")</div>
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm"
+                                               name="Tiers[@i].DiscountPercent" value="@t.DiscountPercent" required />
+                                    </td>
+                                    <td>
+                                        <input type="number" min="1" max="100" step="1" class="form-control form-control-sm"
+                                               name="Tiers[@i].PointMultiplier" value="@t.PointMultiplier" required />
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" step="5000" class="form-control form-control-sm"
+                                               name="Tiers[@i].BirthdayVoucherValue" value="@t.BirthdayVoucherValue" required />
+                                    </td>
+                                    <td class="text-center"><span class="badge-active">@t.CustomerCount</span></td>
+                                    <td class="text-end">
+                                        @if (!isBaseTier && t.CustomerCount == 0)
+                                        {
+                                            <button type="submit" asp-action="DeleteTier" asp-route-id="@t.Id"
+                                                    formnovalidate class="btn-sm-icon danger" title="Xóa hạng @t.TierName"
+                                                    onclick="return confirm('Xóa hạng thành viên @t.TierName?')">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted" style="font-size:0.75rem">—</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 border-top">
+                    <span class="form-text mb-0">
+                        Khi cập nhật mức chi tiêu, hội viên đủ điều kiện sẽ được nâng hạng ngay.
+                    </span>
+                    <div class="d-flex gap-2">
+                        <button type="submit" asp-action="PreviewImpact" class="btn-outline-bms">
+                            Xem trước thay đổi
+                        </button>
+                        <button type="submit" asp-action="Save" class="btn-primary-bms">
+                            Lưu cấu hình
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

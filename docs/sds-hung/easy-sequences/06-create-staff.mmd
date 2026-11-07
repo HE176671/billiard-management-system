@@ -1,0 +1,39 @@
+sequenceDiagram
+    autonumber
+    actor A as Người quản trị
+    participant C as EmployeeController
+    participant CTX as ApplicationDbContext
+    participant UM as UserManager
+    participant DB as Cơ sở dữ liệu
+    A->>C: Gửi thông tin nhân viên mới
+    Note over A,C: Chỉ người quản trị được tạo; kiểm tra yêu cầu hợp lệ
+    alt Thông tin nhập chưa hợp lệ
+        C-->>A: Hiện lỗi để sửa thông tin
+    else Dữ liệu hợp lệ
+        C->>C: Chuẩn bị thông tin tài khoản
+        C->>CTX: Bắt đầu nhóm các thay đổi
+        CTX->>DB: Giữ các thay đổi trong cùng một lần xử lý
+        C->>UM: Tạo tài khoản nhân viên
+        UM->>DB: Lưu tài khoản và giá trị bảo vệ mật khẩu
+        DB-->>UM: Thành công hoặc lỗi
+        UM-->>C: Trả kết quả hoặc báo lỗi
+        alt Tạo tài khoản thất bại
+            C->>CTX: Hủy các thay đổi của lần tạo
+            CTX->>DB: Hủy các thay đổi chưa xác nhận
+            C-->>A: Báo lỗi, không lộ chi tiết hệ thống
+        else Tạo tài khoản thành công
+            C->>UM: Cấp quyền nhân viên (Staff)
+            UM->>DB: Lưu quyền nhân viên cho tài khoản
+            DB-->>UM: Thành công hoặc lỗi
+            UM-->>C: Trả kết quả hoặc báo lỗi
+            alt Cấp quyền thất bại
+                C->>CTX: Hủy các thay đổi của lần tạo
+                CTX->>DB: Hủy cả tài khoản mới và quyền vừa cấp
+                C-->>A: Báo không tạo được nhân viên
+            else Cấp quyền thành công
+                C->>CTX: Xác nhận lưu cả hai bước
+                CTX->>DB: Lưu toàn bộ thay đổi
+                C-->>A: Báo thành công và mở danh sách nhân viên
+            end
+        end
+    end

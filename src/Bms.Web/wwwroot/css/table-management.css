@@ -1,0 +1,1194 @@
+/* ==========================================================================
+   BMS - Table Management Stylesheet
+   Giao diện Quản lý bàn cho Staff (kế thừa phong cách _AdminLayout)
+   ========================================================================== */
+
+:root {
+    --sidebar-width: 240px;
+    --primary: #e94560;
+    --primary-dark: #c62a47;
+    --primary-green: #10b981;
+    --primary-green-dark: #059669;
+    --bg-dark: #0f172a;
+    --bg-sidebar: #1e293b;
+    --bg-surface: #ffffff;
+    --bg-page: #f1f5f9;
+    --text-muted-light: #94a3b8;
+    --border-color: #cbd5e1;
+    --border-dark: #334155;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    
+    /* 4 trạng thái bàn chuẩn: Còn trống, Đang sử dụng, Đã hết giờ Combo (Tính vượt giờ), Bảo trì */
+    --status-available: #10b981;        /* Còn trống - Xanh lá */
+    --status-inuse: #2563eb;            /* Đang sử dụng - Xanh dương */
+    --status-overdue: #dc2626;          /* Đã hết giờ Combo (Tính vượt giờ) - Đỏ đậm */
+    --status-maintenance: #94a3b8;      /* Bảo trì - Xám */
+
+    /* Màu chữ trạng thái đảm bảo độ tương phản WCAG AA >= 4.5:1 */
+    --status-available-text: #047857;   /* Tương phản 5.48:1 trên nền trắng */
+    --status-inuse-text: #1d4ed8;       /* Tương phản 6.32:1 trên nền #eff6ff */
+    --status-overdue-text: #b91c1c;     /* Tương phản 5.91:1 trên nền #fef2f2 */
+    --status-maintenance-text: #475569; /* Tương phản 7.24:1 trên nền #f8fafc */
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body.staff-layout-body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-page);
+    color: var(--text-main);
+    min-height: 100vh;
+}
+
+/* ==========================================================================
+   Sidebar cố định (Phong cách từ _AdminLayout)
+   ========================================================================== */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-width);
+    height: 100vh;
+    background: var(--bg-sidebar);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+}
+
+.sidebar-brand {
+    padding: 1.5rem 1.25rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-brand .logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: -0.5px;
+}
+
+.sidebar-brand .logo-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted-light);
+    display: block;
+    margin-top: 2px;
+}
+
+.sidebar-nav {
+    flex: 1;
+    padding: 1rem 0;
+    overflow-y: auto;
+}
+
+.nav-section-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--text-muted-light);
+    text-transform: uppercase;
+    padding: 0.75rem 1.25rem 0.35rem;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.55rem 1.25rem;
+    color: #cbd5e1;
+    font-size: 0.875rem;
+    text-decoration: none;
+    border-radius: 0;
+    transition: background 0.15s, color 0.15s;
+    border-left: 3px solid transparent;
+}
+
+.sidebar-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+}
+
+.sidebar-link.active {
+    background: rgba(233, 69, 96, 0.15);
+    color: var(--primary);
+    border-left-color: var(--primary);
+    font-weight: 600;
+}
+
+.sidebar-link i {
+    font-size: 1rem;
+    width: 1.1rem;
+    text-align: center;
+}
+
+.sidebar-footer {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.user-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: #ffffff;
+    flex-shrink: 0;
+}
+
+.user-chip .user-name {
+    font-size: 0.8rem;
+    color: #e2e8f0;
+    font-weight: 500;
+}
+
+.user-chip .user-role {
+    font-size: 0.7rem;
+    color: var(--text-muted-light);
+}
+
+/* ==========================================================================
+   Main Content Wrapper & Topbar (Phong cách từ _AdminLayout)
+   ========================================================================== */
+.main-wrapper {
+    margin-left: var(--sidebar-width);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.topbar {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 1.5rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.topbar-title {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1e293b;
+}
+
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.btn-logout {
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #64748b;
+    border-radius: 8px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    text-decoration: none;
+}
+
+.btn-logout:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.page-content {
+    padding: 1.5rem;
+    flex: 1;
+}
+
+/* ==========================================================================
+   Bố cục Quản lý bàn (2 vùng: Sơ đồ bàn & Chi tiết phiên)
+   ========================================================================== */
+.table-management-wrapper {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+/* Cột trái: Sơ đồ bàn */
+.table-grid-section {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Cột phải: Panel chi tiết phiên chơi (Sticky và align-self) */
+.table-detail-aside {
+    width: 380px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    position: sticky;
+    top: calc(56px + 1.5rem);
+    max-height: calc(100vh - 56px - 3rem);
+    overflow-y: auto;
+}
+
+/* Hộp tiêu đề theo kiểu khung dây wireframe */
+.section-box-header {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    padding: 0.65rem 1.25rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+}
+
+.section-box-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--bg-dark);
+}
+
+.detail-header-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.btn-close-detail {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease-in-out;
+}
+
+.btn-close-detail:hover {
+    color: var(--primary);
+    background-color: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+.btn-close-detail:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+}
+
+/* ==========================================================================
+   Bộ lọc nhanh trạng thái bàn (Tất cả / Sử dụng / Còn trống)
+   ========================================================================== */
+.table-quick-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.65rem 1rem;
+    margin-bottom: 0.75rem;
+    background-color: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.quick-filter-radio {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-main);
+    position: relative;
+}
+
+.quick-filter-radio input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+}
+
+.quick-filter-radio .radio-ring {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #94a3b8;
+    background-color: #ffffff;
+    display: inline-block;
+    flex-shrink: 0;
+    transition: border-color 0.15s ease, border-width 0.15s ease, box-shadow 0.15s ease;
+}
+
+.quick-filter-radio:hover .radio-ring {
+    border-color: #2563eb;
+}
+
+.quick-filter-radio input[type="radio"]:checked + .radio-ring {
+    border: 6px solid #0066cc;
+    background-color: #ffffff;
+}
+
+.quick-filter-radio input[type="radio"]:focus-visible + .radio-ring {
+    outline: 2px solid #0066cc;
+    outline-offset: 2px;
+}
+
+.quick-filter-radio.active .radio-text,
+.quick-filter-radio input[type="radio"]:checked ~ .radio-text {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+/* ==========================================================================
+   Dải Chú giải trạng thái (Status Legend)
+   ========================================================================== */
+.status-legend-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+    background-color: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-main);
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 500;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.status-dot-available { background-color: var(--status-available); }
+.status-dot-inuse { background-color: var(--status-inuse); }
+.status-dot-overdue { background-color: var(--status-overdue); }
+.status-dot-maintenance { background-color: var(--status-maintenance); }
+
+/* ==========================================================================
+   Lưới thẻ bàn (Table Grid & Cards)
+   ========================================================================== */
+.table-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.table-card {
+    background-color: #ffffff;
+    border: 2px solid var(--border-dark);
+    border-radius: 4px;
+    padding: 0.9rem 1rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    position: relative;
+    user-select: none;
+    min-height: 135px;
+}
+
+.table-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.table-card:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.table-card.selected {
+    box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.4);
+    border-color: var(--primary) !important;
+}
+
+.table-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.35rem;
+    min-height: 28px;
+}
+
+.table-code {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--bg-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 45%;
+}
+
+.table-top-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 55%;
+}
+
+.table-mode-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #334155;
+    background-color: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
+    padding: 0.1rem 0.35rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.table-type {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.table-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.table-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    min-height: 1.25rem;
+}
+
+.info-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.info-value {
+    font-weight: 600;
+}
+
+.table-clock {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 700;
+    font-size: 0.95rem;
+    min-height: 1.25rem;
+    display: inline-block;
+}
+
+/* Dành sẵn chỗ cho dòng còn lại để giữ chiều cao ổn định */
+.table-remaining-row {
+    min-height: 1.25rem;
+}
+
+.table-remaining-placeholder {
+    visibility: hidden;
+}
+
+/* Định kiểu 4 trạng thái bàn chuẩn với màu chữ tương phản WCAG AA >= 4.5:1 */
+.table-card.status-available {
+    border-left: 6px solid var(--status-available);
+}
+.table-card.status-available .status-text {
+    color: var(--status-available-text);
+}
+
+.table-card.status-inuse {
+    border-left: 6px solid var(--status-inuse);
+    background-color: #eff6ff;
+}
+.table-card.status-inuse .status-text {
+    color: var(--status-inuse-text);
+}
+.table-card.status-inuse .table-clock {
+    color: var(--status-inuse-text);
+}
+
+.table-card.status-maintenance {
+    border-left: 6px solid var(--status-maintenance);
+    background-color: #f8fafc;
+    opacity: 0.85;
+}
+.table-card.status-maintenance .status-text {
+    color: var(--status-maintenance-text);
+}
+
+.no-tables-message {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-muted);
+    background-color: #ffffff;
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+}
+
+/* ==========================================================================
+   Panel Chi tiết Phiên chơi
+   ========================================================================== */
+.detail-panel-container {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    padding: 1.25rem;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.panel-card-box {
+    border: 2px solid var(--border-dark);
+    padding: 0.85rem 1rem;
+    border-radius: 4px;
+    background-color: #ffffff;
+}
+
+.panel-group-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 0.45rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.detail-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.3rem 0;
+    font-size: 0.95rem;
+}
+
+.detail-data-row:not(:last-child) {
+    border-bottom: 1px dashed #e2e8f0;
+}
+
+.detail-key {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.detail-val {
+    font-weight: 600;
+    color: var(--bg-dark);
+}
+
+.duration-val {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 1.05rem;
+    color: var(--bg-dark);
+}
+
+#detail-playtime-amount {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 1.05rem;
+    color: #198754;
+}
+
+.panel-card-box .detail-data-row:has(+ #detail-playtime-row.d-none) {
+    border-bottom: none;
+}
+
+.action-single-btn-wrapper {
+    margin-top: 0.75rem;
+}
+
+/* ==========================================================================
+   Các nút hành động (Action Buttons - Bố cục lưới 2x2 đều nhau)
+   ========================================================================== */
+.action-buttons-container {
+    padding: 0.85rem 1rem;
+}
+
+.action-buttons-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+}
+
+.action-buttons-grid .btn-action-main,
+.action-buttons-grid .btn-wireframe {
+    width: 100%;
+    height: 100%;
+    min-height: 42px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.action-btn-row {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.btn-action-main {
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 0.6rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: 2px solid transparent;
+}
+
+.btn-primary-bms {
+    background-color: var(--primary-green);
+    border-color: var(--primary-green-dark);
+    color: #ffffff;
+}
+.btn-primary-bms:hover:not(:disabled) {
+    background-color: var(--primary-green-dark);
+    color: #ffffff;
+}
+
+.btn-danger-bms {
+    background-color: var(--primary);
+    border-color: var(--primary-dark);
+    color: #ffffff;
+}
+.btn-danger-bms:hover:not(:disabled) {
+    background-color: var(--primary-dark);
+    color: #ffffff;
+}
+
+.btn-wireframe {
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0.55rem 0.5rem;
+    border-radius: 4px;
+    border: 2px solid var(--border-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-main);
+    background-color: transparent;
+}
+
+.btn-wireframe:hover:not(:disabled) {
+    background-color: #f1f5f9;
+    color: var(--bg-dark);
+    border-color: var(--border-dark);
+}
+
+/* Style cho nút disabled và tooltip wrapper */
+button:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.5;
+}
+
+.tooltip-wrapper {
+    cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints & Chống tràn màn hình nhỏ
+   ========================================================================== */
+html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+@media (max-width: 991.98px) {
+    .table-management-wrapper {
+        flex-direction: column;
+    }
+    
+    .table-detail-aside {
+        width: 100%;
+        position: static;
+        max-height: none;
+        overflow-y: visible;
+    }
+}
+
+@media (max-width: 767.98px) {
+    :root {
+        --sidebar-width: 60px;
+    }
+
+    .sidebar {
+        width: 60px;
+    }
+
+    .sidebar-brand {
+        padding: 1rem 0.25rem;
+        text-align: center;
+    }
+
+    .sidebar-brand .logo {
+        font-size: 1rem;
+        letter-spacing: 0;
+    }
+
+    .sidebar-brand .logo-sub {
+        display: none !important;
+    }
+
+    .nav-section-label {
+        display: none !important;
+    }
+
+    .sidebar-link {
+        padding: 0.65rem 0.25rem;
+        justify-content: center;
+        font-size: 0;
+        border-left-width: 2px;
+    }
+
+    .sidebar-link i {
+        font-size: 1.25rem;
+        width: auto;
+        margin: 0;
+    }
+
+    .sidebar-footer {
+        padding: 0.75rem 0.25rem;
+        display: flex;
+        justify-content: center;
+    }
+
+    .user-chip {
+        justify-content: center;
+        gap: 0;
+    }
+
+    .user-chip > div:last-child {
+        display: none !important;
+    }
+
+    .main-wrapper {
+        margin-left: 60px;
+    }
+
+    .topbar {
+        padding: 0 0.85rem;
+    }
+
+    .topbar-title {
+        font-size: 0.9rem;
+    }
+
+    .page-content {
+        padding: 1rem 0.75rem;
+    }
+}
+
+/* ==========================================================================
+   Toast Notification Styles
+   ========================================================================== */
+.toast-container {
+    z-index: 1090;
+}
+
+#bms-toast {
+    min-width: 300px;
+    font-size: 0.95rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* ==========================================================================
+   Form Mở bàn (Open Session Form)
+   ========================================================================== */
+.open-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.open-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.open-session-form .form-check-input:checked {
+    background-color: var(--primary-green);
+    border-color: var(--primary-green-dark);
+}
+
+.preset-buttons-group .btn-preset-minutes {
+    flex: 1;
+    min-width: 60px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: #f8fafc;
+    color: var(--text-main);
+    transition: all 0.15s ease-in-out;
+}
+
+.preset-buttons-group .btn-preset-minutes:hover {
+    background-color: #e2e8f0;
+    border-color: #94a3b8;
+}
+
+.preset-buttons-group .btn-preset-minutes.active {
+    background-color: var(--bg-dark);
+    color: #ffffff;
+    border-color: var(--bg-dark);
+}
+
+.time-preview-box {
+    background-color: #f8fafc !important;
+    border: 1px dashed var(--border-color) !important;
+}
+
+.time-preview-box strong {
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--bg-dark);
+    font-size: 0.95rem;
+}
+
+/* ==========================================================================
+   Trạng thái Đã hết giờ Combo (Tính vượt giờ) trên thẻ bàn (data-time-state)
+   ========================================================================== */
+.table-remaining {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 700;
+    font-size: 0.95rem;
+    min-height: 1.25rem;
+    display: inline-block;
+}
+
+/* Khi trong giờ Combo bình thường: giữ nguyên màu chữ & viền trạng thái Đang sử dụng */
+.table-card[data-time-state="normal"] .table-remaining {
+    color: #0f172a;
+}
+
+/* Đã hết giờ Combo (Tính vượt giờ): <= 0 */
+.table-card[data-time-state="overdue"] {
+    border-color: var(--status-overdue);
+    border-left: 6px solid var(--status-overdue);
+    background-color: #fef2f2;
+    animation: pulse-overdue 2s infinite ease-in-out;
+}
+.table-card[data-time-state="overdue"] .status-text,
+.table-card[data-time-state="overdue"] .table-clock,
+.table-card[data-time-state="overdue"] .table-remaining {
+    color: var(--status-overdue-text);
+    font-weight: 700;
+}
+.table-card[data-time-state="overdue"] .remaining-label {
+    color: var(--status-overdue-text);
+    font-weight: 700;
+}
+
+@keyframes pulse-overdue {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.2);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    .table-card[data-time-state="overdue"] {
+        animation: none;
+    }
+}
+
+/* ==========================================================================
+   Nút & Form Gia hạn (Extend Session)
+   ========================================================================== */
+.btn-warning-bms {
+    background-color: #f59e0b;
+    border-color: #d97706;
+    color: #ffffff;
+}
+.btn-warning-bms:hover:not(:disabled) {
+    background-color: #d97706;
+    color: #ffffff;
+}
+
+.extend-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.extend-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.preset-buttons-group .btn-preset-extend-minutes {
+    flex: 1;
+    min-width: 60px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: #f8fafc;
+    color: var(--text-main);
+    transition: all 0.15s ease-in-out;
+}
+.preset-buttons-group .btn-preset-extend-minutes:hover {
+    background-color: #e2e8f0;
+    border-color: #94a3b8;
+}
+.preset-buttons-group .btn-preset-extend-minutes.active {
+    background-color: var(--bg-dark);
+    color: #ffffff;
+    border-color: var(--bg-dark);
+}
+
+/* ==========================================================================
+   Form Đóng bàn (Close Session Form)
+   ========================================================================== */
+.close-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.close-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.close-summary-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    background-color: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.75rem 0.85rem;
+}
+
+.summary-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.875rem;
+    padding: 0.15rem 0;
+}
+
+.summary-key {
+    color: var(--text-muted);
+}
+
+.summary-val {
+    color: var(--text-main);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.summary-amount-row {
+    border-top: 1px dashed var(--border-color);
+    border-bottom: 1px dashed var(--border-color);
+    margin-top: 0.35rem;
+    margin-bottom: 0.25rem;
+}
+
+.summary-amount-row .summary-val {
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* ==========================================================================
+   Form Chuyển bàn (Transfer Session Form)
+   ========================================================================== */
+.transfer-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.transfer-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+/* ==========================================================================
+   Lịch sử các đoạn bàn (Table Segments History)
+   ========================================================================== */
+.detail-segments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.segment-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0.5rem;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.segment-item-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.segment-item-table {
+    font-weight: 700;
+    color: var(--bg-dark);
+}
+
+.segment-item-type {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.segment-item-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.1rem;
+}
+
+.segment-item-time {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.segment-item-rate {
+    font-size: 0.75rem;
+    color: var(--primary-green-dark);
+    font-weight: 600;
+}
+
+/* ==========================================================================
+   Form Chọn Combo & Danh sách Combo đã chọn
+   ========================================================================== */
+.combo-session-form {
+    border: 2px solid var(--border-dark);
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.combo-session-form .form-section-title {
+    font-size: 0.95rem;
+    color: var(--bg-dark);
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+}
+
+.detail-combos-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.combo-purchase-card {
+    padding: 0.5rem 0.65rem;
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #f59e0b;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.combo-purchase-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.combo-purchase-name {
+    font-weight: 700;
+    color: var(--bg-dark);
+}
+
+.combo-purchase-price {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 700;
+    color: #047857;
+    white-space: nowrap;
+}
+
+.combo-purchase-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.combo-purchase-items {
+    font-size: 0.78rem;
+    color: #334155;
+    margin-top: 0.25rem;
+    padding-top: 0.2rem;
+    border-top: 1px dashed #e2e8f0;
+}
+
+

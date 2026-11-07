@@ -1,15 +1,134 @@
-﻿@{
-    ViewData["Title"] = "Customer Dashboard";
-    Layout = "_AdminLayout";
+@model Bms.Web.Models.CustomerListViewModel
+@{
+    ViewData["Title"] = "Quản lý Khách hàng";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
 }
-<div class="data-card p-4 text-center" style="max-width:500px;margin:0 auto">
-    <div style="font-size:3rem">🎯</div>
-    <h5 class="mt-3">Chao mung ban!</h5>
-    <p class="text-muted" style="font-size:0.875rem">
-        Trang nay dang duoc Trong Hiep xay dung.<br/>
-        Vibe code se som duoc hoan thien tinh nang dat ban va xem lich su.<br/>
-        
-        Chuc nang dat ban va xem lich su se som co o day.
-    </p>
-    <a asp-controller="Account" asp-action="Logout" class="btn btn-sm btn-outline-secondary mt-2">Dang xuat</a>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title">
+            <i class="bi bi-people me-1"></i> Khách hàng
+            <span class="badge bg-secondary ms-1">@Model.TotalCount</span>
+        </span>
+        <div class="d-flex gap-2 flex-wrap">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="search" value="@Model.Search" class="form-control form-control-sm"
+                       style="width:200px" placeholder="Tên, email, SĐT..." />
+                <select name="status" class="form-select form-select-sm" style="width:130px">
+                    <option value="">Tất cả</option>
+                    <option value="active"   selected="@(Model.StatusFilter=="active")">Hoạt động</option>
+                    <option value="inactive" selected="@(Model.StatusFilter=="inactive")">Bị khóa</option>
+                </select>
+                <select name="tierId" class="form-select form-select-sm" style="width:140px">
+                    <option value="">Tất cả hạng</option>
+                    @foreach (var t in Model.TierOptions)
+                    {
+                        <option value="@t.Id" selected="@(Model.TierFilter==t.Id)">@t.TierName</option>
+                    }
+                </select>
+                <button type="submit" class="btn-primary-bms">
+                    <i class="bi bi-search"></i> Tìm
+                </button>
+                <a asp-action="Index" class="btn-outline-bms">Xóa lọc</a>
+            </form>
+        </div>
+    </div>
+
+    <table class="table table-hover mb-0">
+        <thead>
+            <tr>
+                <th>Khách hàng</th>
+                <th>Liên hệ</th>
+                <th>Hạng</th>
+                <th>Điểm</th>
+                <th>Ngày đăng ký</th>
+                <th>Trạng thái</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in Model.Customers)
+            {
+                <tr>
+                    <td>
+                        <div style="font-weight:600">@c.FullName</div>
+                        <div style="font-size:0.78rem;color:#64748b">@c.UserName</div>
+                    </td>
+                    <td>
+                        <div>@c.Email</div>
+                        <div style="font-size:0.78rem;color:#64748b">@c.PhoneNumber</div>
+                    </td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(c.TierName))
+                        {
+                            <span class="badge bg-warning text-dark">@c.TierName</span>
+                        }
+                        else
+                        {
+                            <span style="color:#94a3b8">—</span>
+                        }
+                    </td>
+                    <td><strong>@c.RewardPoints.ToString("N0")</strong></td>
+                    <td style="font-size:0.82rem">@c.CreatedAtUtc.AddHours(7).ToString("dd/MM/yyyy")</td>
+                    <td>
+                        @if (c.IsActive)
+                        {
+                            <span class="badge-active">Hoạt động</span>
+                        }
+                        else
+                        {
+                            <span class="badge-inactive">Bị khóa</span>
+                        }
+                    </td>
+                    <td class="text-nowrap">
+                        <a asp-action="Details" asp-route-id="@c.Id" class="btn-sm-icon" title="Chi tiết"><i class="bi bi-eye"></i></a>
+                        <a asp-action="Edit" asp-route-id="@c.Id" class="btn-sm-icon" title="Sửa"><i class="bi bi-pencil"></i></a>
+                        <form asp-action="ToggleLock" asp-route-id="@c.Id" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit"
+                                    class="btn-sm-icon @(!c.IsActive ? "" : "danger")"
+                                    title="@(c.IsActive ? "Khóa tài khoản" : "Mở khóa")"
+                                    onclick="return confirm('@(c.IsActive ? "Khóa" : "Mở khóa") tài khoản khách hàng này?')">
+                                <i class="bi bi-@(c.IsActive ? "lock" : "unlock")"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            @if (!Model.Customers.Any())
+            {
+                <tr><td colspan="7" class="text-center py-4 text-muted">Không tìm thấy khách hàng nào.</td></tr>
+            }
+        </tbody>
+    </table>
+
+    @if (Model.TotalPages > 1)
+    {
+        <div class="d-flex justify-content-center gap-1 py-3">
+            @for (int i = 1; i <= Model.TotalPages; i++)
+            {
+                <a asp-action="Index"
+                   asp-route-search="@Model.Search"
+                   asp-route-status="@Model.StatusFilter"
+                   asp-route-tierId="@Model.TierFilter"
+                   asp-route-page="@i"
+                   class="btn btn-sm @(i == Model.Page ? "btn-danger" : "btn-outline-secondary")">@i</a>
+            }
+        </div>
+    }
 </div>

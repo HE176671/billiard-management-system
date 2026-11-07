@@ -1,0 +1,814 @@
+@model Bms.Web.Models.LoyaltyTestViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Thanh toán & Tích điểm tại quầy";
+    Layout = "_AdminLayout";
+    var detail = Model.CustomerDetail;
+    var p = Model.Preview;
+    var isGuest = Model.IsGuestMode;
+    var finalAmt = Model.FinalAmount;
+    var maxAdultBirthDate = DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("yyyy-MM-dd");
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Warning"] != null)
+{
+    <div class="alert alert-warning alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-shield-exclamation me-2"></i>@TempData["Warning"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-3">
+    <!-- ═══════════ CỘT TRÁI: THÔNG TIN KHÁCH HÀNG, BÀN CHƠI & PHƯƠNG THỨC THANH TOÁN ═══════════ -->
+    <div class="col-lg-7">
+        <div class="data-card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 border-bottom pb-3">
+                <div>
+                    <h2 class="h6 fw-bold mb-1">
+                        <i class="bi bi-receipt-cutoff me-2 text-danger"></i>Màn hình Thanh toán tại quầy (POS)
+                    </h2>
+                    <div class="text-muted" style="font-size:0.78rem">
+                        Hỗ trợ thanh toán Khách hội viên (tự động cộng điểm &amp; xét hạng) hoặc Khách lẻ qua <strong>VietQR</strong> và <strong>Tiền mặt</strong>.
+                    </div>
+                </div>
+                <div class="btn-group" role="group">
+                    <a asp-action="Index"
+                       asp-route-customerMode="member"
+                       asp-route-customerId="@Model.SelectedCustomerId"
+                       asp-route-sessionId="@Model.SelectedSessionId"
+                       asp-route-playtimeAmount="@Model.PlaytimeAmount"
+                       asp-route-fandBAmount="@Model.FandBAmount"
+                       class="btn btn-sm @(!isGuest ? "btn-danger fw-semibold" : "btn-outline-secondary")">
+                        <i class="bi bi-person-check me-1"></i>Khách đã có TK hội viên
+                    </a>
+                    <a asp-action="Index"
+                       asp-route-customerMode="guest"
+                       asp-route-sessionId="@Model.SelectedSessionId"
+                       asp-route-playtimeAmount="@Model.PlaytimeAmount"
+                       asp-route-fandBAmount="@Model.FandBAmount"
+                       class="btn btn-sm @(isGuest ? "btn-danger fw-semibold" : "btn-outline-secondary")">
+                        <i class="bi bi-person-walking me-1"></i>Khách lẻ (Chưa có TK)
+                    </a>
+                </div>
+            </div>
+
+            <!-- 1. Tích hợp chọn Bàn / Phiên chơi (PlaySessions) & Thực đơn F&B (Orders) -->
+            @if (Model.ActiveSessions.Any())
+            {
+                <div class="mb-3 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0">
+                    <form method="get" asp-action="Index" class="row g-2 align-items-end">
+                        <input type="hidden" name="customerMode" value="@Model.CustomerMode" />
+                        <input type="hidden" name="customerId" value="@Model.SelectedCustomerId" />
+                        <div class="col-md-9">
+                            <label class="form-label mb-1" style="font-size:0.8rem">
+                                <i class="bi bi-grid-3x3-gap me-1 text-primary"></i>Tích hợp Vận hành bàn &amp; Thực đơn F&amp;B (Chọn phiên bàn để tự động lấy tiền giờ &amp; đồ ăn/nước uống)
+                            </label>
+                            <select name="sessionId" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">-- Nhập số tiền thủ công hoặc chọn phiên bàn cần thanh toán --</option>
+                                @foreach (var s in Model.ActiveSessions)
+                                {
+                                    <option value="@s.SessionId" selected="@(Model.SelectedSessionId == s.SessionId)">
+                                        #@s.SessionId — @s.TableCode (@s.Status) · Giờ chơi: @VnFormat.Money(s.PlaytimeAmount) · F&amp;B: @VnFormat.Money(s.FandBAmount) @(s.CustomerName != null ? $"· KH: {s.CustomerName}" : "")
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            @if (Model.SelectedSessionId.HasValue)
+                            {
+                                <a asp-action="Index" asp-route-customerMode="@Model.CustomerMode" asp-route-customerId="@Model.SelectedCustomerId"
+                                   class="btn btn-sm btn-outline-secondary w-100">
+                                    Bỏ chọn bàn
+                                </a>
+                            }
+                        </div>
+                    </form>
+
+                    @if (Model.SelectedSession != null)
+                    {
+                        <div class="mt-2 pt-2 border-top d-flex justify-content-between flex-wrap gap-2" style="font-size:0.8rem">
+                            <span>
+                                <strong>@Model.SelectedSession.TableCode</strong> (Phiên #@Model.SelectedSession.SessionId) ·
+                                Bắt đầu: @Model.SelectedSession.StartAtUtc.ToVn().ToString("dd/MM HH:mm") ·
+                                Giá bàn: @VnFormat.Money(Model.SelectedSession.HourlyRateSnapshot)/giờ
+                            </span>
+                            <span class="text-primary fw-semibold">
+                                Tiền giờ: @VnFormat.Money(Model.SelectedSession.PlaytimeAmount) | F&amp;B: @VnFormat.Money(Model.SelectedSession.FandBAmount)
+                            </span>
+                        </div>
+                        @if (Model.SessionOrderLines.Any())
+                        {
+                            <div class="mt-2 pt-2 border-top" style="font-size:0.78rem">
+                                <div class="fw-semibold text-secondary mb-1"><i class="bi bi-cup-straw me-1"></i>Chi tiết đồ ăn / nước uống đã gọi tại bàn:</div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    @foreach (var item in Model.SessionOrderLines)
+                                    {
+                                        <span class="badge bg-white text-dark border">
+                                            @item.ProductName × @item.Quantity (@VnFormat.Money(item.Subtotal))
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+
+            <!-- 2. Khu vực Khách lẻ vs Khách hội viên -->
+            @if (isGuest)
+            {
+                <div class="p-3 rounded-3 mb-3" style="background:#fffbeb;border:1px solid #fde68a">
+                    <div class="fw-bold text-dark" style="font-size:0.9rem">
+                        <i class="bi bi-person-walking text-warning me-1"></i>Chế độ Thanh toán Khách lẻ tại quầy
+                    </div>
+                    <div class="text-muted mt-1" style="font-size:0.8rem">
+                        Thanh toán trực tiếp hóa đơn bàn chơi và F&amp;B bằng <strong>Chuyển khoản VietQR (STK: 2107072003)</strong> hoặc <strong>Tiền mặt</strong> (nhập tiền khách đưa &amp; tính tiền trả lại).
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Tìm kiếm hội viên theo Tên hoặc SĐT kèm Hạng thành viên & Điểm bên cạnh -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0">Tìm kiếm &amp; Chọn hội viên thanh toán</label>
+                    </div>
+
+                    <div class="input-group mb-2">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="memberSearchBox" class="form-control"
+                               placeholder="Nhập tên hoặc số điện thoại để tìm nhanh hội viên trong danh sách..." autocomplete="off" />
+                    </div>
+
+                    <form method="get" asp-action="Index" id="selectMemberForm">
+                        <input type="hidden" name="customerMode" value="member" />
+                        <input type="hidden" name="sessionId" value="@Model.SelectedSessionId" />
+                        <input type="hidden" name="playtimeAmount" id="frmMemberPlaytime" value="@Model.PlaytimeAmount" />
+                        <input type="hidden" name="fandBAmount" id="frmMemberFnb" value="@Model.FandBAmount" />
+                        <div class="d-flex gap-2">
+                            <select name="customerId" id="customerIdSelect" class="form-select">
+                                @foreach (var c in Model.Customers)
+                                {
+                                    <option value="@c.Id"
+                                            data-name="@c.FullName"
+                                            data-phone="@(c.PhoneNumber ?? "—")"
+                                            data-tier="@(c.TierName ?? "Member")"
+                                            data-points="@c.RewardPoints"
+                                            data-search="@($"{c.FullName} {c.PhoneNumber} {c.Email}".ToLowerInvariant())"
+                                            selected="@(c.Id == Model.SelectedCustomerId)">
+                                        @c.FullName — SĐT: @(c.PhoneNumber ?? "—") | Hạng @(c.TierName ?? "Member") | @VnFormat.Number(c.RewardPoints) điểm
+                                    </option>
+                                }
+                            </select>
+                            @if (detail != null)
+                            {
+                                <a id="btnMemberProfile" asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@detail.Id"
+                                   class="btn-outline-bms text-nowrap" title="Xem hồ sơ hội viên">
+                                    <i class="bi bi-person-vcard"></i> Hồ sơ
+                                </a>
+                            }
+                        </div>
+                    </form>
+                </div>
+
+                @if (detail != null)
+                {
+                    <div class="p-3 rounded-3 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2"
+                         style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.84rem">
+                        <div>
+                            <strong id="lblMemberName">@detail.FullName</strong>
+                            <span class="text-muted ms-1">(<span id="lblMemberPhone">@(detail.PhoneNumber ?? "—")</span>)</span>
+                            <span id="lblMemberTierBadge" class="ms-2" style="@(VnFormat.TierBadgeStyle(detail.TierName));padding:2px 8px;border-radius:6px;font-weight:600">
+                                Hạng @detail.TierName (-@detail.DiscountPercent.ToString("0.##")% giờ · ×@detail.PointMultiplier)
+                            </span>
+                        </div>
+                        <div>
+                            Điểm hiện có: <strong class="text-danger" id="lblMemberPoints">@VnFormat.Number(detail.RewardPoints) điểm</strong>
+                            <span class="ms-2 text-muted">| Tổng mức chi tiêu: <strong id="lblMemberSpend12M">@VnFormat.Money(Math.Max(detail.TotalSpend, detail.Spend12Months))</strong></span>
+                        </div>
+                    </div>
+                }
+            }
+
+            <!-- 3. Form Thanh toán (Hỗ trợ cả Khách hội viên & Khách lẻ + 2 hình thức VietQR / Tiền mặt) -->
+            <form asp-action="CommitCheckout" method="post" id="checkoutForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="customerMode" id="inpCustomerMode" value="@Model.CustomerMode" />
+                <input type="hidden" name="customerId" id="inpCustomerId" value="@(isGuest ? "" : detail?.Id)" />
+                <input type="hidden" name="sessionId" value="@Model.SelectedSessionId" />
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Tiền giờ chơi bàn (VND) <span class="text-danger">*</span></label>
+                        <input type="number" name="playtimeAmount" id="inpPlaytime" class="form-control calc-trigger"
+                               min="0" step="1000" value="@Model.PlaytimeAmount" required />
+                        <div class="form-text">
+                            @(isGuest ? "Khách lẻ tính nguyên giá giờ chơi." : "Chiết khấu hạng thành viên tự động giảm trên tiền giờ chơi.")
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Tiền đồ ăn &amp; nước uống F&amp;B (VND)</label>
+                        <input type="number" name="fandBAmount" id="inpFnb" class="form-control calc-trigger"
+                               min="0" step="1000" value="@Model.FandBAmount" required />
+                        <div class="form-text">Tự động cộng từ thực đơn F&amp;B của bàn hoặc nhập tại quầy.</div>
+                    </div>
+                </div>
+
+                @if (!isGuest && detail != null)
+                {
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label d-flex justify-content-between">
+                                <span>Nhập mã voucher khuyến mãi</span>
+                                <a href="javascript:void(0)" id="btnClearVoucher" class="text-secondary text-decoration-none" style="font-size:0.75rem">Xóa mã</a>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i class="bi bi-ticket-perforated text-danger"></i></span>
+                                <input type="text" name="voucherCode" id="inpVoucher" list="memberVoucherList"
+                                       class="form-control font-monospace text-uppercase calc-trigger"
+                                       placeholder="Nhập mã (VD: BMS-7KQ2-9XHD) hoặc chọn..."
+                                       value="@Model.VoucherCode" autocomplete="off" />
+                            </div>
+                            <datalist id="memberVoucherList">
+                                @foreach (var v in Model.AvailableVouchers)
+                                {
+                                    var minTier = v.RewardItem?.MinTier;
+                                    var tierSuffix = minTier != null ? $" · Hạng {minTier.TierName}+" : "";
+                                    <option value="@v.Code">
+                                        @v.Title (@(v.DiscountValue.HasValue ? "-" + VnFormat.Money(v.DiscountValue.Value) : VnFormat.RewardTypeLabel(v.VoucherType))@tierSuffix)
+                                    </option>
+                                }
+                            </datalist>
+                            <div id="lblVoucherWarning" class="alert alert-danger py-1 px-2 mt-2 mb-0 d-none" style="font-size:0.78rem"></div>
+                            <div class="form-text">Nhập trực tiếp mã voucher khuyến mãi hoặc chọn từ danh sách voucher hiệu lực của hội viên (hệ thống tự động kiểm tra điều kiện hạng thành viên).</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label d-flex justify-content-between">
+                                <span>Đổi điểm trừ tiền (1 điểm = 1.000 VND)</span>
+                                <a href="javascript:void(0)" id="btnMaxPoints" class="text-danger fw-semibold text-decoration-none" style="font-size:0.78rem">
+                                    Dùng tối đa (<span id="lblMaxPts">@(p?.MaxRedeemablePoints ?? 0)</span> điểm)
+                                </a>
+                            </label>
+                            <input type="number" name="pointsToRedeem" id="inpPoints" class="form-control calc-trigger"
+                                   min="0" step="1" value="@Model.PointsToRedeem" />
+                            <div class="form-text">Tối đa 50% số tiền còn lại sau chiết khấu hạng và voucher.</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <input type="hidden" name="voucherCode" id="inpVoucher" value="" />
+                    <input type="hidden" name="pointsToRedeem" id="inpPoints" value="0" />
+                }
+
+                <!-- Chọn 2 hình thức thanh toán: VietQR vs Tiền mặt -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">
+                        Hình thức thanh toán <span class="text-danger">*</span>
+                        @if (!isGuest)
+                        {
+                            <span class="badge bg-success-subtle text-success ms-2" style="font-size:0.72rem">
+                                <i class="bi bi-coin me-1"></i>Thanh toán bằng VietQR hay Tiền mặt đều được cộng điểm thưởng
+                            </span>
+                        }
+                    </label>
+                    <input type="hidden" name="paymentMethod" id="inpPaymentMethod" value="@Model.PaymentMethod" />
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <button type="button" id="btnMethodVietQR"
+                                    class="w-100 p-3 rounded-3 text-start border d-flex align-items-center gap-3 payment-method-btn"
+                                    style="background:@(Model.PaymentMethod != "Cash" ? "#fff1f2" : "#fff");border-color:@(Model.PaymentMethod != "Cash" ? "#e94560" : "#e2e8f0") !important">
+                                <i class="bi bi-qr-code-scan fs-3 text-danger"></i>
+                                <div>
+                                    <div class="fw-bold" style="font-size:0.88rem">Chuyển khoản VietQR</div>
+                                    <div class="text-muted" style="font-size:0.75rem">Tạo mã QR hiển thị trực tiếp số tiền</div>
+                                </div>
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button type="button" id="btnMethodCash"
+                                    class="w-100 p-3 rounded-3 text-start border d-flex align-items-center gap-3 payment-method-btn"
+                                    style="background:@(Model.PaymentMethod == "Cash" ? "#fff1f2" : "#fff");border-color:@(Model.PaymentMethod == "Cash" ? "#e94560" : "#e2e8f0") !important">
+                                <i class="bi bi-cash-stack fs-3 text-success"></i>
+                                <div>
+                                    <div class="fw-bold" style="font-size:0.88rem">Tiền mặt tại quầy</div>
+                                    <div class="text-muted" style="font-size:0.75rem">Nhập tiền khách đưa &amp; tính tiền thừa</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Khung chi tiết khi chọn Tiền mặt: Số tiền khách đưa & Số tiền trả lại khách -->
+                <div id="cashPaymentPanel" class="p-3 rounded-3 mb-3 @(Model.PaymentMethod == "Cash" ? "" : "d-none")"
+                     style="background:#f0fdf4;border:1px solid #bbf7d0">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-success mb-1">
+                                <i class="bi bi-cash-coin me-1"></i>Số tiền khách đưa (VND) <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" name="cashReceived" id="inpCashReceived" class="form-control fw-bold"
+                                   min="0" step="1000" value="@Model.CashReceived" />
+                            <div class="d-flex flex-wrap gap-1 mt-2">
+                                <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 quick-cash-btn" data-exact="true" style="font-size:0.72rem">Khách đưa vừa đủ</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="100000" style="font-size:0.72rem">100.000 VND</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="200000" style="font-size:0.72rem">200.000 VND</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="500000" style="font-size:0.72rem">500.000 VND</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="1000000" style="font-size:0.72rem">1.000.000 VND</button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3 rounded-3 bg-white border text-end">
+                                <div class="text-muted" style="font-size:0.78rem">Số tiền trả lại khách (Tiền thừa):</div>
+                                <div class="fs-4 fw-bold text-success" id="lblChangeAmount">@VnFormat.Money(Model.ChangeAmount)</div>
+                                <div id="lblCashShortfall" class="text-danger fw-semibold d-none" style="font-size:0.75rem">
+                                    Số tiền khách đưa chưa đủ tổng thanh toán!
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label d-flex justify-content-between">
+                        <span>Mã hóa đơn</span>
+                        <a href="javascript:void(0)" id="btnNewRef" class="text-primary text-decoration-none" style="font-size:0.78rem">
+                            <i class="bi bi-arrow-clockwise"></i> Tạo mã mới
+                        </a>
+                    </label>
+                    <input type="text" name="referenceCode" id="inpRefCode" class="form-control font-monospace"
+                           value="@Model.ReferenceCode" required />
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn-primary-bms px-4 py-2" id="btnCommitCheckout">
+                        <i class="bi bi-check2-circle"></i> Xác nhận Thanh toán @(isGuest ? "(Khách lẻ)" : "& Cộng điểm Hội viên")
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ═══════════ CỘT PHẢI: PHIẾU TẠM TÍNH & MÃ VIETQR TRỰC TIẾP ═══════════ -->
+    <div class="col-lg-5">
+        <div class="data-card p-4">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
+                <div>
+                    <div class="fw-bold">PHIẾU THANH TOÁN HÓA ĐƠN</div>
+                    <div class="text-muted" style="font-size:0.78rem">Mã HĐ: <code id="rcpRef">@Model.ReferenceCode</code></div>
+                </div>
+                <span id="rcpMemberBadge" class="badge @(isGuest ? "bg-secondary" : "bg-danger")">
+                    @(isGuest ? "KHÁCH LẺ" : $"HỘI VIÊN: {detail?.FullName}")
+                </span>
+            </div>
+
+            <div id="rcpErrors" class="alert alert-danger py-2 mb-3 @(p != null && !p.IsValid ? "" : "d-none")" style="font-size:0.8rem">
+                @if (p != null && !p.IsValid)
+                {
+                    foreach (var e in p.Errors) { <div>• @e</div> }
+                }
+            </div>
+
+            <div class="d-flex justify-content-between py-1" style="font-size:0.88rem">
+                <span>Tiền giờ chơi bàn:</span>
+                <strong id="rcpPlay">@VnFormat.Money(Model.PlaytimeAmount)</strong>
+            </div>
+            <div class="d-flex justify-content-between py-1 border-bottom pb-2" style="font-size:0.88rem">
+                <span>Đồ ăn &amp; nước uống (F&amp;B):</span>
+                <strong id="rcpFnb">@VnFormat.Money(Model.FandBAmount)</strong>
+            </div>
+
+            <div class="d-flex justify-content-between py-1 mt-2 text-success" style="font-size:0.86rem">
+                <span>Ưu đãi hạng (<span id="rcpTierName">@(isGuest ? "Khách lẻ" : (p?.TierName ?? "Member"))</span> -<span id="rcpTierPct">@(isGuest ? "0" : (p?.TierDiscountPercent.ToString("0.##") ?? "0"))</span>% giờ):</span>
+                <span id="rcpTierDisc">-@VnFormat.Money(p?.TierDiscountAmount ?? 0)</span>
+            </div>
+            <div class="d-flex justify-content-between py-1 text-success" style="font-size:0.86rem">
+                <span>Giảm voucher:</span>
+                <span id="rcpVoucherDisc">-@VnFormat.Money(p?.VoucherDiscountAmount ?? 0)</span>
+            </div>
+            <div class="d-flex justify-content-between py-1 border-bottom pb-2 text-success" style="font-size:0.86rem">
+                <span>Đổi điểm thưởng:</span>
+                <span id="rcpPointsDisc">-@VnFormat.Money(p?.PointsDiscountAmount ?? 0)</span>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center py-3 border-bottom">
+                <span class="fw-bold">TỔNG CẦN THANH TOÁN:</span>
+                <span class="fw-bold fs-4 text-danger" id="rcpFinal">@VnFormat.Money(finalAmt)</span>
+            </div>
+
+            <!-- Khu vực hiển thị trực tiếp Mã QR VietQR với số tiền chính xác -->
+            <div id="vietQrBox" class="mt-3 p-3 rounded-3 text-center @(Model.PaymentMethod == "Cash" ? "d-none" : "")"
+                 style="background:#fff1f2;border:1px dashed #e94560">
+                <div class="fw-bold text-danger mb-1" style="font-size:0.88rem">
+                    <i class="bi bi-qr-code me-1"></i>MÃ VIETQR THANH TOÁN TRỰC TIẾP CHO KHÁCH
+                </div>
+                <div class="text-muted mb-2" style="font-size:0.76rem">
+                    Khách quét mã bằng ứng dụng Ngân hàng — Số tiền &amp; nội dung chuyển khoản tự động điền sẵn
+                </div>
+                <div class="bg-white p-2 rounded-3 d-inline-block shadow-sm border mb-2">
+                    <img id="vietQrImg"
+                         src="https://img.vietqr.io/image/MB-2107072003-compact2.png?amount=@((long)finalAmt)&addInfo=@(Uri.EscapeDataString(Model.ReferenceCode))&accountName=CLB%20BIDA%20BMS"
+                         alt="VietQR Thanh toán"
+                         style="max-width:220px;height:auto;border-radius:6px" />
+                </div>
+                <div style="font-size:0.82rem">
+                    <div>Số tiền hiển thị trên QR: <strong class="text-danger fs-6" id="qrAmountText">@VnFormat.Money(finalAmt)</strong></div>
+                    <div class="text-muted" style="font-size:0.75rem">STK: <strong>2107072003</strong> · NH MB Bank · Nội dung: <code id="qrRefText">@Model.ReferenceCode</code></div>
+                </div>
+            </div>
+
+            <!-- Khu vực tóm tắt Tiền mặt trên phiếu -->
+            <div id="cashReceiptBox" class="mt-3 p-3 rounded-3 @(Model.PaymentMethod == "Cash" ? "" : "d-none")"
+                 style="background:#f0fdf4;border:1px solid #bbf7d0;font-size:0.85rem">
+                <div class="fw-bold text-success mb-2"><i class="bi bi-cash-stack me-1"></i>CHI TIẾT THU TIỀN MẶT</div>
+                <div class="d-flex justify-content-between py-1">
+                    <span>Số tiền khách đưa:</span>
+                    <strong id="rcpCashIn">@VnFormat.Money(Model.CashReceived)</strong>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-top mt-1 pt-2">
+                    <span>Số tiền trả lại khách:</span>
+                    <strong class="text-success fs-6" id="rcpCashChange">@VnFormat.Money(Model.ChangeAmount)</strong>
+                </div>
+            </div>
+
+            <!-- Thông tin điểm cộng & xét hạng -->
+            <div class="mt-3 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.84rem">
+                <div class="d-flex justify-content-between mb-1">
+                    <span>Điểm cộng sau thanh toán (VietQR / Tiền mặt):</span>
+                    <strong class="text-primary" id="rcpEarn">+@(isGuest ? 0 : (p?.PointsToEarn ?? 0)) điểm</strong>
+                </div>
+                <div id="rcpTierStatus" class="mt-2 pt-2 border-top text-muted" style="font-size:0.8rem">
+                    @if (isGuest)
+                    {
+                        <span>Khách lẻ không tích điểm. Để đăng ký hội viên mới, vui lòng thực hiện tại màn <strong>Tra cứu hội viên</strong>.</span>
+                    }
+                    else if (p != null)
+                    {
+                        if (p.WillUpgradeTier)
+                        {
+                            <span class="text-success fw-semibold"><i class="bi bi-award me-1"></i>Đủ điều kiện lên hạng @p.NextTierName ngay sau hóa đơn này!</span>
+                        }
+                        else if (p.NextTierName != null && p.AmountNeededForNextTier > 0)
+                        {
+                            <span>Cần thêm <strong>@VnFormat.Money(p.AmountNeededForNextTier)</strong> tổng mức chi tiêu để lên hạng <strong>@p.NextTierName</strong>.</span>
+                        }
+                        else
+                        {
+                            <span>Khách hàng đang ở hạng cao nhất.</span>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        const modeInput = document.getElementById('inpCustomerMode');
+        const custInput = document.getElementById('inpCustomerId');
+        const playInput = document.getElementById('inpPlaytime');
+        const fnbInput = document.getElementById('inpFnb');
+        const voucherInput = document.getElementById('inpVoucher');
+        const pointsInput = document.getElementById('inpPoints');
+        const refInput = document.getElementById('inpRefCode');
+        const maxBtn = document.getElementById('btnMaxPoints');
+        const lblMaxPts = document.getElementById('lblMaxPts');
+        const newRefBtn = document.getElementById('btnNewRef');
+
+        const paymentMethodInput = document.getElementById('inpPaymentMethod');
+        const btnVietQR = document.getElementById('btnMethodVietQR');
+        const btnCash = document.getElementById('btnMethodCash');
+        const cashPanel = document.getElementById('cashPaymentPanel');
+        const cashReceivedInput = document.getElementById('inpCashReceived');
+        const lblChangeAmount = document.getElementById('lblChangeAmount');
+        const lblCashShortfall = document.getElementById('lblCashShortfall');
+        const vietQrBox = document.getElementById('vietQrBox');
+        const vietQrImg = document.getElementById('vietQrImg');
+        const qrAmountText = document.getElementById('qrAmountText');
+        const qrRefText = document.getElementById('qrRefText');
+        const cashReceiptBox = document.getElementById('cashReceiptBox');
+        const rcpCashIn = document.getElementById('rcpCashIn');
+        const rcpCashChange = document.getElementById('rcpCashChange');
+        const btnCommitCheckout = document.getElementById('btnCommitCheckout');
+
+        // Tìm kiếm nhanh hội viên theo Tên hoặc SĐT ngay trong dropdown & tự động đồng bộ thông tin bên dưới + phiếu bên phải
+        const memberSearchBox = document.getElementById('memberSearchBox');
+        const customerSelect = document.getElementById('customerIdSelect');
+        const lblMemberName = document.getElementById('lblMemberName');
+        const lblMemberPhone = document.getElementById('lblMemberPhone');
+        const lblMemberTierBadge = document.getElementById('lblMemberTierBadge');
+        const lblMemberPoints = document.getElementById('lblMemberPoints');
+        const lblMemberSpend12M = document.getElementById('lblMemberSpend12M');
+        const btnMemberProfile = document.getElementById('btnMemberProfile');
+        const rcpMemberBadge = document.getElementById('rcpMemberBadge');
+        const memberVoucherList = document.getElementById('memberVoucherList');
+        const btnClearVoucher = document.getElementById('btnClearVoucher');
+
+        function syncSelectedCustomerToForm(newCustomerId, resetVoucherAndPoints) {
+            if (!newCustomerId || !custInput) return;
+            const changed = custInput.value !== newCustomerId;
+            custInput.value = newCustomerId;
+            if (btnMemberProfile) {
+                btnMemberProfile.href = `/CustomerManagement/Profile/${encodeURIComponent(newCustomerId)}`;
+            }
+            if (changed && resetVoucherAndPoints) {
+                if (voucherInput) voucherInput.value = '';
+                if (pointsInput) pointsInput.value = '0';
+            }
+            refreshPreview(changed);
+        }
+
+        if (btnClearVoucher && voucherInput) {
+            btnClearVoucher.addEventListener('click', function () {
+                voucherInput.value = '';
+                refreshPreview(false);
+            });
+        }
+
+        if (memberSearchBox && customerSelect) {
+            const allOptions = Array.from(customerSelect.options).map(opt => ({
+                value: opt.value,
+                text: opt.text,
+                name: opt.getAttribute('data-name') || '',
+                phone: opt.getAttribute('data-phone') || '—',
+                tier: opt.getAttribute('data-tier') || 'Member',
+                points: opt.getAttribute('data-points') || '0',
+                search: (opt.getAttribute('data-search') || opt.text).toLowerCase(),
+                selected: opt.selected
+            }));
+
+            memberSearchBox.addEventListener('input', function () {
+                const term = (memberSearchBox.value || '').trim().toLowerCase();
+                const currentVal = custInput ? custInput.value : customerSelect.value;
+                customerSelect.innerHTML = '';
+                const matched = allOptions.filter(o => !term || o.search.includes(term));
+                if (matched.length === 0) {
+                    const emptyOpt = document.createElement('option');
+                    emptyOpt.value = '';
+                    emptyOpt.text = `-- Không tìm thấy hội viên khớp với "${memberSearchBox.value}" --`;
+                    customerSelect.appendChild(emptyOpt);
+                    return;
+                }
+                let pickedVal = '';
+                matched.forEach((o, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = o.value;
+                    opt.text = o.text;
+                    opt.setAttribute('data-name', o.name);
+                    opt.setAttribute('data-phone', o.phone);
+                    opt.setAttribute('data-tier', o.tier);
+                    opt.setAttribute('data-points', o.points);
+                    if ((!term && o.value === currentVal) || (term && idx === 0)) {
+                        opt.selected = true;
+                        pickedVal = o.value;
+                    }
+                    customerSelect.appendChild(opt);
+                });
+                if (!pickedVal && matched.length > 0) {
+                    customerSelect.options[0].selected = true;
+                    pickedVal = matched[0].value;
+                }
+                if (pickedVal) {
+                    const pickedObj = matched.find(m => m.value === pickedVal);
+                    if (pickedObj) {
+                        if (lblMemberName) lblMemberName.textContent = pickedObj.name;
+                        if (lblMemberPhone) lblMemberPhone.textContent = pickedObj.phone;
+                        if (lblMemberPoints) lblMemberPoints.textContent = Number(pickedObj.points || 0).toLocaleString('vi-VN') + ' điểm';
+                        if (rcpMemberBadge) rcpMemberBadge.textContent = 'HỘI VIÊN: ' + pickedObj.name;
+                    }
+                    syncSelectedCustomerToForm(pickedVal, true);
+                }
+            });
+
+            customerSelect.addEventListener('change', function () {
+                const val = customerSelect.value;
+                if (!val) return;
+                const selOpt = customerSelect.options[customerSelect.selectedIndex];
+                if (selOpt) {
+                    const name = selOpt.getAttribute('data-name');
+                    const phone = selOpt.getAttribute('data-phone');
+                    const pts = selOpt.getAttribute('data-points');
+                    if (name && lblMemberName) lblMemberName.textContent = name;
+                    if (phone && lblMemberPhone) lblMemberPhone.textContent = phone;
+                    if (pts && lblMemberPoints) lblMemberPoints.textContent = Number(pts || 0).toLocaleString('vi-VN') + ' điểm';
+                    if (name && rcpMemberBadge) rcpMemberBadge.textContent = 'HỘI VIÊN: ' + name;
+                }
+                syncSelectedCustomerToForm(val, true);
+            });
+
+            memberSearchBox.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (customerSelect.value) {
+                        syncSelectedCustomerToForm(customerSelect.value, true);
+                    }
+                }
+            });
+        }
+
+        let maxAllowed = @(p?.MaxRedeemablePoints ?? 0);
+        let currentFinalAmount = @((long)finalAmt);
+
+        function fmtMoney(n) {
+            return Math.round(n || 0).toLocaleString('vi-VN') + ' VND';
+        }
+
+        function updateQrAndCashUI() {
+            const method = paymentMethodInput.value;
+            const ref = (refInput.value || 'HD').trim();
+            const qrUrl = `https://img.vietqr.io/image/MB-2107072003-compact2.png?amount=${Math.max(0, Math.round(currentFinalAmount))}&addInfo=${encodeURIComponent(ref)}&accountName=CLB%20BIDA%20BMS`;
+            if (vietQrImg) vietQrImg.src = qrUrl;
+            if (qrAmountText) qrAmountText.textContent = fmtMoney(currentFinalAmount);
+            if (qrRefText) qrRefText.textContent = ref;
+
+            const cashIn = parseFloat(cashReceivedInput ? cashReceivedInput.value : 0) || 0;
+            const diff = cashIn - currentFinalAmount;
+            const change = Math.max(0, diff);
+
+            if (lblChangeAmount) lblChangeAmount.textContent = fmtMoney(change);
+            if (rcpCashIn) rcpCashIn.textContent = fmtMoney(cashIn);
+            if (rcpCashChange) rcpCashChange.textContent = fmtMoney(change);
+
+            if (method === 'Cash') {
+                if (diff < 0) {
+                    lblCashShortfall && lblCashShortfall.classList.remove('d-none');
+                    btnCommitCheckout && (btnCommitCheckout.disabled = true);
+                } else {
+                    lblCashShortfall && lblCashShortfall.classList.add('d-none');
+                    btnCommitCheckout && (btnCommitCheckout.disabled = false);
+                }
+            } else {
+                lblCashShortfall && lblCashShortfall.classList.add('d-none');
+                btnCommitCheckout && (btnCommitCheckout.disabled = false);
+            }
+        }
+
+        function setPaymentMethod(method) {
+            paymentMethodInput.value = method;
+            if (method === 'Cash') {
+                cashPanel.classList.remove('d-none');
+                cashReceiptBox.classList.remove('d-none');
+                vietQrBox.classList.add('d-none');
+                btnCash.style.background = '#fff1f2';
+                btnCash.style.borderColor = '#e94560';
+                btnVietQR.style.background = '#fff';
+                btnVietQR.style.borderColor = '#e2e8f0';
+                if (!cashReceivedInput.value || parseFloat(cashReceivedInput.value) < currentFinalAmount) {
+                    cashReceivedInput.value = Math.round(currentFinalAmount);
+                }
+            } else {
+                cashPanel.classList.add('d-none');
+                cashReceiptBox.classList.add('d-none');
+                vietQrBox.classList.remove('d-none');
+                btnVietQR.style.background = '#fff1f2';
+                btnVietQR.style.borderColor = '#e94560';
+                btnCash.style.background = '#fff';
+                btnCash.style.borderColor = '#e2e8f0';
+            }
+            updateQrAndCashUI();
+        }
+
+        if (btnVietQR) btnVietQR.addEventListener('click', () => setPaymentMethod('VietQR'));
+        if (btnCash) btnCash.addEventListener('click', () => setPaymentMethod('Cash'));
+        if (cashReceivedInput) cashReceivedInput.addEventListener('input', updateQrAndCashUI);
+
+        document.querySelectorAll('.quick-cash-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.getAttribute('data-exact') === 'true') {
+                    cashReceivedInput.value = Math.round(currentFinalAmount);
+                } else {
+                    cashReceivedInput.value = btn.getAttribute('data-amount');
+                }
+                updateQrAndCashUI();
+            });
+        });
+
+        function refreshPreview(reloadVouchers) {
+            const url = `/CashierSimulator/Preview?customerId=${encodeURIComponent(custInput ? custInput.value : '')}&customerMode=${encodeURIComponent(modeInput ? modeInput.value : 'member')}&playtimeAmount=${playInput.value || 0}&fandBAmount=${fnbInput.value || 0}&pointsToRedeem=${pointsInput ? (pointsInput.value || 0) : 0}&voucherCode=${encodeURIComponent(voucherInput ? (voucherInput.value || '') : '')}&referenceCode=${encodeURIComponent(refInput.value || '')}`;
+            fetch(url)
+                .then(r => r.json())
+                .then(d => {
+                    maxAllowed = d.maxRedeemablePoints || 0;
+                    if (lblMaxPts) lblMaxPts.textContent = maxAllowed;
+                    currentFinalAmount = d.finalAmount || 0;
+
+                    if (d.customerName && modeInput && modeInput.value !== 'guest') {
+                        if (lblMemberName) lblMemberName.textContent = d.customerName;
+                        if (lblMemberPhone) lblMemberPhone.textContent = d.customerPhone || '—';
+                        if (lblMemberPoints) lblMemberPoints.textContent = Number(d.rewardPoints || 0).toLocaleString('vi-VN') + ' điểm';
+                        if (lblMemberSpend12M) lblMemberSpend12M.textContent = fmtMoney(d.spend12Months || 0);
+                        if (lblMemberTierBadge) {
+                            lblMemberTierBadge.setAttribute('style', `${d.tierBadgeStyle || 'background:#dbeafe;color:#1d4ed8'};padding:2px 8px;border-radius:6px;font-weight:600`);
+                            lblMemberTierBadge.textContent = `Hạng ${d.tierName} (-${d.tierDiscountPercent}% giờ · ×${d.pointMultiplier || 1})`;
+                        }
+                        if (rcpMemberBadge) {
+                            rcpMemberBadge.textContent = 'HỘI VIÊN: ' + d.customerName;
+                        }
+                        if (reloadVouchers === true && memberVoucherList && Array.isArray(d.availableVouchers)) {
+                            memberVoucherList.innerHTML = '';
+                            d.availableVouchers.forEach(v => {
+                                const opt = document.createElement('option');
+                                opt.value = v.code;
+                                opt.text = v.label;
+                                memberVoucherList.appendChild(opt);
+                            });
+                        }
+                    }
+
+                    document.getElementById('rcpRef').textContent = refInput.value;
+                    document.getElementById('rcpPlay').textContent = fmtMoney(playInput.value);
+                    document.getElementById('rcpFnb').textContent = fmtMoney(fnbInput.value);
+                    document.getElementById('rcpTierName').textContent = d.tierName;
+                    document.getElementById('rcpTierPct').textContent = d.tierDiscountPercent;
+                    document.getElementById('rcpTierDisc').textContent = '-' + fmtMoney(d.tierDiscountAmount);
+                    document.getElementById('rcpVoucherDisc').textContent = '-' + fmtMoney(d.voucherDiscountAmount);
+                    document.getElementById('rcpPointsDisc').textContent = '-' + fmtMoney(d.pointsDiscountAmount);
+                    document.getElementById('rcpFinal').textContent = fmtMoney(d.finalAmount);
+                    document.getElementById('rcpEarn').textContent = '+' + d.pointsToEarn + ' điểm';
+
+                    const errBox = document.getElementById('rcpErrors');
+                    const voucherWarnBox = document.getElementById('lblVoucherWarning');
+                    if (!d.isValid && d.errors && d.errors.length > 0) {
+                        errBox.classList.remove('d-none');
+                        errBox.innerHTML = d.errors.map(e => `<div>• ${e}</div>`).join('');
+                        const vErrs = d.errors.filter(e => e.toLowerCase().includes('voucher') || e.toLowerCase().includes('hạng') || e.toLowerCase().includes('mã'));
+                        if (voucherWarnBox && vErrs.length > 0 && voucherInput && voucherInput.value.trim() !== '') {
+                            voucherWarnBox.classList.remove('d-none');
+                            voucherWarnBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>` + vErrs.join('<br/>');
+                            voucherInput.classList.add('is-invalid');
+                        } else if (voucherWarnBox) {
+                            voucherWarnBox.classList.add('d-none');
+                            voucherWarnBox.innerHTML = '';
+                            voucherInput && voucherInput.classList.remove('is-invalid');
+                        }
+                    } else {
+                        errBox.classList.add('d-none');
+                        errBox.innerHTML = '';
+                        if (voucherWarnBox) {
+                            voucherWarnBox.classList.add('d-none');
+                            voucherWarnBox.innerHTML = '';
+                        }
+                        voucherInput && voucherInput.classList.remove('is-invalid');
+                    }
+
+                    const statusBox = document.getElementById('rcpTierStatus');
+                    if (modeInput && modeInput.value === 'guest') {
+                        statusBox.innerHTML = 'Khách lẻ không tích điểm. Để đăng ký hội viên mới, vui lòng thực hiện tại màn <strong>Tra cứu hội viên</strong>.';
+                    } else if (d.willUpgradeTier) {
+                        statusBox.innerHTML = `<span class="text-success fw-bold"><i class="bi bi-trophy-fill me-1"></i>Sắp lên hạng ${d.nextTierName} ngay sau hóa đơn này!</span>`;
+                    } else if (d.nextTierName && d.amountNeededForNextTier > 0) {
+                        statusBox.innerHTML = `Còn thiếu <strong>${fmtMoney(d.amountNeededForNextTier)}</strong> tổng mức chi tiêu để lên hạng <strong>${d.nextTierName}</strong>.`;
+                    } else {
+                        statusBox.innerHTML = 'Khách đang ở hạng cao nhất.';
+                    }
+
+                    updateQrAndCashUI();
+                });
+        }
+
+        document.querySelectorAll('.calc-trigger').forEach(el => {
+            el.addEventListener('input', () => refreshPreview(false));
+            el.addEventListener('change', () => refreshPreview(false));
+        });
+
+        refInput.addEventListener('input', () => {
+            document.getElementById('rcpRef').textContent = refInput.value;
+            updateQrAndCashUI();
+        });
+
+        if (maxBtn) {
+            maxBtn.addEventListener('click', () => {
+                pointsInput.value = maxAllowed;
+                refreshPreview();
+            });
+        }
+
+        newRefBtn.addEventListener('click', () => {
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const rand = Math.floor(1000 + Math.random() * 9000);
+            refInput.value = `HD-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}-${rand}`;
+            document.getElementById('rcpRef').textContent = refInput.value;
+            updateQrAndCashUI();
+        });
+
+        updateQrAndCashUI();
+    })();
+</script>
+}

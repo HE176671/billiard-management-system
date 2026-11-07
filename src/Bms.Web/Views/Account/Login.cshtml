@@ -81,7 +81,7 @@
 <body>
     <div class="login-card">
         <div class="login-logo">🎱 BMS</div>
-        <div class="login-subtitle">Billiard Management System</div>
+        <div class="login-subtitle">Hệ thống quản lý nội bộ — Nhân viên &amp; Quản trị viên</div>
 
         @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ContainsKey(string.Empty))
         {
@@ -97,7 +97,7 @@
             @Html.AntiForgeryToken()
             <div class="mb-3">
                 <label asp-for="Username" class="form-label"></label>
-                <input asp-for="Username" class="form-control" placeholder="admin.demo" autocomplete="username" />
+                <input asp-for="Username" class="form-control" placeholder="Nhập tài khoản nhân viên / quản trị" autocomplete="username" />
                 <span asp-validation-for="Username" class="text-danger"></span>
             </div>
             <div class="mb-3">
@@ -110,9 +110,6 @@
                 <label asp-for="RememberMe" class="form-check-label" for="rememberMe"></label>
             </div>
             <button type="submit" class="btn btn-login btn-primary w-100">Đăng nhập</button>
-            <div class="text-center mt-3" style="color:rgba(255,255,255,0.5);font-size:0.82rem">
-                Chưa có tài khoản? <a asp-action="Register" style="color:#e94560">Đăng ký ngay</a>
-            </div>
         </form>
     </div>
 

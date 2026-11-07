@@ -1,0 +1,195 @@
+@model List<Bms.Web.Data.RewardItemEntity>
+@using Bms.Web.Data
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Danh mục quà đổi điểm";
+    Layout = "_AdminLayout";
+    var tiers = ViewBag.Tiers as List<MembershipTier> ?? new List<MembershipTier>();
+    var editItem = ViewBag.EditItem as RewardItemEntity;
+    var campaignUsage = ViewBag.CampaignUsage as Dictionary<int, int> ?? new Dictionary<int, int>();
+    var campaignIssued = ViewBag.CampaignIssued as Dictionary<int, int> ?? new Dictionary<int, int>();
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="data-card">
+            <div class="data-card-header">
+                <span class="data-card-title"><i class="bi bi-gift me-2"></i>Danh mục quà &amp; voucher đổi điểm (@Model.Count)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Mã</th>
+                            <th>Tên phần quà</th>
+                            <th>Phân loại</th>
+                            <th class="text-end">Điểm đổi</th>
+                            <th class="text-end">Giá trị quy đổi</th>
+                            <th>Hạng áp dụng</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr style="@(editItem?.Id == item.Id ? "background:#fff1f3" : "")">
+                                <td><code>@item.Code</code></td>
+                                <td>
+                                    <strong>@item.Name</strong>
+                                    <div class="text-muted" style="font-size:0.75rem">@item.Description</div>
+                                    @if (campaignUsage.TryGetValue(item.Id, out var usedIn) && usedIn > 0)
+                                    {
+                                        <div class="mt-1" style="font-size:0.72rem;color:#1e40af">
+                                            <i class="bi bi-megaphone me-1"></i>Dùng trong @usedIn chương trình ưu đãi · đã phát @(campaignIssued.GetValueOrDefault(item.Id)) mã
+                                        </div>
+                                    }
+                                </td>
+                                <td><span class="badge bg-light text-dark border">@VnFormat.RewardTypeLabel(item.RewardType)</span></td>
+                                <td class="text-end fw-bold text-danger">@VnFormat.Number(item.PointCost) điểm</td>
+                                <td class="text-end">@(item.DiscountValue.HasValue ? VnFormat.Money(item.DiscountValue.Value) : "—")</td>
+                                <td>@(item.MinTier != null ? $"Từ hạng {item.MinTier.TierName}" : "Mọi hạng")</td>
+                                <td>
+                                    @if (item.IsActive)
+                                    {
+                                        <span class="badge-active">Đang mở</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge-inactive">Đã đóng</span>
+                                    }
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <form asp-action="ToggleStatus" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@item.Id" />
+                                        @if (item.IsActive)
+                                        {
+                                            <button type="submit" class="btn-outline-bms py-1 px-2 me-1" style="font-size:0.75rem" title="Đóng mã quà tặng này">
+                                                <i class="bi bi-toggle-on text-success"></i> Đóng mã
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button type="submit" class="btn-primary-bms py-1 px-2 me-1" style="font-size:0.75rem" title="Mở lại mã quà tặng này">
+                                                <i class="bi bi-toggle-off"></i> Mở mã
+                                            </button>
+                                        }
+                                    </form>
+                                    @if (item.IsActive)
+                                    {
+                                        <a asp-controller="Campaign" asp-action="Index" asp-route-rewardItemId="@item.Id" class="btn-sm-icon me-1" title="Gửi ưu đãi kèm voucher này">
+                                            <i class="bi bi-send"></i>
+                                        </a>
+                                    }
+                                    <a asp-action="Index" asp-route-editId="@item.Id" class="btn-sm-icon" title="Chỉnh sửa phần quà">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="data-card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0">
+                    <i class="bi @(editItem != null ? "bi-pencil-square" : "bi-plus-circle") me-1 text-danger"></i>
+                    @(editItem != null ? $"Cập nhật mã {editItem.Code}" : "Thêm phần quà mới")
+                </h6>
+                @if (editItem != null)
+                {
+                    <a asp-action="Index" class="btn-sm-icon" title="Hủy chỉnh sửa"><i class="bi bi-x-lg"></i></a>
+                }
+            </div>
+            <form asp-action="Save" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@(editItem?.Id ?? 0)" />
+                <div class="mb-2">
+                    <label class="form-label">Mã quà</label>
+                    <input type="text" name="code" class="form-control text-uppercase"
+                           value="@(editItem?.Code ?? "")" placeholder="VD: COMBO_VIP" required />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Tên phần quà</label>
+                    <input type="text" name="name" class="form-control"
+                           value="@(editItem?.Name ?? "")" placeholder="Nước ngọt miễn phí" required />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Mô tả ngắn</label>
+                    <input type="text" name="description" class="form-control"
+                           value="@(editItem?.Description ?? "")" />
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Điểm đổi</label>
+                        <input type="number" name="pointCost" id="inpRewardPointCost" class="form-control" min="0" step="1"
+                               data-non-negative="true" data-field-label="Điểm đổi"
+                               value="@(editItem?.PointCost ?? 0)" required />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Hình thức</label>
+                        <select name="rewardType" class="form-select">
+                            <option value="Gift" selected="@(editItem?.RewardType == "Gift")">Quà tại quầy</option>
+                            <option value="FreeHour" selected="@(editItem?.RewardType == "FreeHour")">Giảm tiền giờ chơi</option>
+                            <option value="BillDiscount" selected="@(editItem?.RewardType == "BillDiscount")">Giảm tổng hóa đơn</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label">Giá trị quy đổi (VND)</label>
+                        <input type="number" name="discountValue" id="inpRewardDiscountValue" class="form-control" min="0" step="1000"
+                               data-non-negative="true" data-field-label="Giá trị quy đổi (VND)"
+                               value="@(editItem?.DiscountValue?.ToString("0") ?? "0")" required />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Hạng tối thiểu</label>
+                        <select name="minTierId" class="form-select">
+                            <option value="" selected="@(editItem?.MinTierId == null)">Tất cả hạng</option>
+                            @foreach (var t in tiers)
+                            {
+                                <option value="@t.Id" selected="@(editItem?.MinTierId == t.Id)">Hạng @t.TierName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Trạng thái mã quà tặng</label>
+                    <select name="isActive" class="form-select">
+                        <option value="true" selected="@(editItem == null || editItem.IsActive)">Đang mở (Cho phép đổi điểm)</option>
+                        <option value="false" selected="@(editItem != null && !editItem.IsActive)">Đã đóng (Tạm ngưng đổi điểm)</option>
+                    </select>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn-primary-bms flex-grow-1 justify-content-center">
+                        <i class="bi bi-check-lg"></i> @(editItem != null ? "Lưu cập nhật" : "Thêm phần quà")
+                    </button>
+                    @if (editItem != null)
+                    {
+                        <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
