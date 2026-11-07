@@ -3,6 +3,7 @@
     ViewData["Title"] = "Tra cứu tại quầy";
     Layout = "_AdminLayout";
     var initialQuery = ViewData["InitialQuery"]?.ToString() ?? "";
+    var maxAdultBirthDate = DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("yyyy-MM-dd");
 }
 
 @if (TempData["Success"] != null)
@@ -27,7 +28,7 @@
             <div class="data-card-header">
                 <span class="data-card-title"><i class="bi bi-search me-2"></i>Tra cứu hội viên tại quầy</span>
                 <button type="button" class="btn-primary-bms" data-bs-toggle="modal" data-bs-target="#quickEnrollModal" id="btnOpenQuickEnroll">
-                    <i class="bi bi-person-plus"></i> Đăng ký hội viên mới
+                    <i class="bi bi-person-plus"></i> Đăng ký hội viên mới (CCCD 18+)
                 </button>
             </div>
 
@@ -35,7 +36,7 @@
                 <div class="input-group">
                     <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
                     <input type="text" id="lookupInput" class="form-control"
-                           placeholder="Nhập số điện thoại, mã thẻ (MB...) hoặc họ tên khách hàng..."
+                           placeholder="Nhập số điện thoại, họ tên hoặc email khách hàng..."
                            value="@initialQuery" autofocus autocomplete="off" />
                 </div>
             </div>
@@ -43,13 +44,13 @@
             <!-- Khu vực hiển thị kết quả AJAX -->
             <div id="lookupResults" class="p-3">
                 <div class="text-center text-muted py-4" style="font-size:0.85rem">
-                    Nhập ít nhất 2 ký tự hoặc 4 số điện thoại để tra cứu thông tin hội viên.
+                    Nhập ít nhất 2 ký tự (họ tên / email) hoặc số điện thoại để tra cứu thông tin hội viên.
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ═══════════ Cột phải: Xác nhận mã Voucher quà tặng ═══════════ -->
+    <!-- ═══════════ Cột phải: Xác nhận mã Voucher quà tặng & Chuyển sang Thanh toán ═══════════ -->
     <div class="col-lg-4">
         <div class="data-card p-3">
             <div class="fw-semibold mb-1" style="font-size:0.9rem"><i class="bi bi-ticket-perforated me-2 text-danger"></i>Đổi voucher quà tại quầy</div>
@@ -72,67 +73,75 @@
 
             <hr class="my-3" />
             <div class="d-flex flex-column gap-2">
-                <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-outline-bms justify-content-center">
-                    <i class="bi bi-receipt-cutoff"></i> Tính tiền &amp; Tích điểm
+                <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-primary-bms justify-content-center">
+                    <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
                 </a>
-                @if (User.IsInRole("Admin"))
-                {
-                    <a asp-controller="CustomerManagement" asp-action="Index" class="btn-outline-bms justify-content-center">
-                        <i class="bi bi-people"></i> Danh sách hội viên
-                    </a>
-                }
+                <a asp-controller="CustomerManagement" asp-action="Index" class="btn-outline-bms justify-content-center">
+                    <i class="bi bi-people"></i> Danh sách hội viên
+                </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal Đăng ký hội viên nhanh tại quầy -->
+<!-- Modal Đăng ký tài khoản hội viên tại quầy (Kiểm tra CCCD >= 18 tuổi, không dùng thẻ vật lý) -->
 <div class="modal fade" id="quickEnrollModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-3 border-0 shadow">
             <div class="modal-header">
                 <h5 class="modal-title fw-bold" style="font-size:1rem">
-                    <i class="bi bi-person-plus me-2 text-danger"></i>Đăng ký thẻ hội viên tại quầy
+                    <i class="bi bi-person-plus me-2 text-danger"></i>Đăng ký tài khoản hội viên tại quầy
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form asp-controller="CustomerManagement" asp-action="QuickEnroll" method="post">
                 @Html.AntiForgeryToken()
                 <div class="modal-body">
+                    <div class="alert alert-info py-2 mb-3" style="font-size:0.8rem">
+                        <i class="bi bi-person-badge me-1"></i>
+                        <strong>Quy định đăng ký tại quầy:</strong> Khách hàng để lại <strong>SĐT, Email, Họ tên, Ngày tháng năm sinh</strong> và nhân viên kiểm tra <strong>CCCD đủ 18 tuổi trở lên</strong> bên ngoài trước khi kích hoạt tài khoản (+10 điểm chào mừng).
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Số điện thoại <span class="text-danger">*</span></label>
                         <input type="text" name="PhoneNumber" id="enrollPhone" class="form-control"
                                pattern="^0\d{9}$" maxlength="10" placeholder="0901234567" required />
-                        <div class="form-text">Gồm 10 chữ số, bắt đầu bằng số 0.</div>
+                        <div class="form-text">Gồm 10 chữ số, bắt đầu bằng số 0 (dùng để định danh hội viên).</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Họ và tên khách hàng <span class="text-danger">*</span></label>
+                        <label class="form-label">Họ và tên khách hàng (theo CCCD) <span class="text-danger">*</span></label>
                         <input type="text" name="FullName" id="enrollName" class="form-control"
                                maxlength="100" placeholder="Nguyễn Văn A" required />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Email <span class="text-muted fw-normal">(không bắt buộc)</span></label>
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
                         <input type="email" name="Email" id="enrollEmail" class="form-control"
                                maxlength="256" pattern="^[a-zA-Z0-9._%+\-]+@@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$"
                                title="Nhập đúng định dạng email (ví dụ: khachhang@gmail.com)"
-                               placeholder="khachhang@gmail.com" />
-                        <div class="form-text">Định dạng chuẩn: ten@domain.com</div>
+                               placeholder="khachhang@gmail.com" required />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Ngày sinh <span class="text-muted fw-normal">(không bắt buộc)</span></label>
-                        <input type="date" name="DateOfBirth" class="form-control" />
+                        <label class="form-label">Ngày tháng năm sinh (theo CCCD — đủ 18 tuổi) <span class="text-danger">*</span></label>
+                        <input type="date" name="DateOfBirth" id="enrollDob" class="form-control"
+                               max="@maxAdultBirthDate" required />
+                        <div class="form-text">Khách hàng phải sinh từ ngày <strong>@DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("dd/MM/yyyy")</strong> trở về trước (đủ 18 tuổi).</div>
+                    </div>
+                    <div class="form-check p-2 rounded-3 mb-2" style="background:#fff1f2;border:1px solid #fecdd3;padding-left:2rem !important">
+                        <input class="form-check-input" type="checkbox" name="IsCccdVerified" value="true" id="enrollCccd" required />
+                        <label class="form-check-label fw-semibold text-danger" for="enrollCccd" style="font-size:0.84rem">
+                            Nhân viên đã kiểm tra CCCD trực tiếp bên ngoài và xác nhận khách đủ 18 tuổi trở lên <span class="text-danger">*</span>
+                        </label>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="MarketingOptIn" value="true" id="enrollOptIn" checked />
                         <label class="form-check-label" for="enrollOptIn" style="font-size:0.85rem">
-                            Nhận thông báo ưu đãi và quà sinh nhật
+                            Nhận thông báo ưu đãi và quà sinh nhật qua Email/SĐT
                         </label>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn-outline-bms" data-bs-dismiss="modal">Đóng</button>
                     <button type="submit" class="btn-primary-bms">
-                        <i class="bi bi-check-lg"></i> Tạo thẻ hội viên
+                        <i class="bi bi-check-lg"></i> Đăng ký hội viên (+10 điểm)
                     </button>
                 </div>
             </form>
@@ -160,7 +169,7 @@
                 enrollPhone.value = q;
             }
             if (q.length < 2) {
-                box.innerHTML = '<div class="text-center text-muted py-4" style="font-size:0.85rem">Nhập ít nhất 2 ký tự hoặc 4 số điện thoại để tra cứu thông tin hội viên.</div>';
+                box.innerHTML = '<div class="text-center text-muted py-4" style="font-size:0.85rem">Nhập ít nhất 2 ký tự (họ tên / email) hoặc số điện thoại để tra cứu thông tin hội viên.</div>';
                 return;
             }
 
@@ -171,10 +180,15 @@
                         box.innerHTML = `
                             <div class="text-center py-4 border rounded-3 bg-light">
                                 <div class="fw-semibold mb-1">Chưa có hội viên nào khớp với "${q}"</div>
-                                <div class="text-muted mb-3" style="font-size:0.8rem">Bạn có thể tạo thẻ mới cho khách ngay tại quầy.</div>
-                                <button type="button" class="btn-primary-bms" onclick="document.getElementById('enrollPhone').value='${q.replace(/[^0-9]/g, '')}'; new bootstrap.Modal(document.getElementById('quickEnrollModal')).show();">
-                                    <i class="bi bi-person-plus"></i> Đăng ký SĐT này
-                                </button>
+                                <div class="text-muted mb-3" style="font-size:0.8rem">Bạn có thể hỏi khách có muốn đăng ký hội viên (kiểm tra CCCD đủ 18 tuổi) hoặc chuyển sang thanh toán khách lẻ.</div>
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-primary-bms" onclick="document.getElementById('enrollPhone').value='${q.replace(/[^0-9]/g, '')}'; new bootstrap.Modal(document.getElementById('quickEnrollModal')).show();">
+                                        <i class="bi bi-person-plus"></i> Đăng ký hội viên cho khách
+                                    </button>
+                                    <a href="/LoyaltyTest/Index?customerMode=guest" class="btn-outline-bms">
+                                        <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán (Khách lẻ)
+                                    </a>
+                                </div>
                             </div>`;
                         return;
                     }
@@ -182,21 +196,28 @@
                     let html = '<div class="list-group">';
                     items.forEach(item => {
                         html += `
-                            <a href="/CustomerManagement/Profile/${item.id}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
+                            <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
                                 <div>
-                                    <div class="fw-semibold">${item.fullName}
-                                        <span class="ms-2" style="${tierBadge(item.tierName)};padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600">${item.tierName}</span>
+                                    <div class="fw-semibold">
+                                        <a href="/CustomerManagement/Profile/${item.id}" class="text-dark text-decoration-none">${item.fullName}</a>
+                                        <span class="ms-2" style="${tierBadge(item.tierName)};padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:600">Hạng ${item.tierName}</span>
                                     </div>
                                     <div class="text-muted mt-1" style="font-size:0.8rem">
-                                        <span>SĐT: ${item.maskedPhone}</span>
-                                        <span class="ms-3">Mã thẻ: <code>${item.cardCode}</code></span>
+                                        <span><i class="bi bi-telephone me-1"></i>SĐT: <strong>${item.phoneNumber || item.maskedPhone}</strong></span>
+                                        <span class="ms-3"><i class="bi bi-envelope me-1"></i>Email: ${item.email || '—'}</span>
+                                        <span class="ms-3"><i class="bi bi-calendar-event me-1"></i>NS: ${item.dateOfBirth || '—'}</span>
                                     </div>
                                 </div>
-                                <div class="text-end">
-                                    <div class="fw-bold" style="color:#e94560">${item.rewardPoints.toLocaleString('vi-VN')} điểm</div>
-                                    <span class="text-muted" style="font-size:0.75rem">Xem hồ sơ <i class="bi bi-chevron-right"></i></span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="text-end me-2">
+                                        <div class="fw-bold" style="color:#e94560">${item.rewardPoints.toLocaleString('vi-VN')} điểm</div>
+                                        <a href="/CustomerManagement/Profile/${item.id}" class="text-muted text-decoration-none" style="font-size:0.75rem">Xem hồ sơ <i class="bi bi-chevron-right"></i></a>
+                                    </div>
+                                    <a href="/LoyaltyTest/Index?customerId=${item.id}&customerMode=member" class="btn-primary-bms py-1 px-3" style="font-size:0.8rem">
+                                        <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
+                                    </a>
                                 </div>
-                            </a>`;
+                            </div>`;
                     });
                     html += '</div>';
                     box.innerHTML = html;
@@ -214,4 +235,3 @@
     })();
 </script>
 }
-

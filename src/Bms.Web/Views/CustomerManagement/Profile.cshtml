@@ -42,11 +42,10 @@
 
                 <div class="text-muted mt-2 d-flex align-items-center gap-3 flex-wrap" style="font-size:0.84rem">
                     <span><i class="bi bi-telephone me-1"></i><strong>@(Model.PhoneNumber ?? "—")</strong></span>
-                    <span><i class="bi bi-credit-card-2-front me-1"></i>Mã thẻ: <code>@(Model.CardCode ?? "Chưa cấp")</code></span>
                     @if (Model.DateOfBirth.HasValue)
                     {
                         <span>
-                            <i class="bi bi-calendar-event me-1"></i>Ngày sinh: @Model.DateOfBirth.Value.ToString("dd/MM/yyyy")
+                            <i class="bi bi-calendar-event me-1"></i>Ngày sinh (CCCD): @Model.DateOfBirth.Value.ToString("dd/MM/yyyy")
                             @if (Model.IsBirthdaySoon)
                             {
                                 <span class="badge bg-warning text-dark ms-1">Sinh nhật @(Model.DaysUntilBirthday == 0 ? "hôm nay" : $"sau {Model.DaysUntilBirthday} ngày")</span>
@@ -63,8 +62,8 @@
 
         <!-- Nút hành động nhanh -->
         <div class="d-flex gap-2 flex-wrap">
-            <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@Model.Id" class="btn-primary-bms">
-                <i class="bi bi-receipt-cutoff"></i> Tính tiền cho khách
+            <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@Model.Id" asp-route-customerMode="member" class="btn-primary-bms">
+                <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
             </a>
             <a asp-controller="PointAdjustment" asp-action="Index" asp-route-customerId="@Model.Id" class="btn-outline-bms">
                 <i class="bi bi-sliders"></i> Điều chỉnh điểm

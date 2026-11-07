@@ -11,6 +11,8 @@ namespace Bms.Web.Controllers;
 [Authorize(Roles = "Staff,Manager,Admin")]
 public class LoyaltyTestController : Controller
 {
+    private const string PlaceholderEmailDomain = "@noemail.bms.local";
+
     private readonly ApplicationDbContext _context;
     private readonly ILoyaltyService _loyaltyService;
     private readonly IPointLedgerService _ledger;
@@ -37,11 +39,15 @@ public class LoyaltyTestController : Controller
     [HttpGet("/CashierSimulator/Index")]
     public async Task<IActionResult> Index(
         string? customerId = null,
+        string? customerMode = null,
+        int? sessionId = null,
         decimal playtimeAmount = 300000m,
         decimal fandBAmount = 80000m,
         int pointsToRedeem = 0,
         string? voucherCode = null,
-        string? referenceCode = null)
+        string? referenceCode = null,
+        string paymentMethod = "VietQR",
+        decimal? cashReceived = null)
     {
         var roleId = await _context.Roles.Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync();
 
@@ -54,15 +60,45 @@ public class LoyaltyTestController : Controller
                 Id = u.Id,
                 FullName = u.FullName,
                 PhoneNumber = u.PhoneNumber,
+                Email = u.Email != null && !u.Email.EndsWith(PlaceholderEmailDomain) ? u.Email : null,
+                DateOfBirth = u.DateOfBirth,
                 CardCode = u.EmployeeCode,
-                TierName = u.Tier != null ? u.Tier.TierName : null,
+                TierName = u.Tier != null ? u.Tier.TierName : "Member",
                 RewardPoints = u.RewardPoints
             })
             .ToListAsync();
 
-        if (string.IsNullOrEmpty(customerId) && customers.Count > 0)
+        // Tải danh sách phiên chơi từ bảng PlaySessions + Orders/OrderDetails (Tích hợp vận hành bàn & thực đơn F&B)
+        var activeSessions = await LoadCheckoutSessionsAsync();
+        CheckoutSessionItemViewModel? selectedSession = null;
+        var sessionOrderLines = new List<SessionOrderLineViewModel>();
+
+        if (sessionId.HasValue && sessionId.Value > 0)
+        {
+            selectedSession = activeSessions.FirstOrDefault(s => s.SessionId == sessionId.Value);
+            if (selectedSession != null)
+            {
+                playtimeAmount = selectedSession.PlaytimeAmount;
+                fandBAmount = selectedSession.FandBAmount;
+                if (string.IsNullOrEmpty(customerId) && !string.IsNullOrEmpty(selectedSession.CustomerId) && customerMode != "guest")
+                {
+                    customerId = selectedSession.CustomerId;
+                }
+            }
+            sessionOrderLines = await LoadSessionOrderLinesAsync(sessionId.Value);
+        }
+
+        string resolvedMode = string.Equals(customerMode, "guest", StringComparison.OrdinalIgnoreCase)
+            ? "guest"
+            : "member";
+
+        if (resolvedMode == "member" && string.IsNullOrEmpty(customerId) && customers.Count > 0)
         {
             customerId = customers[0].Id;
+        }
+        else if (resolvedMode == "guest")
+        {
+            customerId = null;
         }
 
         SelectedCustomerDetailViewModel? detail = null;
@@ -72,7 +108,7 @@ public class LoyaltyTestController : Controller
             ? $"HD-{DateTime.UtcNow:yyyyMMddHHmmss}"
             : referenceCode.Trim();
 
-        if (!string.IsNullOrEmpty(customerId))
+        if (resolvedMode == "member" && !string.IsNullOrEmpty(customerId))
         {
             var user = await _context.Users
                 .AsNoTracking()
@@ -103,6 +139,8 @@ public class LoyaltyTestController : Controller
                     Id = user.Id,
                     FullName = user.FullName,
                     PhoneNumber = user.PhoneNumber,
+                    Email = user.Email != null && !user.Email.EndsWith(PlaceholderEmailDomain) ? user.Email : null,
+                    DateOfBirth = user.DateOfBirth,
                     CardCode = user.EmployeeCode,
                     TierName = user.Tier?.TierName ?? "Member",
                     PointMultiplier = user.Tier?.PointMultiplier ?? 1,
@@ -173,11 +211,19 @@ public class LoyaltyTestController : Controller
                 .ToListAsync();
         }
 
+        decimal finalAmt = preview?.FinalAmount ?? Math.Max(0m, playtimeAmount + fandBAmount);
+        string normalizedMethod = string.Equals(paymentMethod, "Cash", StringComparison.OrdinalIgnoreCase) ? "Cash" : "VietQR";
+
         var vm = new LoyaltyTestViewModel
         {
+            CustomerMode = resolvedMode,
             SelectedCustomerId = customerId,
             Customers = customers,
             CustomerDetail = detail,
+            SelectedSessionId = sessionId,
+            ActiveSessions = activeSessions,
+            SelectedSession = selectedSession,
+            SessionOrderLines = sessionOrderLines,
             ReferenceCode = refCode,
             PlaytimeAmount = playtimeAmount,
             FandBAmount = fandBAmount,
@@ -185,6 +231,8 @@ public class LoyaltyTestController : Controller
             VoucherCode = voucherCode,
             AvailableVouchers = availableVouchers,
             Preview = preview,
+            PaymentMethod = normalizedMethod,
+            CashReceived = cashReceived ?? finalAmt,
             RecentReviews = recentReviews,
             CustomerNotifications = customerNotifications
         };
@@ -192,19 +240,44 @@ public class LoyaltyTestController : Controller
         return View(vm);
     }
 
-    // GET /CashierSimulator/Preview (AJAX JSON cho receipt live preview)
+    // GET /CashierSimulator/Preview (AJAX JSON cho receipt live preview — hỗ trợ cả Hội viên & Khách lẻ)
     [HttpGet("/CashierSimulator/Preview")]
     [HttpGet("/LoyaltyTest/Preview")]
     public async Task<IActionResult> Preview(
-        string customerId,
+        string? customerId,
         decimal playtimeAmount,
         decimal fandBAmount,
         int pointsToRedeem = 0,
         string? voucherCode = null,
-        string? referenceCode = null)
+        string? referenceCode = null,
+        string customerMode = "member")
     {
+        decimal subtotal = Math.Max(0m, playtimeAmount) + Math.Max(0m, fandBAmount);
+
+        if (string.Equals(customerMode, "guest", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(customerId))
+        {
+            return Json(new
+            {
+                isValid = true,
+                errors = Array.Empty<string>(),
+                tierName = "Khách lẻ",
+                tierDiscountPercent = 0m,
+                subtotal,
+                tierDiscountAmount = 0m,
+                voucherDiscountAmount = 0m,
+                pointsDiscountAmount = 0m,
+                maxRedeemablePoints = 0,
+                finalAmount = subtotal,
+                pointsToEarn = 0,
+                willUpgradeTier = false,
+                nextTierName = (string?)null,
+                spend12MonthsAfter = 0m,
+                amountNeededForNextTier = 0m
+            });
+        }
+
         var res = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
-            CustomerId: customerId ?? string.Empty,
+            CustomerId: customerId,
             ReferenceCode: referenceCode ?? "PREVIEW",
             InvoiceId: null,
             PlaytimeAmount: playtimeAmount,
@@ -233,20 +306,88 @@ public class LoyaltyTestController : Controller
         });
     }
 
-    // POST /CashierSimulator/CommitCheckout (Thanh toán trọn gói F3)
+    // POST /CashierSimulator/CommitCheckout (Thanh toán trọn gói F3: Hội viên hoặc Khách lẻ, VietQR hoặc Tiền mặt)
     [HttpPost("/CashierSimulator/CommitCheckout")]
     [HttpPost("/LoyaltyTest/CommitCheckout")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CommitCheckout(
-        string customerId,
+        string? customerId,
         string referenceCode,
         decimal playtimeAmount,
         decimal fandBAmount,
         int pointsToRedeem = 0,
-        string? voucherCode = null)
+        string? voucherCode = null,
+        string customerMode = "member",
+        string paymentMethod = "VietQR",
+        decimal? cashReceived = null,
+        int? sessionId = null)
     {
+        bool isGuest = string.Equals(customerMode, "guest", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(customerId);
+        bool isCash = string.Equals(paymentMethod, "Cash", StringComparison.OrdinalIgnoreCase);
+        string methodLabel = isCash ? "Tiền mặt" : "Chuyển khoản VietQR";
+        string dbPaymentMethod = isCash ? "Cash" : "Transfer";
+
+        if (playtimeAmount < 0 || fandBAmount < 0 || (playtimeAmount + fandBAmount) <= 0)
+        {
+            TempData["Error"] = "Tổng tiền giờ chơi và dịch vụ ăn uống phải lớn hơn 0 ₫.";
+            return RedirectToAction(nameof(Index), new { customerId, customerMode, sessionId, playtimeAmount, fandBAmount, paymentMethod });
+        }
+
+        if (isGuest)
+        {
+            decimal guestFinal = playtimeAmount + fandBAmount;
+            decimal actualCash = cashReceived ?? guestFinal;
+            if (isCash && actualCash < guestFinal)
+            {
+                TempData["Error"] = $"Số tiền khách đưa ({VnFormat.Money(actualCash)}) nhỏ hơn tổng cần thanh toán ({VnFormat.Money(guestFinal)}). Vui lòng nhập lại số tiền khách đưa.";
+                return RedirectToAction(nameof(Index), new { customerMode = "guest", sessionId, playtimeAmount, fandBAmount, paymentMethod = "Cash", cashReceived = actualCash, referenceCode });
+            }
+
+            decimal changeAmt = isCash ? (actualCash - guestFinal) : 0m;
+            await RecordInvoiceAndPaymentAsync(sessionId, null, playtimeAmount, fandBAmount, 0m, guestFinal, dbPaymentMethod);
+
+            string cashSummary = isCash
+                ? $" (Khách đưa: {VnFormat.Money(actualCash)} · Tiền thừa trả khách: {VnFormat.Money(changeAmt)})"
+                : $" (Đã xác nhận thanh toán qua mã VietQR số tiền {VnFormat.Money(guestFinal)})";
+
+            TempData["Success"] = $"Đã thanh toán thành công hóa đơn {referenceCode} cho Khách lẻ bằng hình thức {methodLabel}: {VnFormat.Money(guestFinal)}{cashSummary}.";
+            return RedirectToAction(nameof(Index), new
+            {
+                customerMode = "guest",
+                playtimeAmount,
+                fandBAmount,
+                paymentMethod,
+                referenceCode = $"HD-{DateTime.UtcNow:yyyyMMddHHmmss}"
+            });
+        }
+
+        // Luồng Khách hội viên: kiểm tra trước FinalAmount nếu thanh toán bằng Tiền mặt
+        var preview = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
+            CustomerId: customerId!,
+            ReferenceCode: referenceCode,
+            InvoiceId: null,
+            PlaytimeAmount: playtimeAmount,
+            FandBAmount: fandBAmount,
+            PointsToRedeem: pointsToRedeem,
+            VoucherCode: string.IsNullOrWhiteSpace(voucherCode) ? null : voucherCode,
+            CashierId: CurrentActorId));
+
+        if (!preview.IsValid)
+        {
+            TempData["Error"] = string.Join(" ", preview.Errors);
+            return RedirectToAction(nameof(Index), new { customerId, customerMode = "member", sessionId, playtimeAmount, fandBAmount, pointsToRedeem, voucherCode, paymentMethod, cashReceived, referenceCode });
+        }
+
+        decimal memberCashReceived = cashReceived ?? preview.FinalAmount;
+        if (isCash && memberCashReceived < preview.FinalAmount)
+        {
+            TempData["Error"] = $"Số tiền khách đưa ({VnFormat.Money(memberCashReceived)}) nhỏ hơn tổng thanh toán ({VnFormat.Money(preview.FinalAmount)}). Vui lòng nhập đủ số tiền khách đưa.";
+            return RedirectToAction(nameof(Index), new { customerId, customerMode = "member", sessionId, playtimeAmount, fandBAmount, pointsToRedeem, voucherCode, paymentMethod = "Cash", cashReceived = memberCashReceived, referenceCode });
+        }
+
+        // Thanh toán bằng bất kỳ hình thức nào (VietQR hoặc Tiền mặt) đều cộng điểm và xét hạng cho hội viên
         var result = await _loyaltyService.CommitCheckoutAsync(new CheckoutLoyaltyRequest(
-            CustomerId: customerId,
+            CustomerId: customerId!,
             ReferenceCode: referenceCode,
             InvoiceId: null,
             PlaytimeAmount: playtimeAmount,
@@ -265,17 +406,186 @@ public class LoyaltyTestController : Controller
         }
         else
         {
-            TempData["Success"] = result.Message;
+            decimal totalDiscount = (playtimeAmount + fandBAmount) - result.FinalAmount;
+            await RecordInvoiceAndPaymentAsync(sessionId, customerId, playtimeAmount, fandBAmount, totalDiscount, result.FinalAmount, dbPaymentMethod);
+
+            decimal memberChange = isCash ? (memberCashReceived - result.FinalAmount) : 0m;
+            string paymentDetail = isCash
+                ? $" [Hình thức: Tiền mặt · Khách đưa: {VnFormat.Money(memberCashReceived)} · Trả lại khách: {VnFormat.Money(memberChange)}]"
+                : $" [Hình thức: Chuyển khoản VietQR · Số tiền: {VnFormat.Money(result.FinalAmount)}]";
+
+            TempData["Success"] = result.Message + paymentDetail;
         }
 
         return RedirectToAction(nameof(Index), new
         {
             customerId,
+            customerMode = "member",
             playtimeAmount,
             fandBAmount,
             pointsToRedeem = 0,
+            paymentMethod,
             referenceCode
         });
+    }
+
+    // ── Helpers tích hợp Vận hành bàn (PlaySessions) & Thực đơn F&B (Orders/OrderDetails) ──
+
+    private async Task<List<CheckoutSessionItemViewModel>> LoadCheckoutSessionsAsync()
+    {
+        try
+        {
+            return await _context.Database.SqlQuery<CheckoutSessionItemViewModel>($@"
+                SELECT TOP 20
+                    s.Id AS SessionId,
+                    ISNULL(t.TableCode, CONCAT(N'Bàn #', s.TableId)) AS TableCode,
+                    s.CustomerId AS CustomerId,
+                    u.FullName AS CustomerName,
+                    s.StartAtUtc AS StartAtUtc,
+                    s.EndAtUtc AS EndAtUtc,
+                    s.HourlyRateSnapshot AS HourlyRateSnapshot,
+                    CASE
+                        WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
+                        ELSE CAST(ROUND(
+                            (CASE WHEN DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) < 15
+                                  THEN 15
+                                  ELSE DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
+                             END / 60.0) * s.HourlyRateSnapshot, -3) AS decimal(18,2))
+                    END AS PlaytimeAmount,
+                    ISNULL((
+                        SELECT SUM(od.Subtotal)
+                        FROM dbo.Orders o
+                        INNER JOIN dbo.OrderDetails od ON od.OrderId = o.Id
+                        WHERE o.SessionId = s.Id AND o.Status <> 'Cancelled'
+                    ), 0) AS FandBAmount,
+                    s.Status AS Status
+                FROM dbo.PlaySessions s
+                LEFT JOIN dbo.BilliardTables t ON t.Id = s.TableId
+                LEFT JOIN dbo.Users u ON u.Id = s.CustomerId
+                WHERE NOT EXISTS (SELECT 1 FROM dbo.Invoices i WHERE i.SessionId = s.Id AND i.Status = 'Paid')
+                ORDER BY CASE WHEN s.Status = 'Open' THEN 0 ELSE 1 END, s.StartAtUtc DESC, s.Id DESC
+            ").ToListAsync();
+        }
+        catch
+        {
+            return new List<CheckoutSessionItemViewModel>();
+        }
+    }
+
+    private async Task<List<SessionOrderLineViewModel>> LoadSessionOrderLinesAsync(int sessionId)
+    {
+        try
+        {
+            return await _context.Database.SqlQuery<SessionOrderLineViewModel>($@"
+                SELECT
+                    p.Name AS ProductName,
+                    SUM(od.Quantity) AS Quantity,
+                    od.UnitPrice AS UnitPrice,
+                    SUM(od.Subtotal) AS Subtotal
+                FROM dbo.Orders o
+                INNER JOIN dbo.OrderDetails od ON od.OrderId = o.Id
+                INNER JOIN dbo.Products p ON p.Id = od.ProductId
+                WHERE o.SessionId = {sessionId} AND o.Status <> 'Cancelled'
+                GROUP BY p.Name, od.UnitPrice
+                ORDER BY p.Name
+            ").ToListAsync();
+        }
+        catch
+        {
+            return new List<SessionOrderLineViewModel>();
+        }
+    }
+
+    private async Task RecordInvoiceAndPaymentAsync(
+        int? sessionId,
+        string? customerId,
+        decimal totalPlaytime,
+        decimal totalFandB,
+        decimal discountAmount,
+        decimal finalAmount,
+        string dbPaymentMethod)
+    {
+        try
+        {
+            int resolvedSessionId = sessionId ?? 0;
+            var actorId = CurrentActorId;
+            if (string.IsNullOrEmpty(actorId))
+            {
+                actorId = await _context.Users.AsNoTracking().Select(u => u.Id).FirstOrDefaultAsync();
+            }
+            if (string.IsNullOrEmpty(actorId)) return;
+
+            if (resolvedSessionId <= 0)
+            {
+                var tableId = (await _context.Database
+                    .SqlQuery<int>($"SELECT TOP 1 Id AS [Value] FROM dbo.BilliardTables ORDER BY Id")
+                    .ToListAsync()).FirstOrDefault();
+                if (tableId <= 0) return;
+
+                resolvedSessionId = (await _context.Database.SqlQuery<int>($@"
+                    INSERT INTO dbo.PlaySessions (TableId, CustomerId, OpenedById, ClosedById, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status)
+                    OUTPUT INSERTED.Id AS [Value]
+                    VALUES ({tableId}, {customerId}, {actorId}, {actorId}, DATEADD(hour, -1, SYSUTCDATETIME()), SYSUTCDATETIME(), {totalPlaytime}, {totalPlaytime}, 'Closed');
+                ").ToListAsync()).FirstOrDefault();
+            }
+            else
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                    UPDATE dbo.PlaySessions
+                    SET Status = 'Closed',
+                        EndAtUtc = ISNULL(EndAtUtc, SYSUTCDATETIME()),
+                        ClosedById = ISNULL(ClosedById, {actorId}),
+                        CustomerId = ISNULL(CustomerId, {customerId}),
+                        PlaytimeAmount = {totalPlaytime}
+                    WHERE Id = {resolvedSessionId};
+                ");
+            }
+
+            if (resolvedSessionId <= 0) return;
+
+            var existingInvoiceId = (await _context.Database
+                .SqlQuery<int>($"SELECT TOP 1 Id AS [Value] FROM dbo.Invoices WHERE SessionId = {resolvedSessionId}")
+                .ToListAsync()).FirstOrDefault();
+
+            int invoiceId = existingInvoiceId;
+            if (invoiceId <= 0)
+            {
+                invoiceId = (await _context.Database.SqlQuery<int>($@"
+                    INSERT INTO dbo.Invoices (SessionId, CustomerId, TotalPlaytime, TotalFandB, DiscountAmount, Status, CreatedAtUtc)
+                    OUTPUT INSERTED.Id AS [Value]
+                    VALUES ({resolvedSessionId}, {customerId}, {totalPlaytime}, {totalFandB}, {discountAmount}, 'Paid', SYSUTCDATETIME());
+                ").ToListAsync()).FirstOrDefault();
+            }
+            else
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                    UPDATE dbo.Invoices
+                    SET CustomerId = {customerId},
+                        TotalPlaytime = {totalPlaytime},
+                        TotalFandB = {totalFandB},
+                        DiscountAmount = {discountAmount},
+                        Status = 'Paid'
+                    WHERE Id = {invoiceId};
+                ");
+            }
+
+            if (invoiceId > 0)
+            {
+                var activeShiftId = await _context.WorkShifts.AsNoTracking()
+                    .Where(s => s.StaffId == actorId && s.Status == WorkShift.StatusActive)
+                    .Select(s => (int?)s.Id)
+                    .FirstOrDefaultAsync();
+
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                    INSERT INTO dbo.PaymentTransactions (InvoiceId, PaymentMethod, AmountPaid, WorkShiftId, ReceivedById, TransactionTimeUtc)
+                    VALUES ({invoiceId}, {dbPaymentMethod}, {finalAmount}, {activeShiftId}, {actorId}, SYSUTCDATETIME());
+                ");
+            }
+        }
+        catch
+        {
+            // Không làm gián đoạn luồng tính điểm nếu DB đang chạy trong ngữ cảnh giả lập thiếu bảng phụ
+        }
     }
 
     // POST /LoyaltyTest/SimulatePayment (Giữ lại cho tương thích cũ)

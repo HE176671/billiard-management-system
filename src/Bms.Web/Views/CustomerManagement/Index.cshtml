@@ -37,6 +37,9 @@
             <div class="data-card-header">
                 <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách hội viên (@Model.TotalCount)</span>
                 <div class="d-flex gap-2">
+                    <a asp-action="Lookup" class="btn-primary-bms">
+                        <i class="bi bi-person-plus"></i> Đăng ký tại quầy (CCCD 18+)
+                    </a>
                     <a asp-action="ExportCsv"
                        asp-route-search="@Model.Search"
                        asp-route-tierId="@Model.TierId"
@@ -48,7 +51,7 @@
             </div>
 
             <form method="get" id="searchForm" class="d-flex gap-2 flex-wrap p-3 border-bottom bg-light bg-opacity-50">
-                <input type="text" name="search" value="@Model.Search" placeholder="Tìm theo họ tên, số điện thoại hoặc mã thẻ..."
+                <input type="text" name="search" value="@Model.Search" placeholder="Tìm theo họ tên, số điện thoại hoặc email..."
                        class="form-control" style="flex:1;min-width:200px" />
                 <select name="segment" class="form-select" style="width:175px"
                         onchange="this.form.submit()">
@@ -88,7 +91,7 @@
                             <tr>
                                 <th>Họ và tên</th>
                                 <th>Số điện thoại</th>
-                                <th>Mã thẻ</th>
+                                <th>Email &amp; Ngày sinh</th>
                                 <th>Hạng</th>
                                 <th>Nhóm khách</th>
                                 <th class="text-end">Chi tiêu 12T</th>
@@ -106,8 +109,14 @@
                                             @c.FullName
                                         </a>
                                     </td>
-                                    <td>@(c.PhoneNumber ?? "—")</td>
-                                    <td><code class="text-secondary">@(c.CardCode ?? "—")</code></td>
+                                    <td class="fw-semibold">@(c.PhoneNumber ?? "—")</td>
+                                    <td>
+                                        <div style="font-size:0.82rem">@(c.Email ?? "—")</div>
+                                        @if (c.DateOfBirth.HasValue)
+                                        {
+                                            <div class="text-muted" style="font-size:0.75rem">NS: @c.DateOfBirth.Value.ToString("dd/MM/yyyy")</div>
+                                        }
+                                    </td>
                                     <td>
                                         @if (c.TierName != null)
                                         {
@@ -121,6 +130,10 @@
                                     <td class="text-end text-muted">@VnFormat.Money(c.Spend12M)</td>
                                     <td class="text-end fw-semibold">@VnFormat.Number(c.RewardPoints)</td>
                                     <td class="text-end text-nowrap">
+                                        <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@c.Id" asp-route-customerMode="member"
+                                           class="btn-outline-bms py-1 px-2 me-1" style="font-size:0.75rem" title="Chuyển sang Thanh toán">
+                                            <i class="bi bi-receipt-cutoff"></i> Thanh toán
+                                        </a>
                                         <a asp-action="Profile" asp-route-id="@c.Id" class="btn-sm-icon me-1" title="Xem hồ sơ hội viên">
                                             <i class="bi bi-person-vcard"></i>
                                         </a>
@@ -161,7 +174,7 @@
             <div class="form-card" id="customerDetailPanel" style="max-width:none">
                 <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
                     <h2 class="h6 fw-bold mb-0">
-                        <i class="bi bi-pencil-square me-2 text-danger"></i>Cập nhật thông tin
+                        <i class="bi bi-pencil-square me-2 text-danger"></i>Cập nhật thông tin hội viên
                     </h2>
                     <div class="d-flex gap-1">
                         <a asp-action="Profile" asp-route-id="@form.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
@@ -190,7 +203,7 @@
                     }
 
                     <div class="mb-3">
-                        <label class="form-label" for="FullName">Họ và tên <span class="text-danger">*</span></label>
+                        <label class="form-label" for="FullName">Họ và tên (theo CCCD) <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="FullName" name="FullName" maxlength="100"
                                value="@form.FullName" required />
                         @Html.ValidationMessage("FullName", new { @class = "field-error" })
@@ -211,7 +224,7 @@
                                    value="@form.Email" />
                         </div>
                         <div class="col-5">
-                            <label class="form-label" for="DateOfBirth">Ngày sinh</label>
+                            <label class="form-label" for="DateOfBirth">Ngày sinh (CCCD)</label>
                             <input type="date" class="form-control" id="DateOfBirth" name="DateOfBirth"
                                    value="@(form.DateOfBirth?.ToString("yyyy-MM-dd"))" />
                         </div>
@@ -237,27 +250,13 @@
                         <button type="submit" class="btn-primary-bms" id="btnSaveCustomer">
                             <i class="bi bi-check-lg"></i> Lưu thay đổi
                         </button>
+                        <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@form.Id" asp-route-customerMode="member"
+                           class="btn-outline-bms">
+                            <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
+                        </a>
                         <a asp-action="Index" asp-route-search="@Model.Search" asp-route-tierId="@Model.TierId"
                            asp-route-segment="@Model.Segment" asp-route-page="@Model.Page"
                            class="btn-outline-bms">Đóng</a>
-                    </div>
-                </form>
-
-                <hr class="my-4" />
-                <form asp-action="AssignCard" method="post">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="id" value="@form.Id" />
-                    <input type="hidden" name="search" value="@Model.Search" />
-                    <input type="hidden" name="tierId" value="@Model.TierId" />
-                    <input type="hidden" name="segment" value="@Model.Segment" />
-                    <input type="hidden" name="page" value="@Model.Page" />
-                    <label class="form-label" for="cardCode"><i class="bi bi-credit-card-2-front me-1"></i>Mã thẻ thành viên</label>
-                    <div class="d-flex gap-2">
-                        <input type="text" class="form-control" id="cardCode" name="cardCode" maxlength="20"
-                               value="@form.CardCode" placeholder="Để trống để cấp mã tự động" />
-                        <button type="submit" class="btn-primary-bms text-nowrap" id="btnAssignCard">
-                            Cấp thẻ
-                        </button>
                     </div>
                 </form>
             </div>

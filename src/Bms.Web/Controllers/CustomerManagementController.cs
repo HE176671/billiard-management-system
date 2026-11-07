@@ -42,7 +42,7 @@ public class CustomerManagementController : Controller
     private bool IsAdmin => User.IsInRole("Manager") || User.IsInRole("Admin");
 
     // ═════════════════════════════════════════════════════════════════════
-    // F1: TRA CỨU TẠI QUẦY (LOOKUP) & GHI DANH NHANH
+    // F1: TRA CỨU TẠI QUẦY (LOOKUP) & ĐĂNG KÝ HỘI VIÊN KÈM KIỂM TRA CCCD >= 18 TUỔI
     // ═════════════════════════════════════════════════════════════════════
 
     // GET /CustomerManagement/Lookup
@@ -65,7 +65,7 @@ public class CustomerManagementController : Controller
         var query = CustomersQuery()
             .Include(u => u.Tier)
             .Where(u => (u.PhoneNumber != null && u.PhoneNumber.Contains(term))
-                     || (u.EmployeeCode != null && u.EmployeeCode.ToLower().Contains(lower))
+                     || (u.Email != null && !u.Email.EndsWith(PlaceholderEmailDomain) && u.Email.ToLower().Contains(lower))
                      || u.FullName.ToLower().Contains(lower));
 
         var matches = await query
@@ -76,8 +76,10 @@ public class CustomerManagementController : Controller
             {
                 id = u.Id,
                 fullName = u.FullName,
+                phoneNumber = u.PhoneNumber ?? "—",
                 maskedPhone = MaskPhone(u.PhoneNumber),
-                cardCode = u.EmployeeCode ?? "—",
+                email = u.Email != null && !u.Email.EndsWith(PlaceholderEmailDomain) ? u.Email : "—",
+                dateOfBirth = u.DateOfBirth.HasValue ? u.DateOfBirth.Value.ToString("dd/MM/yyyy") : "—",
                 tierName = u.Tier != null ? u.Tier.TierName : "Member",
                 rewardPoints = u.RewardPoints,
                 isActive = u.IsActive
@@ -87,7 +89,7 @@ public class CustomerManagementController : Controller
         return Json(matches);
     }
 
-    // POST /CustomerManagement/QuickEnroll (Ghi danh nhanh < 10 giây + tặng 10 điểm chào mừng)
+    // POST /CustomerManagement/QuickEnroll (Đăng ký tài khoản hội viên tại quầy kèm kiểm tra CCCD đủ 18 tuổi + tặng 10 điểm chào mừng)
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> QuickEnroll(QuickEnrollInputModel input)
@@ -96,11 +98,29 @@ public class CustomerManagementController : Controller
         input.PhoneNumber = (input.PhoneNumber ?? string.Empty).Trim();
         input.Email = string.IsNullOrWhiteSpace(input.Email) ? null : input.Email.Trim();
 
+        IActionResult RedirectBackOnError() =>
+            string.Equals(input.ReturnTo, "checkout", StringComparison.OrdinalIgnoreCase)
+                ? RedirectToAction("Index", "LoyaltyTest", new { customerMode = "guest", sessionId = input.SessionId })
+                : RedirectToAction(nameof(Lookup), new { q = input.PhoneNumber });
+
         if (!ModelState.IsValid)
         {
             var errMsg = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
-            TempData["Error"] = string.IsNullOrEmpty(errMsg) ? "Thông tin ghi danh không hợp lệ." : errMsg;
-            return RedirectToAction(nameof(Lookup), new { q = input.PhoneNumber });
+            TempData["Error"] = string.IsNullOrEmpty(errMsg) ? "Thông tin đăng ký hội viên không hợp lệ." : errMsg;
+            return RedirectBackOnError();
+        }
+
+        if (!input.IsCccdVerified)
+        {
+            TempData["Error"] = "Nhân viên bắt buộc phải kiểm tra CCCD bên ngoài và tích xác nhận khách hàng đủ 18 tuổi trở lên trước khi đăng ký.";
+            return RedirectBackOnError();
+        }
+
+        var minAdultBirthDate = VnTime.Today.AddYears(-18);
+        if (!input.DateOfBirth.HasValue || input.DateOfBirth.Value > minAdultBirthDate)
+        {
+            TempData["Error"] = $"Khách hàng chưa đủ 18 tuổi theo ngày sinh trên CCCD (yêu cầu sinh từ ngày {minAdultBirthDate:dd/MM/yyyy} trở về trước). Không thể đăng ký hội viên.";
+            return RedirectBackOnError();
         }
 
         var existingByPhone = await _context.Users.AsNoTracking()
@@ -108,6 +128,8 @@ public class CustomerManagementController : Controller
         if (existingByPhone != null)
         {
             TempData["Error"] = $"Số điện thoại {input.PhoneNumber} đã tồn tại. Đã mở hồ sơ khách hàng.";
+            if (string.Equals(input.ReturnTo, "checkout", StringComparison.OrdinalIgnoreCase))
+                return RedirectToAction("Index", "LoyaltyTest", new { customerId = existingByPhone.Id, customerMode = "member", sessionId = input.SessionId });
             return RedirectToAction(nameof(Profile), new { id = existingByPhone.Id });
         }
 
@@ -117,12 +139,11 @@ public class CustomerManagementController : Controller
             if (existingByEmail != null)
             {
                 TempData["Error"] = $"Email {input.Email} đã được sử dụng cho hồ sơ hội viên khác.";
-                return RedirectToAction(nameof(Lookup), new { q = input.PhoneNumber });
+                return RedirectBackOnError();
             }
         }
 
         var defaultTier = await DefaultTierAsync();
-        var cardCode = await GenerateNextCardCode6Async();
         var now = DateTime.UtcNow;
 
         var user = new ApplicationUser
@@ -131,7 +152,7 @@ public class CustomerManagementController : Controller
             Email = input.Email ?? PlaceholderEmail(input.PhoneNumber),
             FullName = input.FullName,
             PhoneNumber = input.PhoneNumber,
-            EmployeeCode = cardCode,
+            EmployeeCode = null, // Bỏ hình thức thẻ thành viên vật lý/mã thẻ
             DateOfBirth = input.DateOfBirth,
             MarketingOptIn = input.MarketingOptIn,
             AccountSource = ApplicationUser.SourceCounter,
@@ -144,30 +165,39 @@ public class CustomerManagementController : Controller
             TotalSpend = 0
         };
 
-        await using var tx = await _context.Database.BeginTransactionAsync();
+        await using var ownTx = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
         try
         {
             var create = await _userManager.CreateAsync(user);
             if (!create.Succeeded)
             {
-                await tx.RollbackAsync();
+                if (ownTx != null) await ownTx.RollbackAsync();
                 TempData["Error"] = string.Join(" ", create.Errors.Select(TranslateIdentityError));
-                return RedirectToAction(nameof(Lookup), new { q = input.PhoneNumber });
+                return RedirectBackOnError();
             }
 
             var role = await _userManager.AddToRoleAsync(user, "Customer");
             if (!role.Succeeded)
             {
-                await tx.RollbackAsync();
+                if (ownTx != null) await ownTx.RollbackAsync();
                 TempData["Error"] = "Không thể gán quyền Customer.";
-                return RedirectToAction(nameof(Lookup), new { q = input.PhoneNumber });
+                return RedirectBackOnError();
             }
 
             _context.CustomerAuditLogs.Add(new CustomerAuditLog
             {
                 CustomerId = user.Id,
                 Action = "Create",
-                Detail = JsonSerializer.Serialize(new { source = "Counter", phone = user.PhoneNumber, card = cardCode }),
+                Detail = JsonSerializer.Serialize(new
+                {
+                    source = "Counter",
+                    phone = user.PhoneNumber,
+                    email = user.Email,
+                    dob = user.DateOfBirth?.ToString("yyyy-MM-dd"),
+                    cccdVerified18Plus = true
+                }),
                 ActorId = CurrentActorId,
                 CreatedAtUtc = now
             });
@@ -183,7 +213,7 @@ public class CustomerManagementController : Controller
                 type: PointTransaction.Bonus,
                 referenceCode: welcomeRef,
                 invoiceId: null,
-                reason: "Điểm thưởng chào mừng hội viên mới ghi danh tại quầy",
+                reason: "Điểm thưởng chào mừng hội viên mới đăng ký tại quầy (đã xác minh CCCD đủ 18 tuổi)",
                 actorId: CurrentActorId,
                 spendAmount: null);
 
@@ -191,24 +221,29 @@ public class CustomerManagementController : Controller
             {
                 UserId = user.Id,
                 Title = "Chào mừng hội viên mới (+10 điểm)",
-                Content = $"Chào mừng {user.FullName} gia nhập CLB Bida! Mã thẻ của bạn là {cardCode}. Bạn được tặng 10 điểm chào mừng.",
+                Content = $"Chào mừng {user.FullName} (SĐT: {user.PhoneNumber}) gia nhập CLB Bida BMS! Bạn được tặng 10 điểm chào mừng.",
                 Type = "Welcome",
                 IsRead = false,
                 CreatedAt = now
             });
 
             await _context.SaveChangesAsync();
-            await tx.CommitAsync();
+            if (ownTx != null) await ownTx.CommitAsync();
             _segmentService.InvalidateCache();
         }
         catch
         {
-            await tx.RollbackAsync();
-            TempData["Error"] = "Đã xảy ra lỗi khi ghi danh nhanh. Vui lòng thử lại.";
-            return RedirectToAction(nameof(Lookup), new { q = input.PhoneNumber });
+            if (ownTx != null) await ownTx.RollbackAsync();
+            TempData["Error"] = "Đã xảy ra lỗi khi đăng ký hội viên. Vui lòng thử lại.";
+            return RedirectBackOnError();
         }
 
-        TempData["Success"] = $"Đã ghi danh nhanh khách hàng {user.FullName} (Thẻ {cardCode}) và tặng +10 điểm chào mừng!";
+        TempData["Success"] = $"Đã đăng ký tài khoản hội viên cho {user.FullName} (SĐT: {user.PhoneNumber} · Đã xác minh CCCD đủ 18 tuổi) và tặng +10 điểm chào mừng!";
+        if (string.Equals(input.ReturnTo, "checkout", StringComparison.OrdinalIgnoreCase))
+        {
+            return RedirectToAction("Index", "LoyaltyTest", new { customerId = user.Id, customerMode = "member", sessionId = input.SessionId });
+        }
+
         return RedirectToAction(nameof(Profile), new { id = user.Id });
     }
 
@@ -624,11 +659,12 @@ public class CustomerManagementController : Controller
     {
         var vm = await BuildViewModelAsync(search, tierId, status, segment, 1, null, exportAll: true);
         var sb = new StringBuilder();
-        sb.AppendLine("FullName,PhoneNumber,CardCode,Tier,Segment,RewardPoints,Spend12Months,Status");
+        sb.AppendLine("FullName,PhoneNumber,Email,DateOfBirth,Tier,Segment,RewardPoints,Spend12Months,Status");
         foreach (var c in vm.Customers)
         {
             string name = (c.FullName ?? "").Replace("\"", "\"\"");
-            sb.AppendLine($"\"{name}\",{c.PhoneNumber},{c.CardCode},{c.TierName},{c.Segment},{c.RewardPoints},{c.Spend12M:0},{(c.IsActive ? "Active" : "Locked")}");
+            string dob = c.DateOfBirth.HasValue ? c.DateOfBirth.Value.ToString("dd/MM/yyyy") : "";
+            sb.AppendLine($"\"{name}\",{c.PhoneNumber},{c.Email},{dob},{c.TierName},{c.Segment},{c.RewardPoints},{c.Spend12M:0},{(c.IsActive ? "Active" : "Locked")}");
         }
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
         return File(bytes, "text/csv; charset=utf-8", $"Customers_{DateTime.UtcNow.ToVn():yyyyMMdd_HHmm}.csv");
@@ -672,14 +708,13 @@ public class CustomerManagementController : Controller
         if (existing == null)
         {
             var defaultTier = await DefaultTierAsync();
-            var cardCode = await GenerateNextCardCode6Async();
             var user = new ApplicationUser
             {
                 UserName = form.PhoneNumber,
                 Email = form.Email ?? PlaceholderEmail(form.PhoneNumber),
                 FullName = form.FullName,
                 PhoneNumber = form.PhoneNumber,
-                EmployeeCode = cardCode,
+                EmployeeCode = null,
                 DateOfBirth = form.DateOfBirth,
                 MarketingOptIn = form.MarketingOptIn,
                 AccountSource = ApplicationUser.SourceCounter,
@@ -692,20 +727,22 @@ public class CustomerManagementController : Controller
                 TotalSpend = 0
             };
 
-            await using var tx = await _context.Database.BeginTransactionAsync();
+            await using var ownTx = _context.Database.CurrentTransaction == null
+                ? await _context.Database.BeginTransactionAsync()
+                : null;
             try
             {
                 var create = await _userManager.CreateAsync(user);
                 if (!create.Succeeded)
                 {
-                    await tx.RollbackAsync();
+                    if (ownTx != null) await ownTx.RollbackAsync();
                     foreach (var err in create.Errors) ModelState.AddModelError(string.Empty, TranslateIdentityError(err));
                     return await RedisplayAsync(form, null, search, tierId, status, segment, page);
                 }
                 var role = await _userManager.AddToRoleAsync(user, "Customer");
                 if (!role.Succeeded)
                 {
-                    await tx.RollbackAsync();
+                    if (ownTx != null) await ownTx.RollbackAsync();
                     ModelState.AddModelError(string.Empty, "Gán quyền Customer thất bại. Vui lòng thử lại.");
                     return await RedisplayAsync(form, null, search, tierId, status, segment, page);
                 }
@@ -714,7 +751,7 @@ public class CustomerManagementController : Controller
                 {
                     CustomerId = user.Id,
                     Action = "Create",
-                    Detail = JsonSerializer.Serialize(new { source = "Counter", phone = user.PhoneNumber, card = cardCode }),
+                    Detail = JsonSerializer.Serialize(new { source = "Counter", phone = user.PhoneNumber, email = user.Email }),
                     ActorId = CurrentActorId,
                     CreatedAtUtc = now
                 });
@@ -726,17 +763,17 @@ public class CustomerManagementController : Controller
                 await _ledger.PostAsync(user.Id, 10, PointTransaction.Bonus, welcomeRef, null,
                     "Điểm thưởng chào mừng hội viên mới", CurrentActorId);
 
-                await tx.CommitAsync();
+                if (ownTx != null) await ownTx.CommitAsync();
                 _segmentService.InvalidateCache();
             }
             catch
             {
-                await tx.RollbackAsync();
+                if (ownTx != null) await ownTx.RollbackAsync();
                 ModelState.AddModelError(string.Empty, "Đã xảy ra lỗi hệ thống. Vui lòng thử lại.");
                 return await RedisplayAsync(form, null, search, tierId, status, segment, page);
             }
 
-            TempData["Success"] = $"Đã thêm khách hàng {user.FullName} (Thẻ {cardCode}, +10 điểm chào mừng).";
+            TempData["Success"] = $"Đã thêm khách hàng {user.FullName} (SĐT: {user.PhoneNumber}, +10 điểm chào mừng).";
             return RedirectToIndex(user.Id, search, tierId, status, segment, page);
         }
 
@@ -836,7 +873,7 @@ public class CustomerManagementController : Controller
         return RedirectToIndex(id, search, tierId, status, segment, page);
     }
 
-    // POST /CustomerManagement/AssignCard
+    // POST /CustomerManagement/AssignCard (Giữ tương thích nếu có gọi nội bộ)
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AssignCard(string id, string? cardCode, string? search, int? tierId,
@@ -907,7 +944,7 @@ public class CustomerManagementController : Controller
             var s = search.Trim().ToLowerInvariant();
             filtered = filtered.Where(u => u.FullName.ToLowerInvariant().Contains(s)
                                         || (u.PhoneNumber != null && u.PhoneNumber.Contains(s))
-                                        || (u.CardCode != null && u.CardCode.ToLowerInvariant().Contains(s)));
+                                        || (u.Email != null && u.Email.ToLowerInvariant().Contains(s)));
         }
         if (tierId.HasValue) filtered = filtered.Where(u => u.TierId == tierId);
         if (status == "active") filtered = filtered.Where(u => u.IsActive);
@@ -926,6 +963,8 @@ public class CustomerManagementController : Controller
             Id = u.CustomerId,
             FullName = u.FullName,
             PhoneNumber = u.PhoneNumber,
+            Email = u.Email,
+            DateOfBirth = u.DateOfBirth,
             CardCode = u.CardCode,
             TierName = u.TierName,
             RewardPoints = u.RewardPoints,
