@@ -156,8 +156,7 @@ public class LoyaltyTestController : Controller
                 availableVouchers = await _context.CustomerVouchers.AsNoTracking()
                     .Where(v => v.CustomerId == customerId
                              && v.Status == CustomerVoucher.StatusActive
-                             && v.ExpiresAtUtc > now
-                             && v.VoucherType != RewardItemEntity.TypeGift)
+                             && v.ExpiresAtUtc > now)
                     .OrderBy(v => v.ExpiresAtUtc)
                     .ToListAsync();
 
@@ -295,8 +294,7 @@ public class LoyaltyTestController : Controller
             ? await _context.CustomerVouchers.AsNoTracking()
                 .Where(v => v.CustomerId == user.Id
                          && v.Status == CustomerVoucher.StatusActive
-                         && v.ExpiresAtUtc > nowUtc
-                         && v.VoucherType != RewardItemEntity.TypeGift)
+                         && v.ExpiresAtUtc > nowUtc)
                 .OrderBy(v => v.ExpiresAtUtc)
                 .Select(v => new
                 {
@@ -357,7 +355,7 @@ public class LoyaltyTestController : Controller
 
         if (playtimeAmount < 0 || fandBAmount < 0 || (playtimeAmount + fandBAmount) <= 0)
         {
-            TempData["Error"] = "Tổng tiền giờ chơi và dịch vụ ăn uống phải lớn hơn 0 ₫.";
+            TempData["Error"] = "Tổng tiền giờ chơi và dịch vụ ăn uống phải lớn hơn 0 VND.";
             return RedirectToAction(nameof(Index), new { customerId, customerMode, sessionId, playtimeAmount, fandBAmount, paymentMethod });
         }
 

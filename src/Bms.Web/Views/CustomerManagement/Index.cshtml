@@ -33,7 +33,7 @@
 
 <div class="row g-3">
     <!-- ═══════════ Danh sách hội viên ═══════════ -->
-    <div class="@(form != null ? "col-lg-8" : "col-12")">
+    <div class="col-12">
         <div class="data-card">
             <div class="data-card-header">
                 <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách hội viên (@Model.TotalCount)</span>
@@ -106,7 +106,6 @@
                         <tbody>
                             @foreach (var c in Model.Customers)
                             {
-                                var editHref = Url.Action("Index", new { search = Model.Search, tierId = Model.TierId, segment = Model.Segment, page = Model.Page, id = c.Id });
                                 <tr style="@(c.Id == selectedId ? "background:#fff1f3" : "")">
                                     <td>
                                         <a asp-action="Profile" asp-route-id="@c.Id" class="fw-semibold text-dark text-decoration-none">
@@ -138,11 +137,8 @@
                                            class="btn-outline-bms py-1 px-2 me-1" style="font-size:0.75rem" title="Chuyển sang Thanh toán cho hội viên này">
                                             <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
                                         </a>
-                                        <a asp-action="Profile" asp-route-id="@c.Id" class="btn-sm-icon me-1" title="Xem hồ sơ hội viên">
-                                            <i class="bi bi-person-vcard"></i>
-                                        </a>
-                                        <a href="@editHref" class="btn-sm-icon" title="Sửa thông tin">
-                                            <i class="bi bi-pencil"></i>
+                                        <a asp-action="Profile" asp-route-id="@c.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem" title="Xem và sửa thông tin trong Hồ sơ hội viên">
+                                            <i class="bi bi-person-vcard"></i> Hồ sơ hội viên
                                         </a>
                                     </td>
                                 </tr>
@@ -161,7 +157,6 @@
                                asp-route-tierId="@Model.TierId"
                                asp-route-segment="@Model.Segment"
                                asp-route-page="@i"
-                               asp-route-id="@selectedId"
                                class="btn-sm-icon"
                                style="@(i == Model.Page ? "background:#e94560;color:#fff;border-color:#e94560" : "")">@i</a>
                         }
@@ -170,106 +165,6 @@
             }
         </div>
     </div>
-
-    <!-- ═══════════ Khung sửa thông tin hội viên ═══════════ -->
-    @if (form != null)
-    {
-        <div class="col-lg-4">
-            <div class="form-card" id="customerDetailPanel" style="max-width:none">
-                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                    <h2 class="h6 fw-bold mb-0">
-                        <i class="bi bi-pencil-square me-2 text-danger"></i>Cập nhật thông tin hội viên
-                    </h2>
-                    <div class="d-flex gap-1">
-                        <a asp-action="Profile" asp-route-id="@form.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
-                            <i class="bi bi-person-vcard"></i> Hồ sơ chi tiết
-                        </a>
-                        <a asp-action="Index" asp-route-search="@Model.Search" asp-route-tierId="@Model.TierId"
-                           asp-route-segment="@Model.Segment" asp-route-page="@Model.Page"
-                           class="btn-sm-icon" title="Đóng"><i class="bi bi-x-lg"></i></a>
-                    </div>
-                </div>
-
-                <form asp-action="Save" method="post" id="customerForm">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="Id" value="@form.Id" />
-                    <input type="hidden" name="search" value="@Model.Search" />
-                    <input type="hidden" name="tierId" value="@Model.TierId" />
-                    <input type="hidden" name="segment" value="@Model.Segment" />
-                    <input type="hidden" name="page" value="@Model.Page" />
-                    <input type="hidden" name="IsActive" value="@(form.IsActive ? "true" : "false")" />
-
-                    @if (ViewData.ModelState[string.Empty]?.Errors.Count > 0)
-                    {
-                        <div class="alert alert-danger py-2 rounded-3" style="font-size:0.8rem">
-                            @foreach (var e in ViewData.ModelState[string.Empty]!.Errors) { <div>@e.ErrorMessage</div> }
-                        </div>
-                    }
-
-                    <div class="mb-3">
-                        <label class="form-label" for="FullName">Họ và tên (theo CCCD) <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="FullName" name="FullName" maxlength="100"
-                               placeholder="Nguyễn Văn A" value="@form.FullName" required />
-                        <div id="errCustFullName" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
-                        @Html.ValidationMessage("FullName", new { @class = "field-error" })
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label" for="PhoneNumber">Số điện thoại <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="PhoneNumber" name="PhoneNumber" maxlength="10"
-                               inputmode="numeric" placeholder="0901234567"
-                               value="@form.PhoneNumber" required />
-                        <div id="errCustPhone" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
-                        @Html.ValidationMessage("PhoneNumber", new { @class = "field-error" })
-                    </div>
-
-                    <div class="row g-2 mb-3">
-                        <div class="col-7">
-                            <label class="form-label" for="Email">Email</label>
-                            <input type="text" class="form-control" id="Email" name="Email" maxlength="256"
-                                   placeholder="khachhang@gmail.com" value="@form.Email" />
-                            <div id="errCustEmail" class="text-danger fw-semibold mt-1 d-none" style="font-size:0.78rem"></div>
-                            @Html.ValidationMessage("Email", new { @class = "field-error" })
-                        </div>
-                        <div class="col-5">
-                            <label class="form-label" for="DateOfBirth">Ngày sinh (CCCD)</label>
-                            <input type="date" class="form-control" id="DateOfBirth" name="DateOfBirth"
-                                   value="@(form.DateOfBirth?.ToString("yyyy-MM-dd"))" />
-                        </div>
-                    </div>
-
-                    <div class="row g-3 mb-3">
-                        <div class="col-6">
-                            <label class="form-label">Hạng hiện tại</label>
-                            <input type="text" class="form-control" value="@(form.TierName ?? "—")" readonly disabled />
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label">Điểm tích lũy</label>
-                            <input type="text" class="form-control" value="@VnFormat.Number(form.RewardPoints)" readonly disabled />
-                        </div>
-                    </div>
-
-                    <div class="form-check mb-4">
-                        <input class="form-check-input" type="checkbox" name="MarketingOptIn" value="true" id="chkOptIn" checked="@form.MarketingOptIn" />
-                        <label class="form-check-label" for="chkOptIn" style="font-size:0.84rem">Nhận thông báo chương trình ưu đãi</label>
-                    </div>
-
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button type="submit" class="btn-primary-bms" id="btnSaveCustomer">
-                            <i class="bi bi-check-lg"></i> Lưu thay đổi
-                        </button>
-                        <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@form.Id" asp-route-customerMode="member"
-                           class="btn-outline-bms">
-                            <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
-                        </a>
-                        <a asp-action="Index" asp-route-search="@Model.Search" asp-route-tierId="@Model.TierId"
-                           asp-route-segment="@Model.Segment" asp-route-page="@Model.Page"
-                           class="btn-outline-bms">Đóng</a>
-                    </div>
-                </form>
-            </div>
-        </div>
-    }
 </div>
 
 <!-- ═══════════ Modal Đăng ký tài khoản hội viên mới tại màn Danh sách hội viên (Kiểm tra CCCD >= 18 tuổi) ═══════════ -->
@@ -486,61 +381,6 @@
                 if (enrollSyntaxAlert) enrollSyntaxAlert.classList.add('d-none');
             });
         }
-
-        // 2. Kiểm tra cú pháp trên Khung sửa thông tin hội viên (#customerForm)
-        const custForm = document.getElementById('customerForm');
-        if (!custForm) return;
-        const inpName = document.getElementById('FullName');
-        const inpPhone = document.getElementById('PhoneNumber');
-        const inpEmail = document.getElementById('Email');
-        const errName = document.getElementById('errCustFullName');
-        const errPhone = document.getElementById('errCustPhone');
-        const errEmail = document.getElementById('errCustEmail');
-
-        function vName() {
-            const raw = inpName.value || '';
-            const val = raw.trim().replace(/\s+/g, ' ');
-            if (!val || /[0-9]/.test(raw) || !rxName.test(val) || val.length < 2) {
-                showErr(inpName, errName, 'Họ và tên không được chứa số hoặc ký tự đặc biệt. Vui lòng nhập theo định dạng: Nguyễn Văn A.');
-                return false;
-            }
-            showErr(inpName, errName, '');
-            return true;
-        }
-
-        function vPhone() {
-            const val = (inpPhone.value || '').trim();
-            if (!rxPhone.test(val)) {
-                showErr(inpPhone, errPhone, 'Số điện thoại phải gồm đúng 10 chữ số, bắt đầu từ số 0 và không chứa chữ cái hay ký tự đặc biệt (VD: 0901234567).');
-                return false;
-            }
-            showErr(inpPhone, errPhone, '');
-            return true;
-        }
-
-        function vEmail() {
-            const val = (inpEmail.value || '').trim();
-            if (val && !rxEmail.test(val)) {
-                showErr(inpEmail, errEmail, 'Email không đúng định dạng cú pháp (Ví dụ: khachhang@gmail.com).');
-                return false;
-            }
-            showErr(inpEmail, errEmail, '');
-            return true;
-        }
-
-        inpName && inpName.addEventListener('input', vName);
-        inpPhone && inpPhone.addEventListener('input', vPhone);
-        inpEmail && inpEmail.addEventListener('input', vEmail);
-
-        custForm.addEventListener('submit', function (e) {
-            const ok1 = vName();
-            const ok2 = vPhone();
-            const ok3 = vEmail();
-            if (!ok1 || !ok2 || !ok3) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        });
     })();
 </script>
 }

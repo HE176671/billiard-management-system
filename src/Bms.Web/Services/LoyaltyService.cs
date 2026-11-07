@@ -88,7 +88,8 @@ public class LoyaltyService : ILoyaltyService
             }
             else if (voucher.VoucherType == RewardItemEntity.TypeGift)
             {
-                errors.Add($"Voucher \"{code}\" là quà hiện vật ({voucher.Title}), vui lòng xác nhận giao quà tại quầy thay vì trừ vào hóa đơn.");
+                decimal val = voucher.DiscountValue ?? 0m;
+                voucherDiscountAmount = Math.Min(remainingAfterTier, val);
             }
             else if (voucher.VoucherType == RewardItemEntity.TypeFreeHour)
             {

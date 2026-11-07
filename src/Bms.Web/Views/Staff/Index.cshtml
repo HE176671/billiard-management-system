@@ -1,4 +1,4 @@
-﻿@model Bms.Web.Models.StaffHomeViewModel
+@model Bms.Web.Models.StaffHomeViewModel
 @{
     Layout = "_AdminLayout";
     var s = Model.ActiveShift;
@@ -25,8 +25,8 @@
             <div>
                 <div style="font-weight:600">Ca #@s.Shift.Id đang mở từ @s.Shift.StartTimeUtc.ToVn().ToString("HH:mm dd/MM")</div>
                 <div class="text-muted" style="font-size:0.85rem">
-                    Đầu ca @s.Shift.StartingCash.ToString("N0") ₫ · tiền mặt đã thu @s.CashCollected.ToString("N0") ₫ ·
-                    kỳ vọng trong két <strong>@s.ExpectedCash.ToString("N0") ₫</strong>
+                    Đầu ca @s.Shift.StartingCash.ToString("N0") VND · tiền mặt đã thu @s.CashCollected.ToString("N0") VND ·
+                    kỳ vọng trong két <strong>@s.ExpectedCash.ToString("N0") VND</strong>
                 </div>
             </div>
             <a asp-controller="Shift" asp-action="Index" class="btn-outline-bms ms-auto"><i class="bi bi-stop-circle"></i> Xem / đóng ca</a>

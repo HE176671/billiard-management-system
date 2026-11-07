@@ -53,7 +53,7 @@
                                         <input type="hidden" name="id" value="@tt.Id" />
                                         <div class="input-group input-group-sm" style="max-width:170px">
                                             <input type="number" name="hourlyRate" value="@tt.HourlyRate.ToString("0")" min="1000" step="1000" class="form-control fw-semibold text-end" required />
-                                            <span class="input-group-text">₫/h</span>
+                                            <span class="input-group-text"> VND/h</span>
                                         </div>
                                         <button type="submit" class="btn-primary-bms py-1 px-2" style="font-size:0.75rem">
                                             Lưu
@@ -101,7 +101,7 @@
                                 <td><strong>@p.TableTypeName</strong></td>
                                 <td>@p.StartHour</td>
                                 <td>@p.EndHour</td>
-                                <td><strong class="text-danger">@p.HourlyRate.ToString("N0") ₫/giờ</strong></td>
+                                <td><strong class="text-danger">@p.HourlyRate.ToString("N0") VND/giờ</strong></td>
                                 <td class="text-end">
                                     <a asp-action="Edit" asp-route-id="@p.Id" class="btn-sm-icon" title="Sửa">
                                         <i class="bi bi-pencil"></i>
@@ -152,7 +152,7 @@
 
                 <div class="row g-2 mb-3">
                     <div class="col-7">
-                        <label class="form-label">Giá thuê / lượt (₫) <span class="text-danger">*</span></label>
+                        <label class="form-label">Giá thuê / lượt ( VND) <span class="text-danger">*</span></label>
                         <input type="number" name="price" value="@(editCue != null ? editCue.Price.ToString("0") : "40000")"
                                min="1000" step="1000" class="form-control" required />
                     </div>
@@ -205,7 +205,7 @@
                         {
                             <tr>
                                 <td class="fw-semibold">@cue.Name</td>
-                                <td class="text-end fw-bold text-primary">@cue.Price.ToString("N0") ₫/lượt</td>
+                                <td class="text-end fw-bold text-primary">@cue.Price.ToString("N0") VND/lượt</td>
                                 <td class="text-center">@cue.StockQuantity cây</td>
                                 <td>
                                     @if (cue.IsActive)
@@ -275,7 +275,7 @@
                         </div>
                     </div>
                     <div class="col-6">
-                        <label class="form-label">Giá trọn gói (₫) <span class="text-danger">*</span></label>
+                        <label class="form-label">Giá trọn gói ( VND) <span class="text-danger">*</span></label>
                         <input type="number" name="price" value="@((editCombo?.Price ?? 190000m).ToString("0"))"
                                min="0" step="5000" class="form-control" required />
                     </div>
@@ -289,7 +289,7 @@
                             @foreach (var prod in Model.AvailableBonusProducts)
                             {
                                 <option value="@prod.Id" selected="@(editCombo?.BonusProductId == prod.Id)">
-                                    @prod.Name (Giá lẻ @prod.Price.ToString("N0")₫)
+                                    @prod.Name (Giá lẻ @prod.Price.ToString("N0") VND)
                                 </option>
                             }
                         </select>
@@ -350,7 +350,7 @@
                                 <td>
                                     <span class="text-success fw-semibold"><i class="bi bi-gift-fill me-1"></i>@c.IncludedItemsSummary</span>
                                 </td>
-                                <td class="text-end fw-bold text-danger">@c.Price.ToString("N0") ₫</td>
+                                <td class="text-end fw-bold text-danger">@c.Price.ToString("N0") VND</td>
                                 <td>
                                     @if (c.IsActive)
                                     {

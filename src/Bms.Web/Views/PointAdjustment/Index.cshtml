@@ -32,13 +32,20 @@
             <form asp-action="Create" method="post">
                 @Html.AntiForgeryToken()
                 <div class="mb-3">
-                    <label class="form-label">Hội viên <span class="text-danger">*</span></label>
-                    <select name="customerId" class="form-select" required>
+                    <label class="form-label">Tìm kiếm &amp; Chọn hội viên <span class="text-danger">*</span></label>
+                    <div class="input-group mb-2">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="adjMemberSearch" class="form-control"
+                               placeholder="Nhập tên hoặc số điện thoại để tìm nhanh hội viên..." autocomplete="off" />
+                    </div>
+                    <select name="customerId" id="adjCustomerSelect" class="form-select" required>
                         <option value="">-- Chọn hội viên --</option>
                         @foreach (var c in Model.Customers)
                         {
-                            <option value="@c.Id" selected="@(c.Id == Model.SelectedCustomerId)">
-                                @c.FullName — @(c.PhoneNumber ?? "—") (@VnFormat.Number(c.RewardPoints) điểm)
+                            <option value="@c.Id"
+                                    data-search="@($"{c.FullName} {c.PhoneNumber} {c.Email}".ToLowerInvariant())"
+                                    selected="@(c.Id == Model.SelectedCustomerId)">
+                                @c.FullName — SĐT: @(c.PhoneNumber ?? "—") (@VnFormat.Number(c.RewardPoints) điểm)
                             </option>
                         }
                     </select>
@@ -188,3 +195,53 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    (function () {
+        const searchBox = document.getElementById('adjMemberSearch');
+        const selectEl = document.getElementById('adjCustomerSelect');
+        if (!searchBox || !selectEl) return;
+
+        const allOptions = Array.from(selectEl.options)
+            .filter(opt => opt.value !== '')
+            .map(opt => ({
+                value: opt.value,
+                text: opt.text,
+                search: (opt.getAttribute('data-search') || opt.text).toLowerCase()
+            }));
+
+        searchBox.addEventListener('input', function () {
+            const term = (searchBox.value || '').trim().toLowerCase();
+            const currentVal = selectEl.value;
+            selectEl.innerHTML = '';
+
+            if (!term) {
+                const defaultOpt = document.createElement('option');
+                defaultOpt.value = '';
+                defaultOpt.text = '-- Chọn hội viên --';
+                selectEl.appendChild(defaultOpt);
+            }
+
+            const matched = allOptions.filter(o => !term || o.search.includes(term));
+            if (matched.length === 0) {
+                const emptyOpt = document.createElement('option');
+                emptyOpt.value = '';
+                emptyOpt.text = `-- Không tìm thấy hội viên khớp với "${searchBox.value}" --`;
+                selectEl.appendChild(emptyOpt);
+                return;
+            }
+
+            matched.forEach((o, idx) => {
+                const opt = document.createElement('option');
+                opt.value = o.value;
+                opt.text = o.text;
+                if ((!term && o.value === currentVal) || (term && idx === 0)) {
+                    opt.selected = true;
+                }
+                selectEl.appendChild(opt);
+            });
+        });
+    })();
+</script>
+}

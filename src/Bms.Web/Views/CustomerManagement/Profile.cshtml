@@ -199,30 +199,11 @@
 </ul>
 
 <div class="tab-content">
-    <!-- TAB 1: VOUCHER & ĐỔI ĐIỂM -->
+    <!-- TAB 1: DANH SÁCH VOUCHER CỦA HỘI VIÊN -->
     <div class="tab-pane fade show active" id="tabVouchers">
         <div class="data-card">
             <div class="data-card-header">
-                <span class="data-card-title">Danh sách voucher &amp; Đổi điểm tại quầy</span>
-                @if (Model.AvailableRewards.Any())
-                {
-                    <form asp-action="RedeemReward" method="post" class="d-flex gap-2 align-items-center flex-wrap">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="customerId" value="@Model.Id" />
-                        <select name="rewardCode" class="form-select form-select-sm" style="width:auto;min-width:260px" required>
-                            <option value="">-- Chọn phần quà đổi điểm cho khách --</option>
-                            @foreach (var r in Model.AvailableRewards)
-                            {
-                                <option value="@r.Code" disabled="@(Model.RewardPoints < r.PointCost)">
-                                    @r.Name — @VnFormat.Number(r.PointCost) điểm @(r.MinTier != null ? $"(Từ hạng {r.MinTier.TierName})" : "")
-                                </option>
-                            }
-                        </select>
-                        <button type="submit" class="btn-primary-bms py-1 px-3" style="font-size:0.82rem">
-                            <i class="bi bi-gift"></i> Đổi điểm cấp Voucher
-                        </button>
-                    </form>
-                }
+                <span class="data-card-title"><i class="bi bi-ticket-perforated me-2"></i>Danh sách voucher của hội viên (@Model.AllVouchers.Count)</span>
             </div>
             @if (!Model.AllVouchers.Any())
             {
@@ -267,25 +248,11 @@
                                     <td class="text-end">
                                         @if (v.Status == CustomerVoucher.StatusActive && v.ExpiresAtUtc > DateTime.UtcNow)
                                         {
-                                            if (v.VoucherType == RewardItemEntity.TypeGift)
-                                            {
-                                                <form asp-action="ConfirmVoucher" method="post" class="d-inline">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="voucherCode" value="@v.Code" />
-                                                    <input type="hidden" name="returnCustomerId" value="@Model.Id" />
-                                                    <button type="submit" class="btn-primary-bms py-1 px-2" style="font-size:0.78rem">
-                                                        <i class="bi bi-check2"></i> Giao quà
-                                                    </button>
-                                                </form>
-                                            }
-                                            else
-                                            {
-                                                <a asp-controller="LoyaltyTest" asp-action="Index"
-                                                   asp-route-customerId="@Model.Id" asp-route-voucherCode="@v.Code"
-                                                   class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
-                                                    Dùng khi tính tiền
-                                                </a>
-                                            }
+                                            <a asp-controller="LoyaltyTest" asp-action="Index"
+                                               asp-route-customerId="@Model.Id" asp-route-voucherCode="@v.Code"
+                                               class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
+                                                Dùng khi tính tiền
+                                            </a>
 
                                             if (isAdmin)
                                             {
@@ -401,7 +368,7 @@
                                     <td>@h.StartAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</td>
                                     <td class="text-end">@(h.TotalPlaytime.HasValue ? VnFormat.Money(h.TotalPlaytime.Value) : "—")</td>
                                     <td class="text-end">@(h.TotalFandB.HasValue ? VnFormat.Money(h.TotalFandB.Value) : "—")</td>
-                                    <td class="text-end text-danger">@(h.DiscountAmount.HasValue && h.DiscountAmount > 0 ? "-" + VnFormat.Money(h.DiscountAmount.Value) : "0 ₫")</td>
+                                    <td class="text-end text-danger">@(h.DiscountAmount.HasValue && h.DiscountAmount > 0 ? "-" + VnFormat.Money(h.DiscountAmount.Value) : "0 VND")</td>
                                     <td class="text-end fw-bold">@(h.FinalAmount.HasValue ? VnFormat.Money(h.FinalAmount.Value) : "—")</td>
                                     <td><span class="badge-active">@(h.InvoiceStatus ?? h.SessionStatus)</span></td>
                                 </tr>
