@@ -28,6 +28,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Campaign>               Campaigns               => Set<Campaign>();
     public DbSet<CustomerAuditLog>       CustomerAuditLogs       => Set<CustomerAuditLog>();
 
+    // Service catalog & Combos (Manager pricing & promotion configuration)
+    public DbSet<ProductCategory>        ProductCategories       => Set<ProductCategory>();
+    public DbSet<Product>                Products                => Set<Product>();
+    public DbSet<Combo>                  Combos                  => Set<Combo>();
+    public DbSet<ComboItem>              ComboItems              => Set<ComboItem>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -264,6 +270,43 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.Ignore(x => x.CashDifference);
             e.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.ClosedBy).WithMany().HasForeignKey(x => x.ClosedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProductCategory>(e =>
+        {
+            e.ToTable("ProductCategories");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(60).IsRequired();
+        });
+
+        builder.Entity<Product>(e =>
+        {
+            e.ToTable("Products");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Price).HasColumnType("decimal(18,2)");
+            e.Property(x => x.RowVersion).IsRowVersion();
+            e.HasOne(x => x.Category).WithMany(c => c.Products)
+                .HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Combo>(e =>
+        {
+            e.ToTable("Combos");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Price).HasColumnType("decimal(18,2)");
+            e.Property(x => x.PlaytimeHours).HasColumnType("decimal(5,2)");
+        });
+
+        builder.Entity<ComboItem>(e =>
+        {
+            e.ToTable("ComboItems");
+            e.HasKey(x => new { x.ComboId, x.ProductId });
+            e.HasOne(x => x.Combo).WithMany(c => c.Items)
+                .HasForeignKey(x => x.ComboId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Product).WithMany()
+                .HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // BilliardTables (Hung)
