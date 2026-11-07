@@ -21,6 +21,7 @@ public class CustomerRowViewModel
     public string?  UserName     { get; set; }
     public string?  Email        { get; set; }
     public string?  PhoneNumber  { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
     public string?  CardCode     { get; set; }
     public bool     IsActive     { get; set; }
     public int      RewardPoints { get; set; }

@@ -79,13 +79,19 @@ public class QuickEnrollInputModel
     [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải bắt đầu bằng 0 và gồm đúng 10 chữ số.")]
     public string PhoneNumber { get; set; } = string.Empty;
 
+    [Required(ErrorMessage = "Vui lòng nhập địa chỉ Email của khách hàng.")]
     [EmailAddress(ErrorMessage = "Email không đúng định dạng (VD: ten@domain.com).")]
     [RegularExpression(@"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", ErrorMessage = "Email không đúng định dạng (VD: ten@domain.com).")]
     [StringLength(256)]
     public string? Email { get; set; }
 
+    [Required(ErrorMessage = "Vui lòng nhập ngày tháng năm sinh để đối chiếu CCCD (từ 18 tuổi trở lên).")]
     public DateOnly? DateOfBirth { get; set; }
+
+    public bool IsCccdVerified { get; set; }
     public bool MarketingOptIn { get; set; } = true;
+    public string? ReturnTo { get; set; }
+    public int? SessionId { get; set; }
 }
 
 // ── Customer 360 ViewModel (F1) ──

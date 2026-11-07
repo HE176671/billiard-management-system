@@ -20,7 +20,9 @@ public record CustomerRfmProfile(
     decimal Monetary12M,
     string Segment,
     string BadgeStyle,
-    string SuggestedAction);
+    string SuggestedAction,
+    string? Email = null,
+    DateOnly? DateOfBirth = null);
 
 public interface ICustomerSegmentService
 {
@@ -152,7 +154,9 @@ public class CustomerSegmentService : ICustomerSegmentService
                 Monetary12M: monetary,
                 Segment: seg,
                 BadgeStyle: style,
-                SuggestedAction: action));
+                SuggestedAction: action,
+                Email: u.Email != null && u.Email.EndsWith("@noemail.bms.local", StringComparison.OrdinalIgnoreCase) ? null : u.Email,
+                DateOfBirth: u.DateOfBirth));
         }
 
         if (nowUtc == null)

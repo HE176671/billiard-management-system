@@ -505,6 +505,99 @@ try
 
 
 
+    // T20: Đăng ký hội viên tại quầy không dùng thẻ thành viên (SĐT, Email, Họ tên, Ngày sinh + kiểm tra CCCD đủ 18 tuổi)
+    var custMgmtCtrl = Prepare(new CustomerManagementController(users, db, ledger, segmentSvc, voucherSvc), staffPrincipal);
+    var minorPhone = "09" + Random.Shared.Next(10000000, 99999999);
+    await custMgmtCtrl.QuickEnroll(new QuickEnrollInputModel
+    {
+        FullName = "Khách Chưa Đủ 18 Tuổi",
+        PhoneNumber = minorPhone,
+        Email = $"minor.{key[..6]}@bms.local",
+        DateOfBirth = VnTime.Today.AddYears(-16),
+        IsCccdVerified = true,
+        ReturnTo = "checkout"
+    });
+    var minorCreated = await db.Users.AsNoTracking().AnyAsync(u => u.PhoneNumber == minorPhone);
+
+    var adultPhone = "09" + Random.Shared.Next(10000000, 99999999);
+    var adultEmail = $"adult.{key[..6]}@bms.local";
+    var adultDob = VnTime.Today.AddYears(-22);
+    var enrollRes = await custMgmtCtrl.QuickEnroll(new QuickEnrollInputModel
+    {
+        FullName = "Khách Đủ 18 Tuổi CCCD",
+        PhoneNumber = adultPhone,
+        Email = adultEmail,
+        DateOfBirth = adultDob,
+        IsCccdVerified = true,
+        ReturnTo = "checkout"
+    }) as RedirectToActionResult;
+    var adultUser = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.PhoneNumber == adultPhone);
+    Check(!minorCreated
+        && adultUser != null
+        && adultUser.EmployeeCode == null
+        && adultUser.Email == adultEmail
+        && adultUser.DateOfBirth == adultDob
+        && adultUser.RewardPoints == 10
+        && enrollRes?.ControllerName == "LoyaltyTest",
+        "T20: Counter QuickEnroll rejects under-18 or unverified CCCD, registers cardless 18+ member (+10 welcome points), and redirects to POS Checkout");
+
+    // T21: Thanh toán tại quầy (POS Checkout) hỗ trợ Khách lẻ & Hội viên qua 2 hình thức VietQR / Tiền mặt + tích hợp bàn chơi & F&B
+    var posCtrl = Prepare(new LoyaltyTestController(db, loyalty, ledger, tierEval), staffPrincipal);
+    await posCtrl.CommitCheckout(
+        customerId: null,
+        referenceCode: $"GUEST-SHORT-{key[..6]}",
+        playtimeAmount: 180000m,
+        fandBAmount: 70000m,
+        pointsToRedeem: 0,
+        voucherCode: null,
+        customerMode: "guest",
+        paymentMethod: "Cash",
+        cashReceived: 200000m);
+    var shortErr = posCtrl.TempData["Error"]?.ToString() ?? "";
+
+    posCtrl.TempData.Clear();
+    await posCtrl.CommitCheckout(
+        customerId: null,
+        referenceCode: $"GUEST-OK-{key[..6]}",
+        playtimeAmount: 180000m,
+        fandBAmount: 70000m,
+        pointsToRedeem: 0,
+        voucherCode: null,
+        customerMode: "guest",
+        paymentMethod: "Cash",
+        cashReceived: 500000m);
+    var guestCashSuccess = posCtrl.TempData["Success"]?.ToString() ?? "";
+
+    await posCtrl.CommitCheckout(
+        customerId: adultUser!.Id,
+        referenceCode: $"MEM-QR-{key[..6]}",
+        playtimeAmount: 200000m,
+        fandBAmount: 40000m,
+        pointsToRedeem: 0,
+        voucherCode: null,
+        customerMode: "member",
+        paymentMethod: "VietQR",
+        cashReceived: null);
+    var ptsAfterQr = await db.Users.AsNoTracking().Where(u => u.Id == adultUser.Id).Select(u => u.RewardPoints).SingleAsync();
+
+    await posCtrl.CommitCheckout(
+        customerId: adultUser.Id,
+        referenceCode: $"MEM-CASH-{key[..6]}",
+        playtimeAmount: 160000m,
+        fandBAmount: 40000m,
+        pointsToRedeem: 0,
+        voucherCode: null,
+        customerMode: "member",
+        paymentMethod: "Cash",
+        cashReceived: 500000m);
+    var ptsAfterCash = await db.Users.AsNoTracking().Where(u => u.Id == adultUser.Id).Select(u => u.RewardPoints).SingleAsync();
+
+    Check(shortErr.Contains("nhỏ hơn")
+        && guestCashSuccess.Contains("250.000")
+        && ptsAfterQr == 22
+        && ptsAfterCash == 32,
+        "T21: POS Checkout supports Walk-in Guest and Member checkout via both VietQR and Cash (validating cash received/change and awarding points for both payment methods)");
+
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }
 finally { await tx.RollbackAsync(); }
