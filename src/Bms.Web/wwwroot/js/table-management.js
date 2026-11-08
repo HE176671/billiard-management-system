@@ -580,11 +580,6 @@
 
         if (boxFnb) boxFnb.classList.remove('d-none');
 
-        const btnQr = document.getElementById('btn-open-qr-menu');
-        if (btnQr) {
-            btnQr.href = '/Menu?tableCode=' + encodeURIComponent(detail.tableCode ?? currentSelectedTable.code);
-        }
-
         if (elFnbTotal) elFnbTotal.textContent = formatVnCurrency(fnbAmount);
         if (elGrandTotal) elGrandTotal.textContent = formatVnCurrency(estimatedAmount + fnbAmount);
 

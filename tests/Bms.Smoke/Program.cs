@@ -1147,18 +1147,6 @@ try
     Check(openQrSession1Res.Success, "WF2 P4: Open session qrSession1 for Table T01");
     var qrSession1 = await db.PlaySessions.AsNoTracking().FirstAsync(s => s.TableId == qrTable.Id && s.Status == "Active");
 
-    // 2. UC-31: Trang QR cho khách hiển thị phiên mở, món và nhúng tạm tính
-    var menuCtrl = new MenuController(db, orderSvc, NullLogger<MenuController>.Instance);
-    var menuResult = await menuCtrl.Index(qrTable.TableCode, null) as ViewResult;
-    var menuVm = menuResult?.Model as QrMenuViewModel;
-
-    Check(menuVm != null
-        && menuVm.HasActiveSession
-        && menuVm.SessionId == qrSession1.Id
-        && menuVm.TableCode == qrTable.TableCode
-        && menuVm.Categories.Any(c => c.Products.Any(p => p.Id == qrDrink.Id)),
-        "WF2 P4: UC-31 Customer scans QR: active session, table info, and menu loaded");
-
     // Khách gọi 2 lon qua QR (mã phiên gửi kèm: qrSession1.Id)
     var qrOrderReq = new QrOrderRequest
     {
