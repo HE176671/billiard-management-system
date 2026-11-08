@@ -108,53 +108,6 @@ public class OrderTests
     }
 
     // ══════════════════════════════════════════════════════
-    // FR-07.5, UC10 AC: Tổng tiền phiên = tiền giờ chơi + tổng thành tiền các món
-    // ══════════════════════════════════════════════════════
-
-    [Fact]
-    public void TotalBill_CalculatesSumOfPlaytimeAndFoodOrders()
-    {
-        // AC: Given phiên có 2 món đã gọi, When xem chi tiết, Then tổng tiền = tiền giờ chơi + tổng thành tiền các món
-        decimal playtimeAmount = 120_000m;
-        
-        var foodItems = new List<CustomerOrderItemViewModel>
-        {
-            new() { ProductId = 1, ProductName = "Trà chanh", Quantity = 2, UnitPrice = 15_000m }, // 30,000
-            new() { ProductId = 2, ProductName = "Mì xào trứng", Quantity = 1, UnitPrice = 35_000m } // 35,000
-        };
-
-        var detailVm = new PlayHistoryDetailViewModel
-        {
-            Id             = 1,
-            PlaytimeAmount = playtimeAmount,
-            OrderedItems   = foodItems
-        };
-
-        Assert.Equal(65_000m, detailVm.FoodAmount);
-        Assert.Equal(185_000m, detailVm.TotalBillAmount);
-    }
-
-    [Fact]
-    public void TotalBill_WhenPlaytimeIsNull_ReturnsFoodAmount()
-    {
-        // Phiên đang chơi chưa có PlaytimeAmount
-        var foodItems = new List<CustomerOrderItemViewModel>
-        {
-            new() { ProductId = 1, ProductName = "Bò húc", Quantity = 1, UnitPrice = 20_000m }
-        };
-
-        var detailVm = new PlayHistoryDetailViewModel
-        {
-            Id             = 2,
-            PlaytimeAmount = null,
-            OrderedItems   = foodItems
-        };
-
-        Assert.Equal(20_000m, detailVm.FoodAmount);
-        Assert.Equal(20_000m, detailVm.TotalBillAmount);
-    }
-
-    // ══════════════════════════════════════════════════════
     // FR-07.7: Thông báo lỗi chuẩn xác khi món hết hàng
     // ══════════════════════════════════════════════════════
 

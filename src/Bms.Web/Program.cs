@@ -87,16 +87,6 @@ app.UseAuthentication();  // phải trước UseAuthorization
 app.UseAuthorization();
 
 app.MapControllerRoute(
-    name: "change_password",
-    pattern: "Profile/ChangePassword",
-    defaults: new { controller = "Profile", action = "ChangePassword" });
-
-app.MapControllerRoute(
-    name: "profile",
-    pattern: "Profile/{action=Index}/{id?}",
-    defaults: new { controller = "CustomerProfile" });
-
-app.MapControllerRoute(
     name: "order_table",
     pattern: "Order/Table/{tableCode}",
     defaults: new { controller = "Order", action = "Table" });
