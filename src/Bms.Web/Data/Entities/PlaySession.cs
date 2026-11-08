@@ -54,7 +54,4 @@ public class PlaySession
 
     [InverseProperty(nameof(Order.Session))]
     public ICollection<Order> Orders { get; set; } = [];
-
-    [NotMapped]
-    public BilliardTable Table => BilliardTable;
 }

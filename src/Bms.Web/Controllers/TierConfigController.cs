@@ -55,7 +55,7 @@ public class TierConfigController : Controller
     {
         var tiers = await _context.MembershipTiers.ToListAsync();
         var counts = await CountCustomersAsync();
-        var parsed = new List<(MembershipTier Tier, decimal Threshold, decimal Discount, int Multiplier, decimal BirthdayVoucher)>();
+        var parsed = new List<(MembershipTier Tier, decimal Threshold, decimal Discount, int Multiplier)>();
 
         foreach (var item in model.Tiers)
         {
@@ -83,13 +83,8 @@ public class TierConfigController : Controller
                 ModelState.AddModelError(string.Empty, $"[{tier.TierName}] Hệ số nhân điểm phải từ 1 đến 100.");
                 continue;
             }
-            if (!TryParseDecimal(item.BirthdayVoucherValue, out var bdayVoucher) || bdayVoucher < 0 || bdayVoucher > 100_000_000m)
-            {
-                ModelState.AddModelError(string.Empty, $"[{tier.TierName}] Giá trị voucher sinh nhật không hợp lệ.");
-                continue;
-            }
 
-            parsed.Add((tier, threshold, Math.Round(discount, 2), item.PointMultiplier, Math.Round(bdayVoucher, 0)));
+            parsed.Add((tier, threshold, Math.Round(discount, 2), item.PointMultiplier));
         }
 
         if (ModelState.IsValid)
@@ -123,7 +118,6 @@ public class TierConfigController : Controller
                 p.Tier.SpendThreshold = p.Threshold;
                 p.Tier.DiscountPercent = p.Discount;
                 p.Tier.PointMultiplier = p.Multiplier;
-                p.Tier.BirthdayVoucherValue = p.BirthdayVoucher;
                 p.Tier.SortOrder = i + 1;
             }
             await _context.SaveChangesAsync();
@@ -170,6 +164,102 @@ public class TierConfigController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // POST /TierConfig/AddTier (Thêm mới hạng thành viên)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddTier(string tierName, decimal spendThreshold, decimal discountPercent = 0m, int pointMultiplier = 1)
+    {
+        tierName = (tierName ?? string.Empty).Trim();
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = "Dữ liệu nhập không hợp lệ: Chỉ được nhập số từ 0 trở lên (không được nhập số âm hoặc ký tự đặc biệt).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (string.IsNullOrEmpty(tierName))
+        {
+            TempData["Error"] = "Vui lòng nhập tên hạng thành viên mới.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (spendThreshold < 0 || discountPercent < 0 || discountPercent > 100 || pointMultiplier < 1 || pointMultiplier > 100)
+        {
+            TempData["Error"] = "Thông số hạng không hợp lệ: Mức chi tiêu >= 0, % giảm giá từ 0-100%, hệ số nhân điểm >= 1.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var existingTiers = await _context.MembershipTiers.OrderBy(t => t.SpendThreshold).ToListAsync();
+        if (existingTiers.Any(t => string.Equals(t.TierName, tierName, StringComparison.OrdinalIgnoreCase)))
+        {
+            TempData["Error"] = $"Hạng thành viên \"{tierName}\" đã tồn tại.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (existingTiers.Any(t => t.SpendThreshold == spendThreshold))
+        {
+            TempData["Error"] = $"Mức chi tiêu {VnFormat.Money(spendThreshold)} đã được sử dụng cho một hạng khác. Vui lòng nhập mức chi tiêu khác.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        int minPoints = (int)Math.Min(1_000_000_000m, Math.Max(0m, Math.Round(spendThreshold / 10000m)));
+        while (existingTiers.Any(t => t.MinPoints == minPoints))
+        {
+            minPoints++;
+        }
+
+        var newTier = new MembershipTier
+        {
+            TierName = tierName,
+            SpendThreshold = spendThreshold,
+            DiscountPercent = Math.Round(discountPercent, 2),
+            PointMultiplier = pointMultiplier,
+            MinPoints = minPoints,
+            SortOrder = existingTiers.Count + 1
+        };
+
+        _context.MembershipTiers.Add(newTier);
+        await _context.SaveChangesAsync();
+
+        var ordered = await _context.MembershipTiers.OrderBy(t => t.SpendThreshold).ThenBy(t => t.Id).ToListAsync();
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].SortOrder = i + 1;
+        }
+        await _context.SaveChangesAsync();
+
+        TempData["Success"] = $"Đã thêm hạng thành viên \"{tierName}\" (Ngưỡng chi tiêu: {VnFormat.Money(spendThreshold)}, Giảm giờ: {discountPercent:0.##}%, Nhân điểm: ×{pointMultiplier}).";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // POST /TierConfig/DeleteTier (Xóa hạng thành viên chưa có dữ liệu gắn kèm)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteTier(int id)
+    {
+        var tier = await _context.MembershipTiers.FindAsync(id);
+        if (tier == null) return NotFound();
+
+        if (tier.SpendThreshold == 0)
+        {
+            TempData["Error"] = $"Không thể xóa hạng mặc định \"{tier.TierName}\" (mức chi tiêu 0 VND).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        bool hasUsers = await _context.Users.AnyAsync(u => u.TierId == id);
+        bool hasRewards = await _context.RewardItems.AnyAsync(r => r.MinTierId == id);
+        if (hasUsers || hasRewards)
+        {
+            TempData["Error"] = $"Không thể xóa hạng \"{tier.TierName}\" vì đang có hội viên hoặc phần quà đổi điểm sử dụng hạng này.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        _context.MembershipTiers.Remove(tier);
+        await _context.SaveChangesAsync();
+
+        TempData["Success"] = $"Đã xóa hạng thành viên \"{tier.TierName}\".";
+        return RedirectToAction(nameof(Index));
+    }
+
     private async Task<List<TierEditItem>> LoadItemsAsync()
     {
         var counts = await CountCustomersAsync();
@@ -183,7 +273,6 @@ public class TierConfigController : Controller
             SpendThreshold = t.SpendThreshold.ToString("0.##", CultureInfo.InvariantCulture),
             DiscountPercent = t.DiscountPercent.ToString("0.##", CultureInfo.InvariantCulture),
             PointMultiplier = t.PointMultiplier,
-            BirthdayVoucherValue = t.BirthdayVoucherValue.ToString("0.##", CultureInfo.InvariantCulture),
             CustomerCount = counts.GetValueOrDefault(t.Id)
         }).ToList();
     }

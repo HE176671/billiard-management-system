@@ -18,7 +18,6 @@ public class TierEditItem
     public string SpendThreshold { get; set; } = "0";
     public string DiscountPercent { get; set; } = "0";
     public int PointMultiplier { get; set; } = 1;
-    public string BirthdayVoucherValue { get; set; } = "0";
     public int CustomerCount { get; set; }
 }
 
@@ -146,8 +145,6 @@ public class Customer360ViewModel
     public List<RewardItemEntity> AvailableRewards { get; set; } = new();
     public List<PointTransaction> LedgerEntries { get; set; } = new();
     public List<HistoryItemViewModel> VisitHistory { get; set; } = new();
-    public List<CustomerAuditLog> AuditLogs { get; set; } = new();
-    public List<CustomerSelectItemViewModel> MergeCandidates { get; set; } = new();
 }
 
 // ── Điều chỉnh điểm thủ công (F2) ──
@@ -157,6 +154,10 @@ public class PointAdjustmentIndexViewModel
     public List<PointAdjustmentRequest> RecentHistory { get; set; } = new();
     public List<CustomerSelectItemViewModel> Customers { get; set; } = new();
     public string? SelectedCustomerId { get; set; }
+    public Dictionary<string, string> RequesterRoleLabels { get; set; } = new();
+    public string CurrentRequesterName { get; set; } = string.Empty;
+    public string CurrentRequesterRoleLabel { get; set; } = string.Empty;
+    public bool IsManagerRequester { get; set; }
 }
 
 // ── CRM Dashboard (F6) ──
@@ -174,7 +175,15 @@ public class CrmDashboardViewModel
     public List<TierDistributionPoint> TierCounts { get; set; } = new();
     public List<MonthlyPointsFlowPoint> MonthlyPointsFlow { get; set; } = new();
     public List<CustomerRfmProfile> TopSpenders12M { get; set; } = new();
+    public int TopSpendersPage { get; set; } = 1;
+    public int TopSpendersTotalPages { get; set; } = 1;
+    public int TopSpendersTotalCount { get; set; }
+
     public List<CustomerRfmProfile> HighValueAtRisk { get; set; } = new();
+    public int AtRiskPage { get; set; } = 1;
+    public int AtRiskTotalPages { get; set; } = 1;
+    public int AtRiskTotalCount { get; set; }
+    public int PageSize { get; set; } = 10;
 }
 
 public class MonthlyPointsFlowPoint
@@ -182,35 +191,4 @@ public class MonthlyPointsFlowPoint
     public string MonthLabel { get; set; } = string.Empty;
     public int EarnedPoints { get; set; }
     public int RedeemedPoints { get; set; }
-}
-
-// ── Chiến dịch (F7) ──
-public class CampaignIndexViewModel
-{
-    public List<Campaign> Campaigns { get; set; } = new();
-    public List<TierOptionViewModel> Tiers { get; set; } = new();
-    public List<RewardItemEntity> RewardItems { get; set; } = new();
-    public CampaignCreateInputModel Form { get; set; } = new();
-    public CampaignPreviewResult? Preview { get; set; }
-}
-
-public class CampaignCreateInputModel
-{
-    [Required(ErrorMessage = "Vui lòng nhập tên chiến dịch.")]
-    [StringLength(150)]
-    public string Name { get; set; } = string.Empty;
-
-    public string CampaignType { get; set; } = Campaign.TypeManual;
-    public string? TargetSegment { get; set; } = "AtRisk";
-    public int? TargetTierId { get; set; }
-    public int? RewardItemId { get; set; }
-    public int BonusPoints { get; set; }
-
-    [Required(ErrorMessage = "Vui lòng nhập tiêu đề thông báo.")]
-    [StringLength(200)]
-    public string MessageTitle { get; set; } = "Ưu đãi đặc biệt dành riêng cho {FullName}!";
-
-    [Required(ErrorMessage = "Vui lòng nhập nội dung thông báo.")]
-    [StringLength(1000)]
-    public string MessageContent { get; set; } = "Xin chào {FullName} (Hạng {TierName}), quán gửi tặng bạn ưu đãi đặc biệt. Số điểm hiện tại của bạn: {Points} điểm. Hẹn gặp lại bạn tại quán!";
 }

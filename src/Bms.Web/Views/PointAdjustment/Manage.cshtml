@@ -80,14 +80,17 @@
                         <th>Mã phiếu</th>
                         <th>Hội viên thụ hưởng</th>
                         <th class="text-end">Điểm đề xuất</th>
-                        <th>Lý do & Nội dung đối chiếu</th>
-                        <th>Nhân viên lập (Staff)</th>
-                        <th style="min-width:290px">Ghi chú & Quyết định của Manager</th>
+                        <th>Lý do &amp; Nội dung đối chiếu</th>
+                        <th class="text-nowrap" style="min-width:145px">Người gửi đơn yêu cầu</th>
+                        <th style="min-width:290px">Ghi chú &amp; Quyết định của Manager</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var r in Model.PendingRequests)
                     {
+                        var reqRoleLabel = Model.RequesterRoleLabels.GetValueOrDefault(r.RequestedById, "Nhân viên yêu cầu");
+                        var isMgrReq = reqRoleLabel.StartsWith("Manager") || reqRoleLabel.StartsWith("Admin");
+                        var reqCode = !string.IsNullOrWhiteSpace(r.RequestedBy?.EmployeeCode) ? $" ({r.RequestedBy.EmployeeCode})" : "";
                         <tr>
                             <td class="fw-bold">#@r.Id</td>
                             <td>
@@ -101,8 +104,13 @@
                             </td>
                             <td>@r.Reason</td>
                             <td>
-                                <div class="fw-semibold">@(r.RequestedBy?.FullName ?? r.RequestedById)</div>
-                                <small class="text-muted">@r.RequestedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</small>
+                                <div class="fw-semibold" style="color:@(isMgrReq ? "#1e40af" : "#15803d")">@(r.RequestedBy?.FullName ?? r.RequestedById)@reqCode</div>
+                                <div class="mt-1">
+                                    <span style="background:@(isMgrReq ? "#2563eb" : "#16a34a");color:#ffffff;font-size:0.72rem;font-weight:600;padding:3px 9px;border-radius:6px;display:inline-block;white-space:nowrap;">
+                                        @reqRoleLabel
+                                    </span>
+                                </div>
+                                <small class="text-muted d-block mt-1">@r.RequestedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</small>
                             </td>
                             <td>
                                 @if (r.RequestedById == curUserId)
@@ -157,15 +165,18 @@
                         <th>Mã</th>
                         <th>Hội viên</th>
                         <th class="text-end">Biến động điểm</th>
-                        <th>Lý do nhân viên lập</th>
-                        <th>Nhân viên lập</th>
+                        <th>Lý do đề xuất</th>
+                        <th class="text-nowrap" style="min-width:145px">Người gửi đơn yêu cầu</th>
                         <th>Trạng thái</th>
-                        <th>Manager xét duyệt & Ghi chú</th>
+                        <th>Manager xét duyệt &amp; Ghi chú</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var h in Model.RecentHistory)
                     {
+                        var hRoleLabel = Model.RequesterRoleLabels.GetValueOrDefault(h.RequestedById, "Nhân viên yêu cầu");
+                        var isMgrHist = hRoleLabel.StartsWith("Manager") || hRoleLabel.StartsWith("Admin");
+                        var hCode = !string.IsNullOrWhiteSpace(h.RequestedBy?.EmployeeCode) ? $" ({h.RequestedBy.EmployeeCode})" : "";
                         <tr>
                             <td>#@h.Id</td>
                             <td>
@@ -178,8 +189,13 @@
                             </td>
                             <td>@h.Reason</td>
                             <td>
-                                <div>@(h.RequestedBy?.FullName ?? h.RequestedById)</div>
-                                <small class="text-muted">@h.RequestedAtUtc.ToVn().ToString("dd/MM HH:mm")</small>
+                                <div class="fw-semibold" style="color:@(isMgrHist ? "#1e40af" : "#15803d")">@(h.RequestedBy?.FullName ?? h.RequestedById)@hCode</div>
+                                <div class="mt-1">
+                                    <span style="background:@(isMgrHist ? "#2563eb" : "#16a34a");color:#ffffff;font-size:0.72rem;font-weight:600;padding:3px 9px;border-radius:6px;display:inline-block;white-space:nowrap;">
+                                        @hRoleLabel
+                                    </span>
+                                </div>
+                                <small class="text-muted d-block mt-1">@h.RequestedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</small>
                             </td>
                             <td>
                                 @if (h.Status == Bms.Web.Data.PointAdjustmentRequest.StatusApproved)

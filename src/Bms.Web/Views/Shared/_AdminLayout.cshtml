@@ -158,8 +158,8 @@
         }
         .table td { padding: 0.75rem 1rem; vertical-align: middle; font-size: 0.875rem; }
         .table tbody tr:hover { background: #f8fafc; }
-        .badge-active   { background:#dcfce7; color:#16a34a; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; }
-        .badge-inactive { background:#fee2e2; color:#dc2626; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; }
+        .badge-active   { background:#dcfce7; color:#16a34a; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; white-space:nowrap; display:inline-block; }
+        .badge-inactive { background:#fee2e2; color:#dc2626; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; white-space:nowrap; display:inline-block; }
 
         /* ── Buttons ── */
         .btn-primary-bms {
@@ -295,13 +295,6 @@
             <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index">
                 <i class="bi bi-grid-3x3"></i> Quản lý bàn
             </a>
-            <a class="sidebar-link @Active("Order", "Counter")" asp-controller="Order" asp-action="Counter">
-                <i class="bi bi-cart3"></i> Gọi món tại quầy
-            </a>
-            <a class="sidebar-link @Active("Order", "Manage")" asp-controller="Order" asp-action="Manage">
-                <i class="bi bi-bell"></i> Duyệt đơn món F&B
-            </a>
-
             <div class="nav-section-label">Quản lý Hội viên &amp; Ưu đãi</div>
             <a class="sidebar-link @Active("CrmDashboard")" asp-controller="CrmDashboard" asp-action="Index">
                 <i class="bi bi-bar-chart-line"></i> Thống kê hội viên
@@ -318,17 +311,11 @@
                     <span class="badge-count">@pendingAdjustCount</span>
                 }
             </a>
-            <a class="sidebar-link @Active("Campaign")" asp-controller="Campaign" asp-action="Index">
-                <i class="bi bi-megaphone"></i> Gửi ưu đãi
-            </a>
             <a class="sidebar-link @Active("TierConfig")" asp-controller="TierConfig" asp-action="Index">
                 <i class="bi bi-award"></i> Hạng thành viên
             </a>
             <a class="sidebar-link @Active("RewardItem")" asp-controller="RewardItem" asp-action="Index">
                 <i class="bi bi-gift"></i> Quà đổi điểm
-            </a>
-            <a class="sidebar-link @Active("Review")" asp-controller="Review" asp-action="Index">
-                <i class="bi bi-star-half"></i> Đánh giá dịch vụ
             </a>
         }
 
@@ -349,7 +336,6 @@
             </a>
 
             <div class="nav-section-label">Nghiệp vụ ca làm &amp; F/B</div>
-            <a class="sidebar-link @Active("Staff")" asp-controller="Staff" asp-action="Index"><i class="bi bi-house"></i> Trang nhân viên</a>
             <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
             <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
             <a class="sidebar-link @Active("Order", "Counter")" asp-controller="Order" asp-action="Counter"><i class="bi bi-cart3"></i> Gọi món tại quầy</a>
@@ -402,6 +388,7 @@
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
 <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
 <script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+<script src="~/js/bms-number-validator.js" asp-append-version="true"></script>
 @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

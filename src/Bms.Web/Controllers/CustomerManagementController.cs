@@ -93,11 +93,18 @@ public class CustomerManagementController : Controller
         return Json(matches);
     }
 
-    // POST /CustomerManagement/QuickEnroll (Đăng ký tài khoản hội viên tại quầy kèm kiểm tra CCCD đủ 18 tuổi + tặng 10 điểm chào mừng)
+    // POST /CustomerManagement/QuickEnroll (Đăng ký tài khoản hội viên tại quầy kèm kiểm tra CCCD đủ 18 tuổi + tặng 10 điểm chào mừng — chỉ dành cho Staff)
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [Authorize(Roles = "Staff,Admin")]
     public async Task<IActionResult> QuickEnroll(QuickEnrollInputModel input)
     {
+        if (User.IsInRole("Manager") && !User.IsInRole("Staff"))
+        {
+            TempData["Error"] = "Chức năng đăng ký hội viên mới tại quầy chỉ dành cho Nhân viên (Staff).";
+            return RedirectToAction(nameof(Index));
+        }
+
         input.FullName = ValidationRules.CollapseSpaces(input.FullName ?? string.Empty);
         input.PhoneNumber = (input.PhoneNumber ?? string.Empty).Trim();
         input.Email = string.IsNullOrWhiteSpace(input.Email) ? null : input.Email.Trim();
@@ -328,7 +335,8 @@ public class CustomerManagementController : Controller
             .ToListAsync();
 
         var vouchers = await _context.CustomerVouchers.AsNoTracking()
-            .Where(v => v.CustomerId == id)
+            .Include(v => v.RewardItem)
+            .Where(v => v.CustomerId == id && v.RewardItemId != null)
             .OrderByDescending(v => v.IssuedAtUtc)
             .ToListAsync();
 
@@ -377,32 +385,6 @@ public class CustomerManagementController : Controller
         }
         catch { /* Bỏ qua nếu chưa có dữ liệu */ }
 
-        var auditLogs = new List<CustomerAuditLog>();
-        var mergeCandidates = new List<CustomerSelectItemViewModel>();
-        if (IsAdmin)
-        {
-            auditLogs = await _context.CustomerAuditLogs.AsNoTracking()
-                .Include(a => a.Actor)
-                .Where(a => a.CustomerId == id)
-                .OrderByDescending(a => a.CreatedAtUtc)
-                .Take(50)
-                .ToListAsync();
-
-            mergeCandidates = await CustomersQuery()
-                .Where(u => u.Id != id && u.IsActive)
-                .OrderBy(u => u.FullName)
-                .Take(100)
-                .Select(u => new CustomerSelectItemViewModel
-                {
-                    Id = u.Id,
-                    FullName = u.FullName,
-                    PhoneNumber = u.PhoneNumber,
-                    CardCode = u.EmployeeCode,
-                    RewardPoints = u.RewardPoints
-                })
-                .ToListAsync();
-        }
-
         var (segStyle, segAction) = CustomerSegmentService.GetSegmentMeta(rfm?.Segment ?? "Regular");
 
         var vm = new Customer360ViewModel
@@ -446,9 +428,7 @@ public class CustomerManagementController : Controller
             AllVouchers = vouchers,
             AvailableRewards = rewardItems,
             LedgerEntries = ledgerEntries,
-            VisitHistory = visitHistory,
-            AuditLogs = auditLogs,
-            MergeCandidates = mergeCandidates
+            VisitHistory = visitHistory
         };
 
         return View(vm);
@@ -540,125 +520,6 @@ public class CustomerManagementController : Controller
         else TempData["Error"] = res.Message;
 
         return RedirectToAction(nameof(Profile), new { id = customerId });
-    }
-
-    // POST /CustomerManagement/MergeDuplicate (F8: Manager gộp tài khoản trùng)
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
-    public async Task<IActionResult> MergeDuplicate(string targetCustomerId, string sourceCustomerId)
-    {
-        if (string.IsNullOrWhiteSpace(targetCustomerId) || string.IsNullOrWhiteSpace(sourceCustomerId) || targetCustomerId == sourceCustomerId)
-        {
-            TempData["Error"] = "Vui lòng chọn tài khoản nguồn hợp lệ khác với tài khoản đích.";
-            return RedirectToAction(nameof(Profile), new { id = targetCustomerId });
-        }
-
-        var targetUser = await GetCustomerOrNullAsync(targetCustomerId);
-        var sourceUser = await GetCustomerOrNullAsync(sourceCustomerId);
-        if (targetUser == null || sourceUser == null)
-            return NotFound();
-
-        await using var tx = await _context.Database.BeginTransactionAsync();
-        try
-        {
-            int pointsToTransfer = sourceUser.RewardPoints;
-            decimal spendToTransfer = sourceUser.TotalSpend;
-            var actorId = CurrentActorId;
-            var now = DateTime.UtcNow;
-
-            // 1. Nếu tài khoản nguồn còn điểm -> trừ hết ở nguồn và cộng sang đích qua sổ cái Adjust
-            if (pointsToTransfer > 0)
-            {
-                await _ledger.PostAsync(
-                    customerId: sourceUser.Id,
-                    delta: -pointsToTransfer,
-                    type: PointTransaction.Adjust,
-                    referenceCode: $"MERGE-OUT-{sourceUser.Id}"[..Math.Min(50, $"MERGE-OUT-{sourceUser.Id}".Length)],
-                    invoiceId: null,
-                    reason: $"Chuyển điểm do gộp sang tài khoản {targetUser.PhoneNumber ?? targetUser.FullName}",
-                    actorId: actorId);
-
-                await _ledger.PostAsync(
-                    customerId: targetUser.Id,
-                    delta: pointsToTransfer,
-                    type: PointTransaction.Adjust,
-                    referenceCode: $"MERGE-IN-{sourceUser.Id}"[..Math.Min(50, $"MERGE-IN-{sourceUser.Id}".Length)],
-                    invoiceId: null,
-                    reason: $"Gộp tài khoản từ {sourceUser.FullName} ({sourceUser.PhoneNumber})",
-                    actorId: actorId);
-            }
-
-            // 2. Chuyển toàn bộ dữ liệu liên kết từ source sang target
-            await _context.PointTransactions.Where(x => x.CustomerId == sourceUser.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.CustomerId, targetUser.Id));
-            await _context.CustomerVouchers.Where(x => x.CustomerId == sourceUser.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.CustomerId, targetUser.Id));
-            await _context.Reviews.Where(x => x.CustomerId == sourceUser.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.CustomerId, targetUser.Id));
-            await _context.Notifications.Where(x => x.UserId == sourceUser.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.UserId, targetUser.Id));
-            await _context.CustomerNotes.Where(x => x.CustomerId == sourceUser.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.CustomerId, targetUser.Id));
-
-            await _context.Database.ExecuteSqlInterpolatedAsync($@"
-                UPDATE dbo.Invoices SET CustomerId = {targetUser.Id} WHERE CustomerId = {sourceUser.Id};
-                UPDATE dbo.PlaySessions SET CustomerId = {targetUser.Id} WHERE CustomerId = {sourceUser.Id};
-                UPDATE dbo.Bookings SET CustomerId = {targetUser.Id} WHERE CustomerId = {sourceUser.Id};
-            ");
-
-            // 3. Cộng dồn TotalSpend và khóa tài khoản nguồn
-            await _context.Entry(targetUser).ReloadAsync();
-            await _context.Entry(sourceUser).ReloadAsync();
-
-            targetUser.TotalSpend += spendToTransfer;
-            if (sourceUser.LastPaidDate.HasValue && (!targetUser.LastPaidDate.HasValue || sourceUser.LastPaidDate > targetUser.LastPaidDate))
-            {
-                targetUser.LastPaidDate = sourceUser.LastPaidDate;
-            }
-            sourceUser.IsActive = false;
-
-            var detailJson = JsonSerializer.Serialize(new
-            {
-                sourceId = sourceUser.Id,
-                sourcePhone = sourceUser.PhoneNumber,
-                targetId = targetUser.Id,
-                targetPhone = targetUser.PhoneNumber,
-                pointsTransferred = pointsToTransfer,
-                spendTransferred = spendToTransfer
-            });
-
-            _context.CustomerAuditLogs.Add(new CustomerAuditLog
-            {
-                CustomerId = targetUser.Id,
-                Action = "Merge",
-                Detail = detailJson,
-                ActorId = actorId,
-                CreatedAtUtc = now
-            });
-            _context.CustomerAuditLogs.Add(new CustomerAuditLog
-            {
-                CustomerId = sourceUser.Id,
-                Action = "Merge",
-                Detail = detailJson,
-                ActorId = actorId,
-                CreatedAtUtc = now
-            });
-
-            await _context.SaveChangesAsync();
-            await _userManager.UpdateSecurityStampAsync(sourceUser);
-            await tx.CommitAsync();
-            _segmentService.InvalidateCache();
-
-            TempData["Success"] = $"Đã gộp thành công tài khoản {sourceUser.FullName} ({sourceUser.PhoneNumber}) vào {targetUser.FullName} (+{pointsToTransfer} điểm) và khóa tài khoản nguồn.";
-        }
-        catch
-        {
-            await tx.RollbackAsync();
-            TempData["Error"] = "Không thể gộp tài khoản. Vui lòng thử lại.";
-        }
-
-        return RedirectToAction(nameof(Profile), new { id = targetCustomerId });
     }
 
     // ═════════════════════════════════════════════════════════════════════

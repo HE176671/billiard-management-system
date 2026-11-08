@@ -39,7 +39,7 @@
                             <th class="text-end">Điểm đổi</th>
                             <th class="text-end">Giá trị quy đổi</th>
                             <th>Hạng áp dụng</th>
-                            <th>Trạng thái</th>
+                            <th class="text-nowrap" style="width:110px">Trạng thái</th>
                             <th class="text-end">Thao tác</th>
                         </tr>
                     </thead>
@@ -56,14 +56,14 @@
                                 <td class="text-end fw-bold text-danger">@VnFormat.Number(item.PointCost) điểm</td>
                                 <td class="text-end">@(item.DiscountValue.HasValue ? VnFormat.Money(item.DiscountValue.Value) : "—")</td>
                                 <td>@(item.MinTier != null ? $"Từ hạng {item.MinTier.TierName}" : "Mọi hạng")</td>
-                                <td>
+                                <td class="text-nowrap">
                                     @if (item.IsActive)
                                     {
-                                        <span class="badge-active">Đang mở</span>
+                                        <span class="badge-active text-nowrap" style="white-space:nowrap; display:inline-block;">Đang mở</span>
                                     }
                                     else
                                     {
-                                        <span class="badge-inactive">Đã đóng</span>
+                                        <span class="badge-inactive text-nowrap" style="white-space:nowrap; display:inline-block;">Đã đóng</span>
                                     }
                                 </td>
                                 <td class="text-end text-nowrap">
@@ -128,8 +128,9 @@
                 <div class="row g-2 mb-2">
                     <div class="col-6">
                         <label class="form-label">Điểm đổi</label>
-                        <input type="number" name="pointCost" class="form-control" min="1"
-                               value="@(editItem?.PointCost ?? 30)" required />
+                        <input type="number" name="pointCost" id="inpRewardPointCost" class="form-control" min="0" step="1"
+                               data-non-negative="true" data-field-label="Điểm đổi"
+                               value="@(editItem?.PointCost ?? 0)" required />
                     </div>
                     <div class="col-6">
                         <label class="form-label">Hình thức</label>
@@ -143,8 +144,9 @@
                 <div class="row g-2 mb-2">
                     <div class="col-6">
                         <label class="form-label">Giá trị quy đổi (VND)</label>
-                        <input type="number" name="discountValue" class="form-control" step="1000"
-                               value="@(editItem?.DiscountValue?.ToString("0") ?? "30000")" />
+                        <input type="number" name="discountValue" id="inpRewardDiscountValue" class="form-control" min="0" step="1000"
+                               data-non-negative="true" data-field-label="Giá trị quy đổi (VND)"
+                               value="@(editItem?.DiscountValue?.ToString("0") ?? "0")" required />
                     </div>
                     <div class="col-6">
                         <label class="form-label">Hạng tối thiểu</label>

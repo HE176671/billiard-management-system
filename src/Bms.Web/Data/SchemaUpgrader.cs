@@ -174,9 +174,9 @@ public static class SchemaUpgrader
                 Code varchar(30) NOT NULL CONSTRAINT UQ_RewardItems_Code UNIQUE,
                 Name nvarchar(100) NOT NULL,
                 Description nvarchar(300) NULL,
-                PointCost int NOT NULL CONSTRAINT CK_RewardItems_Cost CHECK (PointCost > 0),
+                PointCost int NOT NULL CONSTRAINT CK_RewardItems_Cost CHECK (PointCost >= 0),
                 RewardType varchar(20) NOT NULL CONSTRAINT CK_RewardItems_Type CHECK (RewardType IN ('Gift', 'FreeHour', 'BillDiscount')),
-                DiscountValue decimal(18,2) NULL,
+                DiscountValue decimal(18,2) NULL CONSTRAINT CK_RewardItems_Discount CHECK (DiscountValue IS NULL OR DiscountValue >= 0),
                 ValidDays int NOT NULL CONSTRAINT DF_RewardItems_ValidDays DEFAULT 7,
                 MinTierId int NULL,
                 IsActive bit NOT NULL CONSTRAINT DF_RewardItems_IsActive DEFAULT 1,
@@ -304,8 +304,105 @@ public static class SchemaUpgrader
         """
     };
 
+    private const string PaymentIntegrityBatch = """
+        SET ANSI_NULLS ON;
+        SET QUOTED_IDENTIFIER ON;
+
+        IF COL_LENGTH('dbo.PaymentTransactions', 'GatewayRefCode') IS NULL
+            ALTER TABLE dbo.PaymentTransactions ADD GatewayRefCode nvarchar(100) NULL;
+
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_PaymentTransactions_GatewayRefCode' AND object_id = OBJECT_ID('dbo.PaymentTransactions'))
+            CREATE UNIQUE INDEX UX_PaymentTransactions_GatewayRefCode
+                ON dbo.PaymentTransactions(GatewayRefCode) WHERE GatewayRefCode IS NOT NULL;
+
+        IF OBJECT_ID('dbo.PaymentIntents', 'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.PaymentIntents (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_PaymentIntents PRIMARY KEY,
+                InvoiceId int NOT NULL,
+                ReferenceCode varchar(50) NOT NULL,
+                ExpectedAmount decimal(18,2) NOT NULL,
+                Provider varchar(30) NOT NULL CONSTRAINT DF_PaymentIntent_Provider DEFAULT 'SePay',
+                Status varchar(20) NOT NULL CONSTRAINT DF_PaymentIntent_Status DEFAULT 'Pending',
+                ProviderTransactionId nvarchar(100) NULL,
+                CustomerId nvarchar(450) NULL,
+                SessionId int NULL,
+                PlaytimeAmount decimal(18,2) NOT NULL,
+                FandBAmount decimal(18,2) NOT NULL,
+                PointsToRedeem int NOT NULL CONSTRAINT DF_PaymentIntent_Points DEFAULT 0,
+                VoucherCode varchar(20) NULL,
+                CashierId nvarchar(450) NULL,
+                CreatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_PaymentIntent_Created DEFAULT SYSUTCDATETIME(),
+                ExpiresAtUtc datetime2(0) NOT NULL,
+                ConfirmedAtUtc datetime2(0) NULL,
+                CONSTRAINT FK_PaymentIntent_Invoice FOREIGN KEY (InvoiceId) REFERENCES dbo.Invoices(Id),
+                CONSTRAINT FK_PaymentIntent_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.AspNetUsers(Id),
+                CONSTRAINT FK_PaymentIntent_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+                CONSTRAINT FK_PaymentIntent_Cashier FOREIGN KEY (CashierId) REFERENCES dbo.AspNetUsers(Id),
+                CONSTRAINT CK_PaymentIntent_Amount CHECK (ExpectedAmount > 0),
+                CONSTRAINT CK_PaymentIntent_Status CHECK (Status IN ('Pending','Confirmed','Expired','Failed')),
+                CONSTRAINT CK_PaymentIntent_Points CHECK (PointsToRedeem >= 0)
+            );
+            CREATE UNIQUE INDEX UX_PaymentIntents_ReferenceCode ON dbo.PaymentIntents(ReferenceCode);
+            CREATE UNIQUE INDEX UX_PaymentIntents_ProviderTransactionId ON dbo.PaymentIntents(ProviderTransactionId)
+                WHERE ProviderTransactionId IS NOT NULL;
+            CREATE INDEX IX_PaymentIntents_Status_Expires ON dbo.PaymentIntents(Status, ExpiresAtUtc);
+        END;
+        """;
+
+    private const string OrderSchemaBatch = """
+        SET ANSI_NULLS ON;
+        SET QUOTED_IDENTIFIER ON;
+
+        IF OBJECT_ID('dbo.Orders', 'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Orders (
+                Id int IDENTITY NOT NULL CONSTRAINT PK_Orders PRIMARY KEY,
+                SessionId int NOT NULL,
+                OrderTimeUtc datetime2(0) NOT NULL CONSTRAINT DF_Order_Time DEFAULT SYSUTCDATETIME(),
+                Status varchar(20) NOT NULL CONSTRAINT DF_Order_Status DEFAULT 'Pending',
+                CONSTRAINT FK_Order_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+                CONSTRAINT CK_Order_Status CHECK (Status IN ('Pending', 'Preparing', 'Served', 'Cancelled'))
+            );
+        END;
+
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Orders_Session' AND object_id = OBJECT_ID('dbo.Orders'))
+            CREATE INDEX IX_Orders_Session ON dbo.Orders(SessionId);
+
+        IF OBJECT_ID('dbo.OrderDetails', 'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.OrderDetails (
+                Id int IDENTITY NOT NULL CONSTRAINT PK_OrderDetails PRIMARY KEY,
+                OrderId int NOT NULL,
+                ProductId int NOT NULL,
+                Quantity int NOT NULL,
+                UnitPrice decimal(18,2) NOT NULL,
+                Subtotal AS (Quantity * UnitPrice) PERSISTED,
+                CONSTRAINT FK_OrderDetail_Order FOREIGN KEY (OrderId) REFERENCES dbo.Orders(Id) ON DELETE CASCADE,
+                CONSTRAINT FK_OrderDetail_Product FOREIGN KEY (ProductId) REFERENCES dbo.Products(Id),
+                CONSTRAINT CK_OrderDetail_Qty CHECK (Quantity > 0),
+                CONSTRAINT CK_OrderDetail_Price CHECK (UnitPrice >= 0)
+            );
+        END;
+
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OrderDetails_OrderId' AND object_id = OBJECT_ID('dbo.OrderDetails'))
+            CREATE INDEX IX_OrderDetails_OrderId ON dbo.OrderDetails(OrderId);
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OrderDetails_ProductId' AND object_id = OBJECT_ID('dbo.OrderDetails'))
+            CREATE INDEX IX_OrderDetails_ProductId ON dbo.OrderDetails(ProductId);
+        """;
+
     public static async Task ApplyAsync(ApplicationDbContext db, ILogger logger)
     {
+        // Module gọi món F&B được merge từ nhánh Hiep; chỉ bổ sung bảng/index còn thiếu.
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(OrderSchemaBatch);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Không thể nâng cấp schema Orders/OrderDetails cho chức năng gọi món F&B.");
+        }
+
         // 1. Nâng cấp WorkShift (Script 08)
         var missingShift = await db.Database.SqlQueryRaw<int>("""
             SELECT CASE WHEN COL_LENGTH('dbo.WorkShifts', 'ExpectedCash') IS NULL
@@ -336,7 +433,6 @@ public static class SchemaUpgrader
         var missingCrmV2 = await db.Database.SqlQueryRaw<int>("""
             SELECT CASE WHEN COL_LENGTH('dbo.AspNetUsers', 'AccountSource') IS NULL
                           OR COL_LENGTH('dbo.AspNetUsers', 'TierGraceUntilUtc') IS NULL
-                          OR COL_LENGTH('dbo.MembershipTiers', 'BirthdayVoucherValue') IS NULL
                           OR COL_LENGTH('dbo.PointTransactions', 'BalanceAfter') IS NULL
                           OR COL_LENGTH('dbo.PointTransactions', 'SpendAmount') IS NULL
                           OR OBJECT_ID('dbo.RewardItems', 'U') IS NULL
@@ -364,7 +460,17 @@ public static class SchemaUpgrader
             }
         }
 
-        // 3. Đảm bảo Role Manager, bảng ComboItems, danh mục Gậy cho thuê & dữ liệu mẫu Combo/Review
+        // 3. Thanh toán an toàn: yêu cầu VietQR chờ webhook và khóa chống ghi giao dịch trùng.
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(PaymentIntegrityBatch);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Không thể nâng cấp schema PaymentIntents/chống giao dịch trùng.");
+        }
+
+        // 4. Đảm bảo Role Manager, bảng ComboItems, danh mục Gậy cho thuê & dữ liệu mẫu Combo/Review
         try
         {
             await db.Database.ExecuteSqlRawAsync("""
@@ -375,7 +481,25 @@ public static class SchemaUpgrader
                     ALTER TABLE dbo.Reviews ADD AdminReply nvarchar(max) NULL;
 
                 IF OBJECT_ID('dbo.RewardItems', 'U') IS NOT NULL
+                BEGIN
                     UPDATE dbo.RewardItems SET ValidDays = 7 WHERE ValidDays <> 7;
+                    UPDATE dbo.RewardItems SET PointCost = 0 WHERE PointCost < 0;
+                    UPDATE dbo.RewardItems SET DiscountValue = 0 WHERE DiscountValue < 0;
+                    IF OBJECT_ID('dbo.CK_RewardItems_Cost', 'C') IS NOT NULL
+                        ALTER TABLE dbo.RewardItems DROP CONSTRAINT CK_RewardItems_Cost;
+                    ALTER TABLE dbo.RewardItems ADD CONSTRAINT CK_RewardItems_Cost CHECK (PointCost >= 0);
+                    IF OBJECT_ID('dbo.CK_RewardItems_Discount', 'C') IS NULL
+                        ALTER TABLE dbo.RewardItems ADD CONSTRAINT CK_RewardItems_Discount CHECK (DiscountValue IS NULL OR DiscountValue >= 0);
+                END;
+
+                IF OBJECT_ID('dbo.CustomerVouchers', 'U') IS NOT NULL
+                BEGIN
+                    DELETE FROM dbo.CustomerVouchers WHERE UsedReferenceCode LIKE 'BDAY-%' OR (RewardItemId IS NULL AND Title LIKE N'%sinh nhật%');
+                END;
+                IF OBJECT_ID('dbo.Notifications', 'U') IS NOT NULL
+                BEGIN
+                    DELETE FROM dbo.Notifications WHERE [Type] = 'Birthday';
+                END;
 
                 IF OBJECT_ID('dbo.ComboItems', 'U') IS NULL
                 BEGIN
@@ -485,6 +609,39 @@ public static class SchemaUpgrader
                    AND NOT EXISTS (SELECT 1 FROM dbo.AspNetUserRoles WHERE UserId = @mgrUserId AND RoleId = @mgrRoleId)
                 BEGIN
                     INSERT INTO dbo.AspNetUserRoles(UserId, RoleId) VALUES (@mgrUserId, @mgrRoleId);
+                END;
+
+                -- Đồng bộ toàn bộ dữ liệu nghiệp vụ điều chỉnh điểm / chiến dịch từ Admin mẫu sang Manager mẫu
+                IF @mgrUserId IS NOT NULL AND OBJECT_ID('dbo.PointAdjustmentRequests', 'U') IS NOT NULL
+                BEGIN
+                    UPDATE dbo.PointAdjustmentRequests
+                    SET RequestedById = @mgrUserId
+                    WHERE RequestedById = N'demo-admin'
+                       OR RequestedById IN (
+                           SELECT ur.UserId FROM dbo.AspNetUserRoles ur
+                           JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+                           WHERE r.NormalizedName = N'ADMIN'
+                       );
+
+                    UPDATE dbo.PointAdjustmentRequests
+                    SET ReviewedById = @mgrUserId
+                    WHERE ReviewedById = N'demo-admin'
+                       OR ReviewedById IN (
+                           SELECT ur.UserId FROM dbo.AspNetUserRoles ur
+                           JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+                           WHERE r.NormalizedName = N'ADMIN'
+                       );
+
+                    UPDATE dbo.PointAdjustmentRequests
+                    SET ReviewNote = N'Manager đã phê duyệt'
+                    WHERE ReviewNote LIKE N'%Admin%' OR ReviewNote LIKE N'%Tự động duyệt%';
+                END;
+
+                IF @mgrUserId IS NOT NULL AND OBJECT_ID('dbo.Campaigns', 'U') IS NOT NULL
+                BEGIN
+                    UPDATE dbo.Campaigns
+                    SET CreatedById = @mgrUserId
+                    WHERE CreatedById = N'demo-admin';
                 END;
 
                 -- Danh mục Gậy cho thuê & dữ liệu mẫu

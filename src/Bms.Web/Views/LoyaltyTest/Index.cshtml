@@ -7,6 +7,9 @@
     var p = Model.Preview;
     var isGuest = Model.IsGuestMode;
     var finalAmt = Model.FinalAmount;
+    var playtimeAmountInput = decimal.Round(Model.PlaytimeAmount, 0, MidpointRounding.AwayFromZero).ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+    var fandBAmountInput = decimal.Round(Model.FandBAmount, 0, MidpointRounding.AwayFromZero).ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+    var cashReceivedInput = decimal.Round(Model.CashReceived, 0, MidpointRounding.AwayFromZero).ToString("0", System.Globalization.CultureInfo.InvariantCulture);
     var maxAdultBirthDate = DateTime.UtcNow.AddHours(7).AddYears(-18).ToString("yyyy-MM-dd");
 }
 
@@ -53,7 +56,7 @@
                        asp-route-playtimeAmount="@Model.PlaytimeAmount"
                        asp-route-fandBAmount="@Model.FandBAmount"
                        class="btn btn-sm @(!isGuest ? "btn-danger fw-semibold" : "btn-outline-secondary")">
-                        <i class="bi bi-person-check me-1"></i>Khách đã có TK hội viên
+                        <i class="bi bi-person-check me-1"></i>Hội viên
                     </a>
                     <a asp-action="Index"
                        asp-route-customerMode="guest"
@@ -61,86 +64,61 @@
                        asp-route-playtimeAmount="@Model.PlaytimeAmount"
                        asp-route-fandBAmount="@Model.FandBAmount"
                        class="btn btn-sm @(isGuest ? "btn-danger fw-semibold" : "btn-outline-secondary")">
-                        <i class="bi bi-person-walking me-1"></i>Khách lẻ (Chưa có TK)
+                        <i class="bi bi-person-walking me-1"></i>Khách lẻ
                     </a>
                 </div>
             </div>
 
-            <!-- 1. Tích hợp chọn Bàn / Phiên chơi (PlaySessions) & Thực đơn F&B (Orders) -->
+            <!-- 1. Chọn bàn cần thanh toán -->
             @if (Model.ActiveSessions.Any())
             {
                 <div class="mb-3 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0">
                     <form method="get" asp-action="Index" class="row g-2 align-items-end">
                         <input type="hidden" name="customerMode" value="@Model.CustomerMode" />
                         <input type="hidden" name="customerId" value="@Model.SelectedCustomerId" />
-                        <div class="col-md-9">
-                            <label class="form-label mb-1" style="font-size:0.8rem">
-                                <i class="bi bi-grid-3x3-gap me-1 text-primary"></i>Tích hợp Vận hành bàn &amp; Thực đơn F&amp;B (Chọn phiên bàn để tự động lấy tiền giờ &amp; đồ ăn/nước uống)
+                        <div class="@(Model.SelectedSessionId.HasValue ? "col-md-9" : "col-12")">
+                            <label class="form-label mb-1 fw-semibold" style="font-size:0.84rem">
+                                <i class="bi bi-grid-3x3-gap me-1 text-primary"></i>Chọn bàn đang cần thanh toán
                             </label>
-                            <select name="sessionId" class="form-select form-select-sm" onchange="this.form.submit()">
-                                <option value="">-- Nhập số tiền thủ công hoặc chọn phiên bàn cần thanh toán --</option>
+                            <select name="sessionId" class="form-select" onchange="this.form.submit()">
+                                <option value="">Chọn bàn cần thanh toán or nhập số tiền thủ công</option>
                                 @foreach (var s in Model.ActiveSessions)
                                 {
                                     <option value="@s.SessionId" selected="@(Model.SelectedSessionId == s.SessionId)">
-                                        #@s.SessionId — @s.TableCode (@s.Status) · Giờ chơi: @VnFormat.Money(s.PlaytimeAmount) · F&amp;B: @VnFormat.Money(s.FandBAmount) @(s.CustomerName != null ? $"· KH: {s.CustomerName}" : "")
+                                        Bàn @s.TableCode — Thời gian chơi: @s.PlayDurationText
                                     </option>
                                 }
                             </select>
                         </div>
-                        <div class="col-md-3">
-                            @if (Model.SelectedSessionId.HasValue)
-                            {
+                        @if (Model.SelectedSessionId.HasValue)
+                        {
+                            <div class="col-md-3">
                                 <a asp-action="Index" asp-route-customerMode="@Model.CustomerMode" asp-route-customerId="@Model.SelectedCustomerId"
-                                   class="btn btn-sm btn-outline-secondary w-100">
+                                   class="btn btn-outline-secondary w-100">
                                     Bỏ chọn bàn
                                 </a>
-                            }
-                        </div>
+                            </div>
+                        }
                     </form>
 
                     @if (Model.SelectedSession != null)
                     {
-                        <div class="mt-2 pt-2 border-top d-flex justify-content-between flex-wrap gap-2" style="font-size:0.8rem">
+                        <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2" style="font-size:0.82rem">
                             <span>
-                                <strong>@Model.SelectedSession.TableCode</strong> (Phiên #@Model.SelectedSession.SessionId) ·
-                                Bắt đầu: @Model.SelectedSession.StartAtUtc.ToVn().ToString("dd/MM HH:mm") ·
-                                Giá bàn: @VnFormat.Money(Model.SelectedSession.HourlyRateSnapshot)/giờ
+                                <span class="badge bg-danger me-1">Bàn @Model.SelectedSession.TableCode</span>
+                                Thời gian chơi: <strong>@Model.SelectedSession.PlayDurationText</strong>
+                                <span class="text-muted ms-1">(@Model.SelectedSession.StartAtUtc.ToVn().ToString("HH:mm") – @((Model.SelectedSession.EndAtUtc ?? DateTime.UtcNow).ToVn().ToString("HH:mm")))</span>
                             </span>
-                            <span class="text-primary fw-semibold">
-                                Tiền giờ: @VnFormat.Money(Model.SelectedSession.PlaytimeAmount) | F&amp;B: @VnFormat.Money(Model.SelectedSession.FandBAmount)
+                            <span class="text-muted">
+                                Đơn giá bàn: <strong>@VnFormat.Money(Model.SelectedSession.HourlyRateSnapshot)/giờ</strong>
                             </span>
                         </div>
-                        @if (Model.SessionOrderLines.Any())
-                        {
-                            <div class="mt-2 pt-2 border-top" style="font-size:0.78rem">
-                                <div class="fw-semibold text-secondary mb-1"><i class="bi bi-cup-straw me-1"></i>Chi tiết đồ ăn / nước uống đã gọi tại bàn:</div>
-                                <div class="d-flex flex-wrap gap-2">
-                                    @foreach (var item in Model.SessionOrderLines)
-                                    {
-                                        <span class="badge bg-white text-dark border">
-                                            @item.ProductName × @item.Quantity (@VnFormat.Money(item.Subtotal))
-                                        </span>
-                                    }
-                                </div>
-                            </div>
-                        }
                     }
                 </div>
             }
 
             <!-- 2. Khu vực Khách lẻ vs Khách hội viên -->
-            @if (isGuest)
-            {
-                <div class="p-3 rounded-3 mb-3" style="background:#fffbeb;border:1px solid #fde68a">
-                    <div class="fw-bold text-dark" style="font-size:0.9rem">
-                        <i class="bi bi-person-walking text-warning me-1"></i>Chế độ Thanh toán Khách lẻ tại quầy
-                    </div>
-                    <div class="text-muted mt-1" style="font-size:0.8rem">
-                        Thanh toán trực tiếp hóa đơn bàn chơi và F&amp;B bằng <strong>Chuyển khoản VietQR (STK: 2107072003)</strong> hoặc <strong>Tiền mặt</strong> (nhập tiền khách đưa &amp; tính tiền trả lại).
-                    </div>
-                </div>
-            }
-            else
+            @if (!isGuest)
             {
                 <!-- Tìm kiếm hội viên theo Tên hoặc SĐT kèm Hạng thành viên & Điểm bên cạnh -->
                 <div class="mb-3">
@@ -157,8 +135,8 @@
                     <form method="get" asp-action="Index" id="selectMemberForm">
                         <input type="hidden" name="customerMode" value="member" />
                         <input type="hidden" name="sessionId" value="@Model.SelectedSessionId" />
-                        <input type="hidden" name="playtimeAmount" id="frmMemberPlaytime" value="@Model.PlaytimeAmount" />
-                        <input type="hidden" name="fandBAmount" id="frmMemberFnb" value="@Model.FandBAmount" />
+                        <input type="hidden" name="playtimeAmount" id="frmMemberPlaytime" value="@playtimeAmountInput" />
+                        <input type="hidden" name="fandBAmount" id="frmMemberFnb" value="@fandBAmountInput" />
                         <div class="d-flex gap-2">
                             <select name="customerId" id="customerIdSelect" class="form-select">
                                 @foreach (var c in Model.Customers)
@@ -214,17 +192,27 @@
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
                         <label class="form-label">Tiền giờ chơi bàn (VND) <span class="text-danger">*</span></label>
-                        <input type="number" name="playtimeAmount" id="inpPlaytime" class="form-control calc-trigger"
-                               min="0" step="1000" value="@Model.PlaytimeAmount" required />
+                        <input type="number" name="playtimeAmount" id="inpPlaytime"
+                               class="form-control calc-trigger @(Model.SelectedSession != null ? "bg-light" : "")"
+                               min="0" step="1" inputmode="numeric" value="@playtimeAmountInput"
+                               readonly="@(Model.SelectedSession != null)" required />
                         <div class="form-text">
-                            @(isGuest ? "Khách lẻ tính nguyên giá giờ chơi." : "Chiết khấu hạng thành viên tự động giảm trên tiền giờ chơi.")
+                            @(Model.SelectedSession != null
+                                ? "Số tiền được lấy từ hóa đơn bàn đã chọn và không thể chỉnh sửa."
+                                : (isGuest ? "Khách lẻ không được cộng điểm khi thanh toán" : "Thành viên được cộng điểm khi thanh toán."))
                         </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Tiền đồ ăn &amp; nước uống F&amp;B (VND)</label>
-                        <input type="number" name="fandBAmount" id="inpFnb" class="form-control calc-trigger"
-                               min="0" step="1000" value="@Model.FandBAmount" required />
-                        <div class="form-text">Tự động cộng từ thực đơn F&amp;B của bàn hoặc nhập tại quầy.</div>
+                        <input type="number" name="fandBAmount" id="inpFnb"
+                               class="form-control calc-trigger @(Model.SelectedSession != null ? "bg-light" : "")"
+                               min="0" step="1" inputmode="numeric" value="@fandBAmountInput"
+                               readonly="@(Model.SelectedSession != null)" required />
+                        <div class="form-text">
+                            @(Model.SelectedSession != null
+                                ? "Số tiền được lấy từ thực đơn F&B của bàn đã chọn và không thể chỉnh sửa."
+                                : "Nhập tiền F&B.")
+                        </div>
                     </div>
                 </div>
 
@@ -233,25 +221,32 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label d-flex justify-content-between">
-                                <span>Nhập mã voucher khuyến mãi</span>
+                                <span>Nhập mã quà tặng(voucher)</span>
                                 <a href="javascript:void(0)" id="btnClearVoucher" class="text-secondary text-decoration-none" style="font-size:0.75rem">Xóa mã</a>
                             </label>
                             <div class="input-group">
                                 <span class="input-group-text bg-white"><i class="bi bi-ticket-perforated text-danger"></i></span>
                                 <input type="text" name="voucherCode" id="inpVoucher" list="memberVoucherList"
                                        class="form-control font-monospace text-uppercase calc-trigger"
-                                       placeholder="Nhập mã (VD: BMS-7KQ2-9XHD) hoặc chọn..."
+                                       placeholder="Nhập mã quà tặng(DRINK, FREEHOUR...)"
                                        value="@Model.VoucherCode" autocomplete="off" />
                             </div>
                             <datalist id="memberVoucherList">
-                                @foreach (var v in Model.AvailableVouchers)
+                                @foreach (var v in Model.AvailableVouchers
+                                    .Where(v => v.RewardItem != null)
+                                    .GroupBy(v => v.RewardItem!.Code)
+                                    .Select(group => group.OrderBy(v => v.ExpiresAtUtc).First()))
                                 {
-                                    <option value="@v.Code">
-                                        @v.Title (@(v.DiscountValue.HasValue ? "-" + VnFormat.Money(v.DiscountValue.Value) : VnFormat.RewardTypeLabel(v.VoucherType)))
+                                    var rewardItem = v.RewardItem!;
+                                    var minTier = rewardItem.MinTier;
+                                    var tierSuffix = minTier != null ? $" · Hạng {minTier.TierName}+" : "";
+                                    <option value="@rewardItem.Code">
+                                        @rewardItem.Name (@(rewardItem.DiscountValue.HasValue ? "-" + VnFormat.Money(rewardItem.DiscountValue.Value) : VnFormat.RewardTypeLabel(rewardItem.RewardType))@tierSuffix)
                                     </option>
                                 }
                             </datalist>
-                            <div class="form-text">Nhập trực tiếp mã voucher khuyến mãi hoặc chọn từ danh sách voucher hiệu lực của hội viên.</div>
+                            <div id="lblVoucherWarning" class="alert alert-danger py-1 px-2 mt-2 mb-0 d-none" style="font-size:0.78rem"></div>
+                            <div class="form-text">Chỉ nhận mã quà tặng đang mở do Manager tạo và hội viên đang sở hữu.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label d-flex justify-content-between">
@@ -319,7 +314,7 @@
                                 <i class="bi bi-cash-coin me-1"></i>Số tiền khách đưa (VND) <span class="text-danger">*</span>
                             </label>
                             <input type="number" name="cashReceived" id="inpCashReceived" class="form-control fw-bold"
-                                   min="0" step="1000" value="@Model.CashReceived" />
+                                   min="0" step="1" inputmode="numeric" value="@cashReceivedInput" />
                             <div class="d-flex flex-wrap gap-1 mt-2">
                                 <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 quick-cash-btn" data-exact="true" style="font-size:0.72rem">Khách đưa vừa đủ</button>
                                 <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-cash-btn" data-amount="100000" style="font-size:0.72rem">100.000 VND</button>
@@ -353,7 +348,10 @@
 
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn-primary-bms px-4 py-2" id="btnCommitCheckout">
-                        <i class="bi bi-check2-circle"></i> Xác nhận Thanh toán @(isGuest ? "(Khách lẻ)" : "& Cộng điểm Hội viên")
+                        <i class="bi bi-check2-circle"></i>
+                        @(Model.PaymentMethod == "Cash"
+                            ? $"Xác nhận thu tiền mặt {(isGuest ? "(Khách lẻ)" : "& Cộng điểm Hội viên")}"
+                            : "Tạo yêu cầu thanh toán QR")
                     </button>
                 </div>
             </form>
@@ -380,13 +378,42 @@
                 }
             </div>
 
-            <div class="d-flex justify-content-between py-1" style="font-size:0.88rem">
-                <span>Tiền giờ chơi bàn:</span>
-                <strong id="rcpPlay">@VnFormat.Money(Model.PlaytimeAmount)</strong>
+            <div class="py-1" style="font-size:0.88rem">
+                <div class="d-flex justify-content-between">
+                    <span>
+                        Tiền giờ chơi bàn@(Model.SelectedSession != null ? $" (Bàn {Model.SelectedSession.TableCode} · {Model.SelectedSession.PlayDurationText})" : ""):
+                    </span>
+                    <strong id="rcpPlay">@VnFormat.Money(Model.PlaytimeAmount)</strong>
+                </div>
             </div>
-            <div class="d-flex justify-content-between py-1 border-bottom pb-2" style="font-size:0.88rem">
-                <span>Đồ ăn &amp; nước uống (F&amp;B):</span>
-                <strong id="rcpFnb">@VnFormat.Money(Model.FandBAmount)</strong>
+            <div class="py-1 border-bottom pb-2" style="font-size:0.88rem">
+                <div class="d-flex justify-content-between">
+                    <span>
+                        Đồ ăn &amp; nước uống (F&amp;B)@(Model.SessionOrderLines.Any() ? $" ({Model.SessionOrderLines.Sum(x => x.Quantity)} món)" : ""):
+                    </span>
+                    <strong id="rcpFnb">@VnFormat.Money(Model.FandBAmount)</strong>
+                </div>
+                @if (Model.SessionOrderLines.Any())
+                {
+                    <div class="mt-2 p-2 rounded-2" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.78rem">
+                        <div class="text-secondary fw-semibold mb-1">
+                            <i class="bi bi-cup-straw me-1"></i>Chi tiết đồ đã gọi (@Model.SessionOrderLines.Sum(x => x.Quantity) món):
+                        </div>
+                        @foreach (var item in Model.SessionOrderLines)
+                        {
+                            <div class="d-flex justify-content-between py-1 border-top" style="border-color:#eef2f7 !important">
+                                <span>@item.ProductName <strong class="text-dark">× @item.Quantity</strong> <span class="text-muted">(@VnFormat.Money(item.UnitPrice)/món)</span></span>
+                                <span class="fw-semibold">@VnFormat.Money(item.Subtotal)</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else if (Model.SelectedSession != null)
+                {
+                    <div class="text-muted mt-1" style="font-size:0.76rem">
+                        <i class="bi bi-info-circle me-1"></i>Bàn này không gọi đồ ăn / nước uống.
+                    </div>
+                }
             </div>
 
             <div class="d-flex justify-content-between py-1 mt-2 text-success" style="font-size:0.86rem">
@@ -413,19 +440,29 @@
                 <div class="fw-bold text-danger mb-1" style="font-size:0.88rem">
                     <i class="bi bi-qr-code me-1"></i>MÃ VIETQR THANH TOÁN TRỰC TIẾP CHO KHÁCH
                 </div>
-                <div class="text-muted mb-2" style="font-size:0.76rem">
-                    Khách quét mã bằng ứng dụng Ngân hàng — Số tiền &amp; nội dung chuyển khoản tự động điền sẵn
-                </div>
-                <div class="bg-white p-2 rounded-3 d-inline-block shadow-sm border mb-2">
-                    <img id="vietQrImg"
-                         src="https://img.vietqr.io/image/MB-2107072003-compact2.png?amount=@((long)finalAmt)&addInfo=@(Uri.EscapeDataString(Model.ReferenceCode))&accountName=CLB%20BIDA%20BMS"
-                         alt="VietQR Thanh toán"
-                         style="max-width:220px;height:auto;border-radius:6px" />
-                </div>
-                <div style="font-size:0.82rem">
-                    <div>Số tiền hiển thị trên QR: <strong class="text-danger fs-6" id="qrAmountText">@VnFormat.Money(finalAmt)</strong></div>
-                    <div class="text-muted" style="font-size:0.75rem">STK: <strong>2107072003</strong> · NH MB Bank · Nội dung: <code id="qrRefText">@Model.ReferenceCode</code></div>
-                </div>
+                @if (Model.HasPendingTransfer)
+                {
+                    <div class="text-muted mb-2" style="font-size:0.76rem">
+                        Khách quét mã bằng ứng dụng Ngân hàng. Hệ thống chỉ xác nhận sau khi nhận webhook hợp lệ.
+                    </div>
+                    <div class="bg-white p-2 rounded-3 d-inline-block shadow-sm border mb-2">
+                        <img id="vietQrImg"
+                             src="https://img.vietqr.io/image/MB-2107072003-compact2.png?amount=@((long)finalAmt)&addInfo=@(Uri.EscapeDataString(Model.ReferenceCode))&accountName=CLB%20BIDA%20BMS"
+                             alt="VietQR Thanh toán"
+                             style="max-width:220px;height:auto;border-radius:6px" />
+                    </div>
+                    <div style="font-size:0.82rem">
+                        <div>Số tiền hiển thị trên QR: <strong class="text-danger fs-6" id="qrAmountText">@VnFormat.Money(finalAmt)</strong></div>
+                        <div class="text-muted" style="font-size:0.75rem">STK: <strong>2107072003</strong> · NH MB Bank · Nội dung: <code id="qrRefText">@Model.ReferenceCode</code></div>
+                        <div class="text-warning mt-1">Chờ xác nhận ngân hàng đến @Model.PendingTransferExpiresAtUtc?.ToVn().ToString("HH:mm:ss")</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-warning mb-0 mt-2 text-start" style="font-size:0.8rem">
+                        Nhấn <strong>Tạo yêu cầu VietQR</strong> trước khi đưa mã QR cho khách.
+                    </div>
+                }
             </div>
 
             <!-- Khu vực tóm tắt Tiền mặt trên phiếu -->
@@ -503,6 +540,17 @@
         const rcpCashIn = document.getElementById('rcpCashIn');
         const rcpCashChange = document.getElementById('rcpCashChange');
         const btnCommitCheckout = document.getElementById('btnCommitCheckout');
+        const transferPending = @Model.HasPendingTransfer.ToString().ToLowerInvariant();
+
+        if (transferPending) {
+            [playInput, fnbInput, voucherInput, pointsInput, refInput].forEach(x => {
+                if (x) x.readOnly = true;
+            });
+            if (btnVietQR) btnVietQR.disabled = true;
+            if (btnCash) btnCash.disabled = true;
+            if (btnCommitCheckout) btnCommitCheckout.disabled = true;
+            if (newRefBtn) newRefBtn.classList.add('d-none');
+        }
 
         // Tìm kiếm nhanh hội viên theo Tên hoặc SĐT ngay trong dropdown & tự động đồng bộ thông tin bên dưới + phiếu bên phải
         const memberSearchBox = document.getElementById('memberSearchBox');
@@ -626,13 +674,23 @@
             return Math.round(n || 0).toLocaleString('vi-VN') + ' VND';
         }
 
+        function normalizeWholeVndInput(input) {
+            if (!input || input.value === '') return;
+            const value = Number(input.value);
+            if (Number.isFinite(value)) {
+                input.value = Math.max(0, Math.round(value)).toString();
+            }
+        }
+
         function updateQrAndCashUI() {
             const method = paymentMethodInput.value;
             const ref = (refInput.value || 'HD').trim();
             const qrUrl = `https://img.vietqr.io/image/MB-2107072003-compact2.png?amount=${Math.max(0, Math.round(currentFinalAmount))}&addInfo=${encodeURIComponent(ref)}&accountName=CLB%20BIDA%20BMS`;
-            if (vietQrImg) vietQrImg.src = qrUrl;
-            if (qrAmountText) qrAmountText.textContent = fmtMoney(currentFinalAmount);
-            if (qrRefText) qrRefText.textContent = ref;
+            if (!transferPending) {
+                if (vietQrImg) vietQrImg.src = qrUrl;
+                if (qrAmountText) qrAmountText.textContent = fmtMoney(currentFinalAmount);
+                if (qrRefText) qrRefText.textContent = ref;
+            }
 
             const cashIn = parseFloat(cashReceivedInput ? cashReceivedInput.value : 0) || 0;
             const diff = cashIn - currentFinalAmount;
@@ -652,12 +710,17 @@
                 }
             } else {
                 lblCashShortfall && lblCashShortfall.classList.add('d-none');
-                btnCommitCheckout && (btnCommitCheckout.disabled = false);
+                btnCommitCheckout && (btnCommitCheckout.disabled = transferPending);
             }
         }
 
         function setPaymentMethod(method) {
             paymentMethodInput.value = method;
+            if (btnCommitCheckout) {
+                btnCommitCheckout.innerHTML = method === 'Cash'
+                    ? '<i class="bi bi-check2-circle"></i> Xác nhận thu tiền mặt'
+                    : '<i class="bi bi-shield-check"></i> Tạo yêu cầu VietQR an toàn';
+            }
             if (method === 'Cash') {
                 cashPanel.classList.remove('d-none');
                 cashReceiptBox.classList.remove('d-none');
@@ -683,7 +746,13 @@
 
         if (btnVietQR) btnVietQR.addEventListener('click', () => setPaymentMethod('VietQR'));
         if (btnCash) btnCash.addEventListener('click', () => setPaymentMethod('Cash'));
-        if (cashReceivedInput) cashReceivedInput.addEventListener('input', updateQrAndCashUI);
+        if (cashReceivedInput) {
+            cashReceivedInput.addEventListener('input', updateQrAndCashUI);
+            cashReceivedInput.addEventListener('change', () => {
+                normalizeWholeVndInput(cashReceivedInput);
+                updateQrAndCashUI();
+            });
+        }
 
         document.querySelectorAll('.quick-cash-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -740,12 +809,28 @@
                     document.getElementById('rcpEarn').textContent = '+' + d.pointsToEarn + ' điểm';
 
                     const errBox = document.getElementById('rcpErrors');
+                    const voucherWarnBox = document.getElementById('lblVoucherWarning');
                     if (!d.isValid && d.errors && d.errors.length > 0) {
                         errBox.classList.remove('d-none');
                         errBox.innerHTML = d.errors.map(e => `<div>• ${e}</div>`).join('');
+                        const vErrs = d.errors.filter(e => e.toLowerCase().includes('voucher') || e.toLowerCase().includes('hạng') || e.toLowerCase().includes('mã'));
+                        if (voucherWarnBox && vErrs.length > 0 && voucherInput && voucherInput.value.trim() !== '') {
+                            voucherWarnBox.classList.remove('d-none');
+                            voucherWarnBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>` + vErrs.join('<br/>');
+                            voucherInput.classList.add('is-invalid');
+                        } else if (voucherWarnBox) {
+                            voucherWarnBox.classList.add('d-none');
+                            voucherWarnBox.innerHTML = '';
+                            voucherInput && voucherInput.classList.remove('is-invalid');
+                        }
                     } else {
                         errBox.classList.add('d-none');
                         errBox.innerHTML = '';
+                        if (voucherWarnBox) {
+                            voucherWarnBox.classList.add('d-none');
+                            voucherWarnBox.innerHTML = '';
+                        }
+                        voucherInput && voucherInput.classList.remove('is-invalid');
                     }
 
                     const statusBox = document.getElementById('rcpTierStatus');
@@ -765,7 +850,14 @@
 
         document.querySelectorAll('.calc-trigger').forEach(el => {
             el.addEventListener('input', () => refreshPreview(false));
-            el.addEventListener('change', () => refreshPreview(false));
+            el.addEventListener('change', () => {
+                if (el === playInput || el === fnbInput) normalizeWholeVndInput(el);
+                refreshPreview(false);
+            });
+        });
+
+        document.getElementById('checkoutForm')?.addEventListener('submit', () => {
+            [playInput, fnbInput, cashReceivedInput].forEach(normalizeWholeVndInput);
         });
 
         refInput.addEventListener('input', () => {

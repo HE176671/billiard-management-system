@@ -12,7 +12,7 @@
             <i class="bi bi-info-circle-fill me-2"></i>
             <strong>Chế độ Demo (Mock Data):</strong>
             Chỉ số Doanh thu và Giờ chơi đang sử dụng dữ liệu mô phỏng do cơ sở dữ liệu chưa có hóa đơn thanh toán thực tế từ thành viên phụ trách.
-            Chỉ số Khách hàng, Hạng thành viên và Đánh giá được đọc từ dữ liệu thật.
+            Chỉ số Khách hàng và Hạng thành viên được đọc từ dữ liệu thật.
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
@@ -21,7 +21,7 @@
 <!-- Hàng 1: Thống kê Vận hành (Bàn, Ca làm việc, Doanh thu ngày/tháng) -->
 <div class="row g-3 mb-4">
     <!-- Doanh thu hôm nay -->
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl-4">
         <div class="stat-card">
             <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
             <div>
@@ -32,7 +32,7 @@
     </div>
 
     <!-- Doanh thu tháng -->
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl-4">
         <div class="stat-card">
             <div class="stat-icon red"><i class="bi bi-calendar-month"></i></div>
             <div class="overflow-hidden">
@@ -49,7 +49,7 @@
     </div>
 
     <!-- Ca làm việc -->
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl-4">
         <a asp-controller="Shift" asp-action="Manage" class="text-decoration-none text-reset">
             <div class="stat-card">
                 <div class="stat-icon amber"><i class="bi bi-clipboard-check"></i></div>
@@ -61,24 +61,13 @@
         </a>
     </div>
 
-    <!-- Đánh giá trung bình -->
-    <div class="col-sm-6 col-xl-3">
-        <div class="stat-card">
-            <div class="stat-icon amber"><i class="bi bi-star-fill"></i></div>
-            <div>
-                <div class="stat-value">@Model.AverageRating.ToString("0.0") <span style="font-size:1rem;color:#f59e0b">★</span></div>
-                <div class="stat-label">Đánh giá trung bình (@Model.TotalReviews lượt)</div>
-            </div>
-        </div>
-    </div>
-
     <!-- Trạng thái bàn bida -->
     <div class="col-md-6 col-xl-6">
         <div class="stat-card">
             <div class="stat-icon red"><i class="bi bi-grid-3x3"></i></div>
             <div>
                 <div class="stat-value">@Model.TotalTables bàn</div>
-                <div class="stat-label">@Model.AvailableTables trống · @Model.InUseTables đang chơi · @Model.AwaitingPaymentTables chờ thanh toán · @Model.UnavailableTables bảo trì</div>
+                <div class="stat-label">@Model.AvailableTables còn trống · @Model.InUseTables đang sử dụng · @Model.UnavailableTables bảo trì</div>
             </div>
         </div>
     </div>
@@ -184,12 +173,6 @@
             </a>
             <a asp-controller="TierConfig" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
                 <i class="bi bi-award"></i> Cấu hình hạng
-            </a>
-            <a asp-controller="Review" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
-                <i class="bi bi-star-half"></i> Đánh giá khách hàng
-            </a>
-            <a asp-controller="LoyaltyTest" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
-                <i class="bi bi-cpu"></i> Giả lập Loyalty
             </a>
         </div>
     </div>

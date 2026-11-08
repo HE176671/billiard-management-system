@@ -6,7 +6,6 @@ namespace Bms.Web.Services;
 
 /// <summary>
 /// Background Service chạy định kỳ hằng ngày lúc 02:00 giờ Việt Nam (và 15 giây sau khi khởi chạy):
-/// 1. Phát voucher mừng sinh nhật (1 lần/năm, hạn dùng 7 ngày) theo hạng (BirthdayVoucherValue > 0).
 /// 2. Cảnh báo điểm sắp hết hạn trước 14 ngày (86 ngày không thanh toán).
 /// 3. Thu hồi điểm thưởng đối với hồ sơ không giao dịch trên 100 ngày qua sổ cái.
 /// 4. Chuyển trạng thái Voucher quá hạn sang Expired.
@@ -73,12 +72,6 @@ public class LoyaltyDailyJob : BackgroundService
         var voucherSvc = scope.ServiceProvider.GetRequiredService<IVoucherService>();
         var tierSvc = scope.ServiceProvider.GetRequiredService<ITierEvaluationService>();
 
-        try
-        {
-            int bday = await campaignSvc.IssueBirthdayVouchersAsync(null, ct);
-            if (bday > 0) _logger.LogInformation("LoyaltyDailyJob: Đã phát {Count} voucher sinh nhật.", bday);
-        }
-        catch (Exception ex) { _logger.LogError(ex, "Lỗi tác vụ phát voucher sinh nhật."); }
 
         try
         {

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Bms.Web.Services;
 
 namespace Bms.Web.Models;
 
@@ -20,7 +21,7 @@ public class OrderMenuViewModel
     public List<CustomerOrderSummaryViewModel> MyOrders { get; set; } = new();
 
     public decimal TotalFoodAmount => MyOrders
-        .Where(o => o.Status != "Cancelled")
+        .Where(o => o.Status == OrderConstants.StatusServed)
         .Sum(o => o.TotalAmount);
 }
 

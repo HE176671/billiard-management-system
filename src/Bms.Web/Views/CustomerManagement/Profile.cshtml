@@ -4,7 +4,9 @@
 @{
     ViewData["Title"] = $"Hồ sơ hội viên — {Model.FullName}";
     Layout = "_AdminLayout";
-    var isAdmin = User.IsInRole("Admin");
+    var isManager = User.IsInRole("Manager");
+    var isAdmin = isManager || User.IsInRole("Admin");
+    var canCashier = User.IsInRole("Staff") && !isManager;
 }
 
 @if (TempData["Success"] != null)
@@ -62,11 +64,14 @@
 
         <!-- Nút hành động nhanh -->
         <div class="d-flex gap-2 flex-wrap">
-            <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@Model.Id" asp-route-customerMode="member" class="btn-primary-bms">
-                <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
-            </a>
+            @if (canCashier)
+            {
+                <a asp-controller="LoyaltyTest" asp-action="Index" asp-route-customerId="@Model.Id" asp-route-customerMode="member" class="btn-primary-bms">
+                    <i class="bi bi-receipt-cutoff"></i> Chuyển sang Thanh toán
+                </a>
+            }
             <a asp-controller="PointAdjustment" asp-action="Index" asp-route-customerId="@Model.Id" class="btn-outline-bms">
-                <i class="bi bi-sliders"></i> Điều chỉnh điểm
+                <i class="bi bi-sliders"></i> Lập phiếu điều chỉnh điểm
             </a>
             <button type="button" class="btn-outline-bms" data-bs-toggle="modal" data-bs-target="#editProfileModal">
                 <i class="bi bi-pencil"></i> Sửa thông tin
@@ -188,14 +193,6 @@
             <i class="bi bi-sticky me-1"></i>Ghi chú phục vụ (@Model.Notes.Count)
         </button>
     </li>
-    @if (isAdmin)
-    {
-        <li class="nav-item">
-            <button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabAudit" type="button">
-                <i class="bi bi-shield-check me-1"></i>Nhật ký &amp; Gộp hồ sơ (@Model.AuditLogs.Count)
-            </button>
-        </li>
-    }
 </ul>
 
 <div class="tab-content">
@@ -248,11 +245,14 @@
                                     <td class="text-end">
                                         @if (v.Status == CustomerVoucher.StatusActive && v.ExpiresAtUtc > DateTime.UtcNow)
                                         {
-                                            <a asp-controller="LoyaltyTest" asp-action="Index"
-                                               asp-route-customerId="@Model.Id" asp-route-voucherCode="@v.Code"
-                                               class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
-                                                Dùng khi tính tiền
-                                            </a>
+                                            if (canCashier)
+                                            {
+                                                <a asp-controller="LoyaltyTest" asp-action="Index"
+                                                   asp-route-customerId="@Model.Id" asp-route-voucherCode="@v.RewardItem?.Code"
+                                                   class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
+                                                    Dùng khi tính tiền
+                                                </a>
+                                            }
 
                                             if (isAdmin)
                                             {
@@ -429,66 +429,6 @@
             }
         </div>
     </div>
-
-    <!-- TAB 5: NHẬT KÝ & GỘP TÀI KHOẢN TRÙNG (CHỈ ADMIN) -->
-    @if (isAdmin)
-    {
-        <div class="tab-pane fade" id="tabAudit">
-            <div class="row g-3">
-                <div class="col-lg-8">
-                    <div class="data-card">
-                        <div class="data-card-header">
-                            <span class="data-card-title">Lịch sử thay đổi thông tin hồ sơ</span>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr><th>Thời gian</th><th>Thao tác</th><th>Nội dung thay đổi</th><th>Người thực hiện</th></tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var a in Model.AuditLogs)
-                                    {
-                                        <tr>
-                                            <td>@a.CreatedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</td>
-                                            <td><span class="badge bg-secondary">@a.Action</span></td>
-                                            <td><code style="font-size:0.78rem">@a.Detail</code></td>
-                                            <td>@(a.Actor?.FullName ?? "Hệ thống")</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-4">
-                    <div class="data-card p-3">
-                        <h6 class="fw-bold mb-2"><i class="bi bi-intersect me-1 text-danger"></i>Gộp hồ sơ hội viên trùng</h6>
-                        <p class="text-muted" style="font-size:0.8rem">
-                            Chuyển toàn bộ điểm, lịch sử giao dịch, voucher và hóa đơn từ hồ sơ bị trùng sang <strong>@Model.FullName</strong>, sau đó khóa hồ sơ cũ.
-                        </p>
-                        <form asp-action="MergeDuplicate" method="post"
-                              onsubmit="return confirm('Xác nhận gộp hồ sơ vào hội viên này? Hồ sơ cũ sẽ bị khóa sau khi gộp.')">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="targetCustomerId" value="@Model.Id" />
-                            <div class="mb-3">
-                                <label class="form-label">Hồ sơ bị trùng</label>
-                                <select name="sourceCustomerId" class="form-select" required>
-                                    <option value="">-- Chọn hồ sơ cần gộp --</option>
-                                    @foreach (var c in Model.MergeCandidates)
-                                    {
-                                        <option value="@c.Id">@c.FullName — @(c.PhoneNumber ?? "—") (@c.RewardPoints đ)</option>
-                                    }
-                                </select>
-                            </div>
-                            <button type="submit" class="btn-primary-bms w-100 justify-content-center">
-                                <i class="bi bi-arrows-collapse"></i> Gộp hồ sơ
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
 </div>
 
 <!-- Modal Sửa thông tin liên lạc -->

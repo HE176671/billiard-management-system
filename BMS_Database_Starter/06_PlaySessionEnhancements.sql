@@ -114,6 +114,25 @@ BEGIN
 END
 GO
 
+-- Step 1c. Enforce standardized BilliardTables statuses: Available (Còn trống), InUse (Đang sử dụng / Vượt giờ Combo), Maintenance (Bảo trì).
+UPDATE t
+SET t.Status = CASE
+    WHEN EXISTS (SELECT 1 FROM dbo.PlaySessions s WHERE s.TableId = t.Id AND s.Status = 'Active') THEN 'InUse'
+    WHEN t.Status = 'Inactive' THEN 'Maintenance'
+    ELSE 'Available'
+END
+FROM dbo.BilliardTables t
+WHERE t.Status IN ('AwaitingPayment', 'Inactive');
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Table_Status' AND parent_object_id = OBJECT_ID(N'dbo.BilliardTables'))
+BEGIN
+    ALTER TABLE dbo.BilliardTables DROP CONSTRAINT CK_Table_Status;
+END
+
+ALTER TABLE dbo.BilliardTables WITH CHECK ADD CONSTRAINT CK_Table_Status
+    CHECK ([Status] IN ('Available', 'InUse', 'Maintenance'));
+GO
+
 -- Step 2. Remove custom auto-expire procedure and restore original starter Booking procedures.
 DROP PROCEDURE IF EXISTS dbo.usp_AutoExpireBookings;
 GO
@@ -136,7 +155,7 @@ BEGIN
         BEGIN TRANSACTION;
         DECLARE @TableStatus varchar(20);
         SELECT @TableStatus = Status FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TableId;
-        IF @TableStatus IS NULL OR @TableStatus IN ('Maintenance','Inactive')
+        IF @TableStatus IS NULL OR @TableStatus = 'Maintenance'
             THROW 51103, N'Table is not bookable.', 1;
         IF EXISTS (SELECT 1 FROM dbo.Bookings
             WHERE TableId = @TableId AND Status IN ('Confirmed','CheckedIn')
@@ -288,16 +307,15 @@ GO
 -- Step 4. dbo.fn_CalcPlaytimeAmount: Minute-based & Combo-aware billing.
 /* dbo.fn_CalcPlaytimeAmount(@SessionId, @AtUtc)
    Calculates total table charge in VND (Combo package price + Overtime playtime charge):
-   Case A - Session has NO purchased combos:
-     1. Minimum playtime block (from 0s up to 15 minutes): billed at minimum 15 minutes right from the start.
-     2. Over 15 minutes: billed by actual minutes played per table segment ((seconds + 59) / 60).
-     3. Cash rounding: rounded to the nearest 1,000 VND (ROUND(Amount, -3), min 1,000 VND).
-   Case B - Session HAS purchased combos (dbo.SessionCombos):
-     1. Combo base charge = SUM(Quantity * UnitPriceSnapshot) is charged immediately.
-     2. Total included combo minutes = ROUND(SUM(Quantity * PlaytimeHoursSnapshot * 60), 0).
+   Case A - Session has NO purchased combos (Hourly / Minute mode):
+     1. Billed strictly by actual minutes played per table segment ((seconds + 59) / 60) — play how long, pay that exact duration (no 15-minute minimum).
+     2. Rounded to the nearest 1,000 VND for cash/QR payment (min 1,000 VND once playtime > 0).
+   Case B - Session HAS a purchased combo (dbo.SessionCombos, 1 combo package per session):
+     1. Combo base charge = UnitPriceSnapshot is charged immediately.
+     2. Total included combo minutes = ROUND(PlaytimeHoursSnapshot * 60, 0).
      3. Included combo minutes are deducted from table segments in chronological order (FIFO).
-     4. Any minutes played beyond the included combo minutes are billed at that segment's HourlyRateSnapshot
-        (no 15-minute minimum for overtime), rounded to the nearest 1,000 VND.
+     4. Any minutes played beyond the included combo minutes are billed at that segment's HourlyRateSnapshot,
+        rounded to the nearest 1,000 VND.
 */
 CREATE OR ALTER FUNCTION dbo.fn_CalcPlaytimeAmount (@SessionId int, @AtUtc datetime2(0))
 RETURNS decimal(18,2)
@@ -308,8 +326,7 @@ BEGIN
     DECLARE @SegmentCount int,
             @TotalMinutes bigint,
             @RawAmount decimal(18,2),
-            @LastRate decimal(18,2),
-            @RoundedAmount decimal(18,2),
+            @RoundedAmount decimal(18,2) = 0,
             @ComboCount int = 0,
             @ComboAmount decimal(18,2) = 0,
             @ComboMinutes bigint = 0;
@@ -330,6 +347,8 @@ BEGIN
              SELECT CASE
                         WHEN COALESCE(g.EndAtUtc, @AtUtc) > g.StartAtUtc
                         THEN (DATEDIFF_BIG(second, g.StartAtUtc, COALESCE(g.EndAtUtc, @AtUtc)) + 59) / 60
+                        WHEN g.EndAtUtc IS NOT NULL
+                        THEN CONVERT(bigint, 1)
                         ELSE CONVERT(bigint, 0)
                     END AS BilledMinutes
          ) x
@@ -337,19 +356,12 @@ BEGIN
 
         IF @SegmentCount = 0 RETURN NULL;
 
-        SELECT TOP (1) @LastRate = g.HourlyRateSnapshot
-          FROM dbo.PlaySessionTableSegments g
-         WHERE g.SessionId = @SessionId
-         ORDER BY g.StartAtUtc DESC, g.Id DESC;
-
-        -- Rule 1: Minimum charge of 15 minutes right from the start of a non-combo session
-        IF @TotalMinutes < 15
-            SET @RawAmount = @RawAmount + (CONVERT(decimal(18,2), 15 - @TotalMinutes) * @LastRate / 60.0);
-
-        -- Rule 2: Round to the nearest 1,000 VND for practical cash/QR payment
-        SET @RoundedAmount = ROUND(@RawAmount, -3);
-        IF @RoundedAmount < 1000
-            SET @RoundedAmount = 1000;
+        IF @RawAmount > 0
+        BEGIN
+            SET @RoundedAmount = ROUND(@RawAmount, -3);
+            IF @RoundedAmount < 1000
+                SET @RoundedAmount = 1000;
+        END
 
         RETURN CONVERT(decimal(18,2), @RoundedAmount);
     END
@@ -461,7 +473,7 @@ GO
 
 -- Step 6. dbo.usp_CloseSession:
 --   Closes the open segment, calculates total table amount (combo + overtime or minute billing) via fn_CalcPlaytimeAmount,
---   updates PlaySessions, and sets table to AwaitingPayment.
+--   updates PlaySessions, and returns table to Available (Còn trống).
 CREATE OR ALTER PROCEDURE dbo.usp_CloseSession
     @SessionId int, @StaffId nvarchar(450)
 AS
@@ -498,7 +510,7 @@ BEGIN
                PlaytimeAmount = @Amount
          WHERE Id = @SessionId;
 
-        UPDATE dbo.BilliardTables SET Status = 'AwaitingPayment' WHERE Id = @TableId;
+        UPDATE dbo.BilliardTables SET Status = 'Available' WHERE Id = @TableId;
         IF @BookingId IS NOT NULL
             UPDATE dbo.Bookings SET Status = 'Completed' WHERE Id = @BookingId;
 
@@ -595,8 +607,8 @@ BEGIN
         WHERE u.Id = @StaffId AND u.IsActive = 1 AND r.Name IN (N'Staff',N'Manager',N'Admin'))
         THROW 51711, N'Active Staff or Admin required.', 1;
 
-    IF @Quantity IS NULL OR @Quantity <= 0
-        THROW 51712, N'Combo quantity must be greater than zero.', 1;
+    IF @Quantity IS NULL OR @Quantity <> 1
+        THROW 51712, N'Each session can only apply 1 Combo package (Quantity = 1).', 1;
 
     BEGIN TRY
         BEGIN TRANSACTION;
@@ -615,6 +627,9 @@ BEGIN
 
         IF @SessionStatus IS NULL OR @SessionStatus <> 'Active'
             THROW 51713, N'Only an Active session can purchase a combo.', 1;
+
+        IF EXISTS (SELECT 1 FROM dbo.SessionCombos WHERE SessionId = @SessionId)
+            THROW 51715, N'This session already has an applied Combo package. Only 1 Combo is allowed per session.', 1;
 
         SELECT @ComboName = Name,
                @ComboPrice = Price,

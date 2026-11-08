@@ -33,17 +33,13 @@ public class LoyaltyTestViewModel
     public decimal CashReceived { get; set; } = 0;
     public decimal FinalAmount => Preview?.FinalAmount ?? Math.Max(0m, PlaytimeAmount + FandBAmount);
     public decimal ChangeAmount => Math.Max(0m, CashReceived - FinalAmount);
+    public bool HasPendingTransfer { get; set; }
+    public DateTime? PendingTransferExpiresAtUtc { get; set; }
 
     // Dữ liệu form cũ để tương thích
     public decimal PaymentFinalAmount { get; set; } = 100000;
     public decimal BillAmount { get; set; } = 200000;
 
-    // Dữ liệu form giả lập khách hàng gửi đánh giá
-    public int ReviewSessionId { get; set; } = 999;
-    public byte ReviewRating { get; set; } = 5;
-    public string ReviewComment { get; set; } = "Bàn chơi rất êm, nhân viên nhiệt tình, giá hợp lý!";
-
-    public List<SimulatedReviewItemViewModel> RecentReviews { get; set; } = new();
     public List<SimulatedNotificationItemViewModel> CustomerNotifications { get; set; } = new();
 }
 
@@ -59,6 +55,34 @@ public class CheckoutSessionItemViewModel
     public decimal PlaytimeAmount { get; set; }
     public decimal FandBAmount { get; set; }
     public string Status { get; set; } = string.Empty;
+
+    public int ElapsedMinutes
+    {
+        get
+        {
+            var end = EndAtUtc ?? DateTime.UtcNow;
+            int diff = (int)Math.Round((end - StartAtUtc).TotalMinutes);
+            if (diff <= 1 && PlaytimeAmount > 0 && HourlyRateSnapshot > 0)
+            {
+                int est = (int)Math.Round((PlaytimeAmount / HourlyRateSnapshot) * 60m);
+                if (est > diff) return est;
+            }
+            return Math.Max(1, diff);
+        }
+    }
+
+    public string PlayDurationText
+    {
+        get
+        {
+            int totalMins = ElapsedMinutes;
+            int hours = totalMins / 60;
+            int mins = totalMins % 60;
+            return hours > 0
+                ? $"{hours} giờ {mins:00} phút"
+                : $"{mins} phút";
+        }
+    }
 }
 
 public class SessionOrderLineViewModel
@@ -67,18 +91,6 @@ public class SessionOrderLineViewModel
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal Subtotal { get; set; }
-}
-
-public class SimulatedReviewItemViewModel
-{
-    public int Id { get; set; }
-    public int SessionId { get; set; }
-    public string CustomerId { get; set; } = string.Empty;
-    public string CustomerName { get; set; } = string.Empty;
-    public byte Rating { get; set; }
-    public string? Comment { get; set; }
-    public string? AdminReply { get; set; }
-    public DateTime CreatedAtUtc { get; set; }
 }
 
 public class SimulatedNotificationItemViewModel

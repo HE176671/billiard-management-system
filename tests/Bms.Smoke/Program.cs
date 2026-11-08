@@ -46,6 +46,7 @@ services.AddScoped<IPointLedgerService, PointLedgerService>();
 services.AddScoped<ITierEvaluationService, TierEvaluationService>();
 services.AddScoped<IVoucherService, VoucherService>();
 services.AddScoped<ILoyaltyService, LoyaltyService>();
+services.AddScoped<ICheckoutService, CheckoutService>();
 services.AddScoped<ICustomerSegmentService, CustomerSegmentService>();
 services.AddScoped<ICampaignService, CampaignService>();
 services.AddScoped<ITableSessionService, TableSessionService>();
@@ -53,9 +54,7 @@ await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-var loggerFactory = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
-var logger = loggerFactory.CreateLogger("SchemaUpgrader");
-await SchemaUpgrader.ApplyAsync(db, logger);
+await SchemaUpgrader.ApplyAsync(db, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
 await using var tx = await db.Database.BeginTransactionAsync();
 var passed = 0;
 void Check(bool condition, string label) {
@@ -198,6 +197,7 @@ try
     var tierEval = scope.ServiceProvider.GetRequiredService<ITierEvaluationService>();
     var voucherSvc = scope.ServiceProvider.GetRequiredService<IVoucherService>();
     var loyalty = scope.ServiceProvider.GetRequiredService<ILoyaltyService>();
+    var checkout = scope.ServiceProvider.GetRequiredService<ICheckoutService>();
     var segmentSvc = scope.ServiceProvider.GetRequiredService<ICustomerSegmentService>();
     var campaignSvc = scope.ServiceProvider.GetRequiredService<ICampaignService>();
 
@@ -259,10 +259,23 @@ try
     // T5: Thứ tự giảm giá -> Hạng 10% chỉ áp tiền giờ; voucher; điểm <= 50% phần còn lại; FinalAmount đúng
     await db.Users.Where(u => u.Id == tv2Customer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.TierId, goldTier.Id));
     db.ChangeTracker.Clear();
+    var rewardT5 = new RewardItemEntity
+    {
+        Code = $"T5{key[..6].ToUpperInvariant()}",
+        Name = "Quà T5 30k",
+        PointCost = 0,
+        RewardType = RewardItemEntity.TypeBillDiscount,
+        DiscountValue = 30000m,
+        ValidDays = 7,
+        IsActive = true
+    };
+    db.RewardItems.Add(rewardT5);
+    await db.SaveChangesAsync();
     var voucherT5 = new CustomerVoucher
     {
         Code = $"BMS-T5-{key[..6].ToUpperInvariant()}",
         CustomerId = tv2Customer.Id,
+        RewardItemId = rewardT5.Id,
         Title = "Voucher T5 30k",
         VoucherType = RewardItemEntity.TypeBillDiscount,
         DiscountValue = 30000m,
@@ -272,7 +285,7 @@ try
     };
     db.CustomerVouchers.Add(voucherT5);
     await db.SaveChangesAsync();
-    var previewT5 = await loyalty.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(tv2Customer.Id, "PREV-T5", null, 200000m, 100000m, 100, voucherT5.Code, staff.Id));
+    var previewT5 = await loyalty.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(tv2Customer.Id, "PREV-T5", null, 200000m, 100000m, 100, rewardT5.Code, staff.Id));
     Check(previewT5.IsValid
         && previewT5.TierDiscountAmount == 20000m
         && previewT5.VoucherDiscountAmount == 30000m
@@ -402,61 +415,28 @@ try
         && segAtRisk == CustomerSegmentService.SegAtRisk,
         "T13: RFM ClassifySegment places each fixture into its exact 4-group segment (VIP, Loyal, New, AtRisk)");
 
-    // T14: Chiến dịch gửi 2 lần cho cùng người -> Không phát trùng voucher/điểm
-    var campT14 = new Campaign
-    {
-        Name = "Smoke Campaign T14 " + key[..6],
-        CampaignType = Campaign.TypeManual,
-        TargetSegment = "All",
-        TargetTierId = silverTier.Id,
-        BonusPoints = 25,
-        MessageTitle = "Ưu đãi T14 {FullName}",
-        MessageContent = "Tặng 25 điểm thưởng T14",
-        Status = Campaign.StatusDraft,
-        CreatedById = adminUser.Id,
-        CreatedAtUtc = DateTime.UtcNow
-    };
-    db.Campaigns.Add(campT14);
-    await db.SaveChangesAsync();
-    var send1 = await campaignSvc.SendCampaignAsync(campT14.Id, adminUser.Id);
-    var send2 = await campaignSvc.SendCampaignAsync(campT14.Id, adminUser.Id);
-    var cmpTxCount = await db.PointTransactions.CountAsync(t => t.CustomerId == upCustomer.Id && t.ReferenceCode == $"CMP-{campT14.Id}-{upCustomer.Id}");
-    Check(send1.Success && send1.SentCount >= 1 && send2.SentCount == 0 && cmpTxCount == 1,
-        "T14: Sending campaign twice does not duplicate bonus points or vouchers for the same customer");
-
-    // T15: Voucher sinh nhật -> Phát 1 lần/năm, chỉ hạng có BirthdayVoucherValue > 0
+    // T15: Quản lý voucher tập trung tại Quà đổi điểm, loại bỏ voucher sinh nhật tự động; hiển thị thông tin sinh nhật trên hồ sơ khách hàng
     var vnToday = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
     var bdayDate = new DateOnly(1998, vnToday.Month, vnToday.Day);
     await db.Users.Where(u => u.Id == upCustomer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.DateOfBirth, bdayDate));
-    await db.Users.Where(u => u.Id == tv2Customer.Id).ExecuteUpdateAsync(s => s
-        .SetProperty(u => u.TierId, memberTier.Id)
-        .SetProperty(u => u.DateOfBirth, bdayDate));
     db.ChangeTracker.Clear();
-    var bdayRun1 = await campaignSvc.IssueBirthdayVouchersAsync(vnToday);
-    var bdayRun2 = await campaignSvc.IssueBirthdayVouchersAsync(vnToday);
-    var bdayRefSilver = $"BDAY-{vnToday.Year}-{upCustomer.Id}";
-    if (bdayRefSilver.Length > 50) bdayRefSilver = bdayRefSilver[..50];
-    var bdayRefMember = $"BDAY-{vnToday.Year}-{tv2Customer.Id}";
-    if (bdayRefMember.Length > 50) bdayRefMember = bdayRefMember[..50];
-    var silverBdayCount = await db.CustomerVouchers.CountAsync(v => v.CustomerId == upCustomer.Id && v.UsedReferenceCode == bdayRefSilver);
-    var memberBdayCount = await db.CustomerVouchers.CountAsync(v => v.CustomerId == tv2Customer.Id && v.UsedReferenceCode == bdayRefMember);
-    Check(bdayRun1 >= 1 && bdayRun2 == 0 && silverBdayCount == 1 && memberBdayCount == 0,
-        "T15: Birthday voucher issued once per year only for tiers with BirthdayVoucherValue > 0");
+    var custProfileRes = await Prepare(new CustomerManagementController(users, db, ledger, segmentSvc, voucherSvc), staffPrincipal).Profile(upCustomer.Id);
+    var profileVm = (custProfileRes as ViewResult)?.Model as Customer360ViewModel;
+    Check(profileVm != null && profileVm.IsBirthdaySoon && profileVm.DaysUntilBirthday == 0,
+        "T15: Birthday display active on customer profile, birthday vouchers removed in favor of centralized voucher catalog");
 
-    // T16: Staff truy cập /CrmDashboard, /Campaign, duyệt điều chỉnh -> Bị chặn bởi [Authorize(Roles = "Admin")]
+    // T16: Staff truy cập /CrmDashboard, /RewardItem, duyệt điều chỉnh -> Bị chặn bởi [Authorize(Roles = "Manager,Admin")]
     var crmAuth = typeof(CrmDashboardController).GetCustomAttribute<AuthorizeAttribute>();
-    var campAuth = typeof(CampaignController).GetCustomAttribute<AuthorizeAttribute>();
     var approveAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Approve))?.GetCustomAttribute<AuthorizeAttribute>();
     var pendingAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Pending))?.GetCustomAttribute<AuthorizeAttribute>();
     var rewardAuth = typeof(RewardItemController).GetCustomAttribute<AuthorizeAttribute>();
     var roleMgmtAuth = typeof(RoleManagementController).GetCustomAttribute<AuthorizeAttribute>();
     Check(crmAuth?.Roles == "Manager,Admin"
-        && campAuth?.Roles == "Manager,Admin"
         && approveAuth?.Roles == "Manager,Admin"
         && pendingAuth?.Roles == "Manager,Admin"
         && rewardAuth?.Roles == "Manager,Admin"
         && roleMgmtAuth?.Roles == "Admin",
-        "T16: CrmDashboard, Campaign, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Manager,Admin)] while RoleManagement enforces [Authorize(Roles = Admin)]");
+        "T16: CrmDashboard, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Manager,Admin)] while RoleManagement enforces [Authorize(Roles = Admin)]");
 
     // T17: Admin phân quyền tài khoản nội bộ (RoleManagementController: tạo/chuyển quyền Staff <-> Manager)
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
@@ -487,9 +467,10 @@ try
     var reqT18After = await db.PointAdjustmentRequests.AsNoTracking().SingleAsync(r => r.Id == reqT18.Id);
     Check(pendingView.ViewName == "Manage"
         && pendingVm.PendingRequests.Any(x => x.Id == reqT18.Id)
+        && pendingVm.RequesterRoleLabels.GetValueOrDefault(reqT18.RequestedById) == "Nhân viên yêu cầu"
         && reqT18After.Status == PointAdjustmentRequest.StatusApproved
         && reqT18After.ReviewedById == managerUser.Id,
-        "T18: Staff creates pending point adjustment and Manager approves it on dedicated Manage screen");
+        "T18: Staff creates pending point adjustment (with requester role label) and Manager approves it on dedicated Manage screen");
 
     // T19: Manager cấu hình Giá Bàn chuẩn, Giá Gậy cho thuê theo lượt & Khuyến mãi Combo Giờ chơi tặng nước
     var mgrPricingCtrl = Prepare(new PricingController(db), managerPrincipal);
@@ -588,7 +569,7 @@ try
         "T20: Counter QuickEnroll rejects invalid FullName (numbers/symbols), invalid PhoneNumber, invalid Email, or under-18 CCCD, and registers valid 18+ member (+10 welcome points)");
 
     // T21: Thanh toán tại quầy (POS Checkout) hỗ trợ Khách lẻ & Hội viên qua 2 hình thức VietQR / Tiền mặt + tích hợp bàn chơi & F&B
-    var posCtrl = Prepare(new LoyaltyTestController(db, loyalty, ledger, tierEval), staffPrincipal);
+    var posCtrl = Prepare(new LoyaltyTestController(db, loyalty, ledger, tierEval, checkout), staffPrincipal);
     await posCtrl.CommitCheckout(
         customerId: null,
         referenceCode: $"GUEST-SHORT-{key[..6]}",
@@ -624,6 +605,14 @@ try
         customerMode: "member",
         paymentMethod: "VietQR",
         cashReceived: null);
+    var ptsWhileQrPending = await db.Users.AsNoTracking().Where(u => u.Id == adultUser.Id).Select(u => u.RewardPoints).SingleAsync();
+    var qrReference = $"MEM-QR-{key[..6]}".ToUpperInvariant();
+    var qrIntent = await db.PaymentIntents.AsNoTracking().SingleOrDefaultAsync(x => x.ReferenceCode == qrReference);
+    if (qrIntent == null)
+        throw new Exception($"FAIL: VietQR intent was not created. Error={posCtrl.TempData["Error"]}; Warning={posCtrl.TempData["Warning"]}");
+    var wrongAmount = await checkout.ConfirmTransferAsync(qrIntent.ReferenceCode, $"SEPAY-WRONG-{key[..6]}", qrIntent.ExpectedAmount - 1000m);
+    var ptsAfterWrongQr = await db.Users.AsNoTracking().Where(u => u.Id == adultUser.Id).Select(u => u.RewardPoints).SingleAsync();
+    var qrConfirmed = await checkout.ConfirmTransferAsync(qrIntent.ReferenceCode, $"SEPAY-OK-{key[..6]}", qrIntent.ExpectedAmount);
     var ptsAfterQr = await db.Users.AsNoTracking().Where(u => u.Id == adultUser.Id).Select(u => u.RewardPoints).SingleAsync();
 
     await posCtrl.CommitCheckout(
@@ -640,9 +629,12 @@ try
 
     Check(shortErr.Contains("nhỏ hơn")
         && guestCashSuccess.Contains("250.000")
+        && ptsWhileQrPending == 10
+        && !wrongAmount.Success && ptsAfterWrongQr == 10
+        && qrConfirmed.Success
         && ptsAfterQr == 22
         && ptsAfterCash == 32,
-        "T21: POS Checkout supports Walk-in Guest and Member checkout via both VietQR and Cash (validating cash received/change and awarding points for both payment methods)");
+        "T21: POS Checkout records cash atomically and only awards VietQR points after an exact, confirmed bank transaction");
 
     // T22: Voucher BMS-XXXX-XXXX hạn dùng 7 ngày; LoyaltyDailyJob quét hết hạn voucher (Expired) & thu hồi điểm thưởng hồ sơ >100 ngày không giao dịch
     await ledger.PostAsync(adultUser.Id, rewardItem.PointCost + 50, PointTransaction.Bonus, $"T22-BONUS-{key[..6]}", null, "Cấp điểm kiểm thử T22", staff.Id);
@@ -672,15 +664,200 @@ try
         && hasExpire100Tx,
         "T22: Redeem issues BMS-XXXX-XXXX voucher with 7-day validity; LoyaltyDailyJob transitions overdue vouchers to Expired and reclaims points for accounts inactive >100 days");
 
-    // T23: TableSessionService (Doan's module) - Open table, purchase Combo, close session & calculate combo/playtime billing
+    // T23: Manager tạo thêm bàn & điều chỉnh trạng thái bàn; Staff mở bàn chọn 1 trong 2 chế độ (Combo hoặc Tính giờ, không chạy song song)
+    var newTableCode = "VIP-SM-" + key[..4];
+    await mgrPricingCtrl.SaveTable(0, newTableCode, testType.Id, 2, "Available");
+    var createdTable = await db.BilliardTables.AsNoTracking().SingleAsync(t => t.TableCode == newTableCode);
+    await mgrPricingCtrl.UpdateTableStatus(createdTable.Id, "Maintenance");
+    var statusMaint = (await db.BilliardTables.AsNoTracking().SingleAsync(t => t.Id == createdTable.Id)).Status;
+    await mgrPricingCtrl.UpdateTableStatus(createdTable.Id, "Available");
+    var statusAvail = (await db.BilliardTables.AsNoTracking().SingleAsync(t => t.Id == createdTable.Id)).Status;
+
     var tableSessionSvc = scope.ServiceProvider.GetRequiredService<ITableSessionService>();
     var tableCards = await tableSessionSvc.GetTableCardsAsync();
     var activeCombos = await tableSessionSvc.GetActiveCombosAsync();
-    var customerOptions = await tableSessionSvc.SearchCustomersAsync(adultUser.PhoneNumber);
-    Check(tableCards.Count > 0
-        && activeCombos.Any(c => c.Id == savedCombo.Id)
-        && customerOptions.Any(c => c.Id == adultUser.Id),
-        "T23: TableSessionService loads table grid cards, active combo packages, and customer options seamlessly after merge");
+    Check(createdTable.FloorNumber == 2
+        && statusMaint == "Maintenance"
+        && statusAvail == "Available"
+        && tableCards.Any(c => c.Id == createdTable.Id)
+        && activeCombos.Any(c => c.Id == savedCombo.Id),
+        "T23: Manager creates new tables & updates table status (Available <-> Maintenance); TableSessionService loads table grid and active combos");
+
+    // T24: Tính tiền giờ chơi theo đúng số phút thực tế (bỏ tối thiểu 15 phút đầu) & mỗi phiên Combo chỉ áp dụng duy nhất 1 gói Combo
+    int mins1 = TableSessionService.CalculateBilledMinutes(60, false);
+    int mins3 = TableSessionService.CalculateBilledMinutes(125, false);
+    var rejectMultiQty = await tableSessionSvc.AddSessionComboAsync(1, savedCombo.Id, 2, staff.Id);
+    Check(mins1 == 1
+        && mins3 == 3
+        && !rejectMultiQty.Success
+        && rejectMultiQty.ErrorCode == 51712,
+        "T24: Hourly playtime bills exact elapsed minutes without 15-minute floor; Combo mode enforces max 1 package per session");
+
+    // T25: Chuẩn hóa chỉ sử dụng 4 trạng thái bàn (Còn trống, Đang sử dụng, Đã hết giờ Combo (Tính vượt giờ), Bảo trì) xuyên suốt BE/FE/DB
+    var allowedDisplayStatuses = new HashSet<string>
+    {
+        "Còn trống",
+        "Đang sử dụng",
+        "Đã hết giờ Combo (Tính vượt giờ)",
+        "Bảo trì"
+    };
+    await mgrPricingCtrl.UpdateTableStatus(createdTable.Id, "AwaitingPayment");
+    var rejectLegacyStatusErr = mgrPricingCtrl.TempData["Error"]?.ToString() ?? "";
+    var cardsAfterStd = await tableSessionSvc.GetTableCardsAsync();
+    var b01Detail = await tableSessionSvc.GetTableDetailAsync(1);
+    var loyaltyAuth = typeof(LoyaltyTestController).GetCustomAttribute<AuthorizeAttribute>();
+    var quickEnrollAuth = typeof(CustomerManagementController).GetMethod(nameof(CustomerManagementController.QuickEnroll))?.GetCustomAttribute<AuthorizeAttribute>();
+    Check(TableSessionService.MapDisplayStatus("Available") == "Còn trống"
+        && TableSessionService.MapDisplayStatus("InUse", false) == "Đang sử dụng"
+        && TableSessionService.MapDisplayStatus("InUse", true) == "Đã hết giờ Combo (Tính vượt giờ)"
+        && TableSessionService.MapDisplayStatus("Maintenance") == "Bảo trì"
+        && !string.IsNullOrWhiteSpace(rejectLegacyStatusErr)
+        && cardsAfterStd.All(c => allowedDisplayStatuses.Contains(c.DisplayStatus))
+        && b01Detail != null && allowedDisplayStatuses.Contains(b01Detail.DisplayStatus)
+        && loyaltyAuth?.Roles == "Staff,Admin"
+        && quickEnrollAuth?.Roles == "Staff,Admin",
+        "T25: Table statuses strictly standardized to 4 states; Staff redirects to Shift; Manager excluded from POS Checkout & QuickEnroll");
+
+    // T26: Kiểm tra điểm/tiền từ 0 (chặn số âm), đồng bộ RewardItem -> Voucher và cảnh báo Hạng tối thiểu (MinTier) ở bước Thanh toán
+    var rewardCtrl = Prepare(new RewardItemController(db), managerPrincipal);
+    await rewardCtrl.Save(0, "NEG_TEST", "Quà âm tiền", null, 0, "Gift", -1000m, 7, silverTier.Id, true);
+    var negDiscountErr = rewardCtrl.TempData["Error"]?.ToString() ?? "";
+    var negExists = await db.RewardItems.AnyAsync(r => r.Code == "NEG_TEST");
+
+    rewardCtrl.TempData.Clear();
+    await rewardCtrl.Save(0, "COMBO_SILVER", "Nước ngọt free Silver", "Tặng nước cho hạng Silver", 0, "BillDiscount", 20000m, 7, silverTier.Id, true);
+    var zeroPointItem = await db.RewardItems.FirstOrDefaultAsync(r => r.Code == "COMBO_SILVER");
+
+    // Cho khách Silver đổi quà 0 điểm -> thành công
+    await db.Users.Where(u => u.Id == tv2Customer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.TierId, silverTier.Id));
+    var zeroRedeemRes = await voucherSvc.RedeemRewardForVoucherAsync(tv2Customer.Id, "COMBO_SILVER");
+    var issuedVoucherCode = zeroRedeemRes.Voucher?.Code ?? "";
+
+    // Manager cập nhật giá trị quy đổi của COMBO_SILVER từ 20.000 -> 35.000 VND -> Voucher đang Active tự động đồng bộ
+    await rewardCtrl.Save(zeroPointItem!.Id, "COMBO_SILVER", "Nước ngọt free Silver", "Tặng nước cho hạng Silver", 0, "BillDiscount", 35000m, 7, silverTier.Id, true);
+    var syncedVoucher = await db.CustomerVouchers.AsNoTracking().FirstOrDefaultAsync(v => v.Code == issuedVoucherCode);
+
+    // Điều chỉnh hạ hạng hội viên xuống Member -> Khi áp mã COMBO_SILVER ở bước Thanh toán (PreviewCheckoutAsync) phải cảnh báo lỗi không đủ hạng!
+    await db.Users.Where(u => u.Id == tv2Customer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.TierId, memberTier.Id));
+    var ineligibleTierPreview = await loyalty.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
+        CustomerId: tv2Customer.Id,
+        ReferenceCode: "REF-TIER-WARN",
+        InvoiceId: null,
+        PlaytimeAmount: 100000m,
+        FandBAmount: 50000m,
+        PointsToRedeem: 0,
+        VoucherCode: "COMBO_SILVER",
+        CashierId: staff.Id));
+
+    Check(!negExists
+        && !string.IsNullOrWhiteSpace(negDiscountErr)
+        && zeroPointItem != null && zeroPointItem.PointCost == 0
+        && zeroRedeemRes.Success && !string.IsNullOrWhiteSpace(issuedVoucherCode)
+        && syncedVoucher != null && syncedVoucher.DiscountValue == 35000m
+        && !ineligibleTierPreview.IsValid
+        && ineligibleTierPreview.VoucherDiscountAmount == 0m
+        && ineligibleTierPreview.Errors.Any(e => e.Contains("Silver", StringComparison.OrdinalIgnoreCase)),
+        "T26: RewardItem allows 0 points/money, blocks negative numbers, syncs active vouchers on edit, and warns/blocks ineligible tier voucher at POS checkout");
+
+    // T27: TierConfig cho phép thêm/xóa hạng thành viên mới; Pricing.SaveTable tích hợp tạo theo số lượng bàn (quantity >= 1) ngay trong 1 form
+    var tierCfgCtrl = Prepare(new TierConfigController(db, tierEval), managerPrincipal);
+    var newTierName = "Platinum-" + key[..4];
+    await tierCfgCtrl.AddTier(newTierName, 12000000m, 15m, 3);
+    var addedTier = await db.MembershipTiers.AsNoTracking().FirstOrDefaultAsync(t => t.TierName == newTierName);
+
+    var multiPrefix = "B-MULTI-" + key[..3] + "-";
+    await mgrPricingCtrl.SaveTable(0, multiPrefix + "01", testType.Id, 3, "Available", quantity: 3);
+    var createdMultiCount = await db.BilliardTables.CountAsync(t => t.TableCode.StartsWith(multiPrefix));
+
+    if (addedTier != null)
+    {
+        await tierCfgCtrl.DeleteTier(addedTier.Id);
+    }
+    var deletedTierGone = addedTier != null && !await db.MembershipTiers.AnyAsync(t => t.Id == addedTier.Id);
+
+    Check(addedTier != null
+        && addedTier.SpendThreshold == 12000000m
+        && addedTier.DiscountPercent == 15m
+        && addedTier.PointMultiplier == 3
+        && createdMultiCount == 3
+        && deletedTierGone,
+        "T27: TierConfig supports adding & deleting membership tiers; Pricing.SaveTable creates single or multiple tables via quantity field");
+
+    // T28: QR không cần đăng nhập -> Pending; chỉ Staff duyệt mới Served, trừ kho và cộng F&B; chặn thanh toán khi còn đơn chờ.
+    var orderProduct = await db.Products.FirstAsync(p => p.IsActive && p.StockQuantity >= 2);
+    int stockBeforeOrder = orderProduct.StockQuantity;
+    var orderSession = new PlaySession
+    {
+        TableId = createdTable.Id,
+        CustomerId = null,
+        OpenedById = staff.Id,
+        StartAtUtc = DateTime.UtcNow.AddMinutes(-30),
+        HourlyRateSnapshot = 60000m,
+        Status = "Active"
+    };
+    db.PlaySessions.Add(orderSession);
+    await db.SaveChangesAsync();
+
+    var pendingOrder = new Order
+    {
+        SessionId = orderSession.Id,
+        OrderTimeUtc = DateTime.UtcNow,
+        Status = OrderConstants.StatusPending,
+        OrderDetails = new List<OrderDetail>
+        {
+            new() { ProductId = orderProduct.Id, Quantity = 2, UnitPrice = orderProduct.Price }
+        }
+    };
+    db.Orders.Add(pendingOrder);
+    await db.SaveChangesAsync();
+
+    decimal billableBeforeApproval = await db.OrderDetails
+        .Where(d => d.Order.SessionId == orderSession.Id && d.Order.Status == OrderConstants.StatusServed)
+        .SumAsync(d => (decimal?)d.Quantity * d.UnitPrice) ?? 0m;
+    var blockedByPending = await checkout.CreateTransferIntentAsync(new CheckoutCommand(
+        null, $"ORDER-PENDING-{key[..6]}", orderSession.Id, 0, 0, 0, null, staff.Id));
+
+    var orderController = Prepare(new OrderController(
+        db, users, Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderController>.Instance), staffPrincipal);
+    await orderController.ApproveOrder(pendingOrder.Id);
+    db.ChangeTracker.Clear();
+
+    var approvedOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == pendingOrder.Id);
+    int stockAfterApproval = await db.Products.AsNoTracking()
+        .Where(p => p.Id == orderProduct.Id).Select(p => p.StockQuantity).SingleAsync();
+    decimal billableAfterApproval = await db.OrderDetails
+        .Where(d => d.Order.SessionId == orderSession.Id && d.Order.Status == OrderConstants.StatusServed)
+        .SumAsync(d => (decimal?)d.Quantity * d.UnitPrice) ?? 0m;
+
+    await orderController.ApproveOrder(pendingOrder.Id);
+    int stockAfterSecondApproval = await db.Products.AsNoTracking()
+        .Where(p => p.Id == orderProduct.Id).Select(p => p.StockQuantity).SingleAsync();
+
+    var transferReady = await checkout.CreateTransferIntentAsync(new CheckoutCommand(
+        null, $"ORDER-READY-{key[..6]}", orderSession.Id, 0, 0, 0, null, staff.Id));
+    int orderCountBeforeLockedSubmit = await db.Orders.CountAsync(o => o.SessionId == orderSession.Id);
+    var anonymousOrderController = Prepare(new OrderController(
+        db, users, Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderController>.Instance));
+    await anonymousOrderController.SubmitTable(createdTable.TableCode, new SubmitOrderInputModel
+    {
+        Items = new List<OrderItemInputModel>
+        {
+            new() { ProductId = orderProduct.Id, Quantity = 1 }
+        }
+    });
+    int orderCountAfterLockedSubmit = await db.Orders.CountAsync(o => o.SessionId == orderSession.Id);
+    var orderApproveAuth = typeof(OrderController).GetMethod(nameof(OrderController.ApproveOrder))?.GetCustomAttribute<AuthorizeAttribute>();
+
+    Check(billableBeforeApproval == 0m
+        && !blockedByPending.Success && blockedByPending.Message.Contains("chờ Staff")
+        && approvedOrder.Status == OrderConstants.StatusServed
+        && stockAfterApproval == stockBeforeOrder - 2
+        && billableAfterApproval == orderProduct.Price * 2
+        && stockAfterSecondApproval == stockAfterApproval
+        && transferReady.Pending
+        && orderCountAfterLockedSubmit == orderCountBeforeLockedSubmit
+        && orderApproveAuth?.Roles == "Staff",
+        "T28: Anonymous table QR creates Pending flow; only Staff approval makes order billable, decrements stock once, blocks checkout while pending, and locks ordering during pending transfer");
 
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }

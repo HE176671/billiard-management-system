@@ -65,42 +65,55 @@ public class LoyaltyService : ILoyaltyService
         decimal tierDiscountAmount = Math.Round(Math.Max(0m, req.PlaytimeAmount) * (tierDiscountPercent / 100m), 0, MidpointRounding.AwayFromZero);
         decimal remainingAfterTier = Math.Max(0m, subtotal - tierDiscountAmount);
 
-        // Bước 2: Voucher (tối đa 1 voucher/hóa đơn)
+        // Bước 2: Mã quà tặng Manager (tối đa 1 mã/hóa đơn).
+        // Staff nhập RewardItems.Code; hệ thống tự chọn voucher còn hiệu lực mà hội viên sở hữu.
         decimal voucherDiscountAmount = 0m;
         if (!string.IsNullOrWhiteSpace(req.VoucherCode))
         {
             var code = req.VoucherCode.Trim().ToUpperInvariant();
-            var voucher = await _db.CustomerVouchers.AsNoTracking()
-                .FirstOrDefaultAsync(v => v.Code == code && v.CustomerId == user.Id, ct);
-
             var now = DateTime.UtcNow;
-            if (voucher == null)
+            decimal userTierThreshold = currentTier?.SpendThreshold ?? 0m;
+            var rewardItem = await _db.RewardItems.AsNoTracking()
+                .Include(r => r.MinTier)
+                .FirstOrDefaultAsync(r => r.Code == code, ct);
+
+            if (rewardItem == null)
             {
-                errors.Add($"Voucher \"{code}\" không tồn tại hoặc không thuộc về khách hàng này.");
+                errors.Add($"Mã quà tặng \"{code}\" không tồn tại.");
             }
-            else if (voucher.Status != CustomerVoucher.StatusActive)
+            else if (!rewardItem.IsActive)
             {
-                errors.Add($"Voucher \"{code}\" không còn khả dụng (trạng thái: {voucher.Status}).");
+                errors.Add($"Mã quà tặng \"{code}\" ({rewardItem.Name}) đang bị Manager đóng.");
             }
-            else if (voucher.ExpiresAtUtc <= now)
+            else if (rewardItem.MinTier != null && userTierThreshold < rewardItem.MinTier.SpendThreshold)
             {
-                errors.Add($"Voucher \"{code}\" đã hết hạn vào {voucher.ExpiresAtUtc.ToVn():dd/MM/yyyy}.");
+                errors.Add($"Không thể áp dụng mã \"{code}\" ({rewardItem.Name}): yêu cầu từ Hạng {rewardItem.MinTier.TierName} trở lên, nhưng hội viên hiện đang ở Hạng {tierName}.");
             }
-            else if (voucher.VoucherType == RewardItemEntity.TypeGift)
+            else
             {
-                decimal val = voucher.DiscountValue ?? 0m;
-                voucherDiscountAmount = Math.Min(remainingAfterTier, val);
-            }
-            else if (voucher.VoucherType == RewardItemEntity.TypeFreeHour)
-            {
-                decimal playAfterTier = Math.Max(0m, req.PlaytimeAmount - tierDiscountAmount);
-                decimal cap = voucher.DiscountValue ?? 80000m;
-                voucherDiscountAmount = Math.Min(playAfterTier, cap);
-            }
-            else // BillDiscount
-            {
-                decimal val = voucher.DiscountValue ?? 0m;
-                voucherDiscountAmount = Math.Min(remainingAfterTier, val);
+                var ownedVoucher = await _db.CustomerVouchers.AsNoTracking()
+                    .Where(v => v.CustomerId == user.Id
+                             && v.RewardItemId == rewardItem.Id
+                             && v.Status == CustomerVoucher.StatusActive
+                             && v.ExpiresAtUtc > now)
+                    .OrderBy(v => v.ExpiresAtUtc)
+                    .FirstOrDefaultAsync(ct);
+
+                if (ownedVoucher == null)
+                {
+                    errors.Add($"Hội viên chưa sở hữu mã quà tặng \"{code}\" ({rewardItem.Name}) còn hiệu lực.");
+                }
+                else if (rewardItem.RewardType == RewardItemEntity.TypeFreeHour)
+                {
+                    decimal playAfterTier = Math.Max(0m, req.PlaytimeAmount - tierDiscountAmount);
+                    decimal cap = rewardItem.DiscountValue ?? 80000m;
+                    voucherDiscountAmount = Math.Min(playAfterTier, cap);
+                }
+                else
+                {
+                    decimal val = rewardItem.DiscountValue ?? 0m;
+                    voucherDiscountAmount = Math.Min(remainingAfterTier, val);
+                }
             }
         }
 
@@ -243,12 +256,23 @@ public class LoyaltyService : ILoyaltyService
                 }
             }
 
-            // 4. Đánh dấu Voucher Used (nếu có dùng voucher)
+            // 4. Staff nhập mã quà Manager; đánh dấu đúng voucher sở hữu của hội viên là Used.
             if (!string.IsNullOrWhiteSpace(req.VoucherCode))
             {
                 var vCode = req.VoucherCode.Trim().ToUpperInvariant();
+                int voucherId = await _db.CustomerVouchers
+                    .Where(v => v.CustomerId == req.CustomerId
+                             && v.RewardItem != null
+                             && v.RewardItem.Code == vCode
+                             && v.RewardItem.IsActive
+                             && v.Status == CustomerVoucher.StatusActive
+                             && v.ExpiresAtUtc > now)
+                    .OrderBy(v => v.ExpiresAtUtc)
+                    .Select(v => v.Id)
+                    .FirstOrDefaultAsync(ct);
+
                 int vUpdated = await _db.CustomerVouchers
-                    .Where(v => v.Code == vCode && v.CustomerId == req.CustomerId && v.Status == CustomerVoucher.StatusActive)
+                    .Where(v => v.Id == voucherId && v.Status == CustomerVoucher.StatusActive)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(v => v.Status, CustomerVoucher.StatusUsed)
                         .SetProperty(v => v.UsedAtUtc, now)
@@ -258,7 +282,7 @@ public class LoyaltyService : ILoyaltyService
                 if (vUpdated == 0)
                 {
                     if (ownTx != null) await ownTx.RollbackAsync(ct);
-                    return new CheckoutLoyaltyResult(false, false, $"Voucher {vCode} đã được sử dụng hoặc không còn hợp lệ.",
+                    return new CheckoutLoyaltyResult(false, false, $"Mã quà tặng {vCode} đã được sử dụng, hết hạn hoặc không thuộc hội viên này.",
                         req.PlaytimeAmount + req.FandBAmount, 0, 0, 0, 0, preview.FinalAmount, 0, 0, 0, preview.TierName, false);
                 }
             }

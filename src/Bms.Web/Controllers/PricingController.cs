@@ -30,8 +30,8 @@ public class PricingController : Controller
 
     #region Danh sach bang gia tong hop (Ban + Gay cho thue + Combo gio choi)
 
-    // GET /Pricing?editCueId=&editComboId=
-    public async Task<IActionResult> Index(int? editCueId = null, int? editComboId = null)
+    // GET /Pricing?editCueId=&editComboId=&editTableId=
+    public async Task<IActionResult> Index(int? editCueId = null, int? editComboId = null, int? editTableId = null)
     {
         var configs = await _context.PricingConfigs
             .Include(p => p.TableType)
@@ -58,6 +58,56 @@ public class PricingController : Controller
 
         try
         {
+            var nowUtc = DateTime.UtcNow;
+            var tables = await _context.BilliardTables.AsNoTracking()
+                .Include(t => t.TableType)
+                .OrderBy(t => t.FloorNumber)
+                .ThenBy(t => t.TableCode)
+                .ToListAsync();
+
+            var overdueTableIds = new HashSet<int>();
+            var activeComboByTable = await (from s in _context.PlaySessions.AsNoTracking()
+                                            where s.Status == "Active"
+                                            join sc in _context.SessionCombos.AsNoTracking() on s.Id equals sc.SessionId
+                                            select new { s.TableId, s.StartAtUtc, sc.Quantity, sc.PlaytimeHoursSnapshot })
+                                            .ToListAsync();
+            foreach (var grp in activeComboByTable.GroupBy(x => new { x.TableId, x.StartAtUtc }))
+            {
+                double comboSecs = (double)grp.Sum(c => c.Quantity * c.PlaytimeHoursSnapshot * 60m) * 60.0;
+                if (comboSecs > 0 && (nowUtc - DateTime.SpecifyKind(grp.Key.StartAtUtc, DateTimeKind.Utc)).TotalSeconds >= comboSecs)
+                {
+                    overdueTableIds.Add(grp.Key.TableId);
+                }
+            }
+
+            vm.Tables = tables.Select(t => new BilliardTableRowViewModel
+            {
+                Id = t.Id,
+                TableCode = t.TableCode,
+                TableTypeId = t.TableTypeId,
+                TableTypeName = t.TableType?.Name ?? "—",
+                HourlyRate = t.TableType?.HourlyRate ?? 0m,
+                FloorNumber = t.FloorNumber,
+                Status = t.Status,
+                IsComboOverdue = t.Status == "InUse" && overdueTableIds.Contains(t.Id)
+            }).ToList();
+
+            if (editTableId.HasValue)
+            {
+                var targetTable = vm.Tables.FirstOrDefault(x => x.Id == editTableId.Value);
+                if (targetTable != null)
+                {
+                    vm.EditTable = new SaveBilliardTableInputModel
+                    {
+                        Id = targetTable.Id,
+                        TableCode = targetTable.TableCode,
+                        TableTypeId = targetTable.TableTypeId,
+                        FloorNumber = targetTable.FloorNumber,
+                        Status = targetTable.Status
+                    };
+                }
+            }
+
             var cueCategory = await _context.ProductCategories.AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Name == ProductCategory.RentalCueCategoryName);
 
@@ -140,9 +190,9 @@ public class PricingController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateTableBaseRate(int id, decimal hourlyRate)
     {
-        if (hourlyRate <= 0)
+        if (!ModelState.IsValid || hourlyRate < 0)
         {
-            TempData["Error"] = "Đơn giá bàn theo giờ phải lớn hơn 0.";
+            TempData["Error"] = "Đơn giá bàn theo giờ phải là số từ 0 VND trở lên (không được nhập số âm hoặc ký tự đặc biệt).";
             return RedirectToAction(nameof(Index));
         }
 
@@ -164,9 +214,9 @@ public class PricingController : Controller
     public async Task<IActionResult> SaveRentalCue(int id, string name, decimal price, int stockQuantity = 10, bool isActive = true)
     {
         name = (name ?? string.Empty).Trim();
-        if (string.IsNullOrEmpty(name) || price <= 0 || stockQuantity < 0)
+        if (!ModelState.IsValid || string.IsNullOrEmpty(name) || price < 0 || stockQuantity < 0)
         {
-            TempData["Error"] = "Tên gậy cho thuê không được trống, giá thuê/lượt phải > 0 và số lượng >= 0.";
+            TempData["Error"] = "Tên gậy cho thuê không được trống, giá thuê/lượt và số lượng phải là số từ 0 trở lên (không được nhập số âm hoặc ký tự đặc biệt).";
             return RedirectToAction(nameof(Index), new { editCueId = id > 0 ? (int?)id : null });
         }
 
@@ -315,6 +365,164 @@ public class PricingController : Controller
             ? $"Đã MỞ áp dụng gói khuyến mãi \"{combo.Name}\"."
             : $"Đã ĐÓNG (tạm ngưng) gói khuyến mãi \"{combo.Name}\".";
 
+        return RedirectToAction(nameof(Index));
+    }
+
+    #endregion
+
+    #region 4. Quan ly Ban Bi-a (Manager tao them so luong ban & dieu chinh trang thai ban)
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveTable(int id, string tableCode, int tableTypeId, int floorNumber = 1, string status = "Available", int quantity = 1)
+    {
+        tableCode = (tableCode ?? string.Empty).Trim();
+        status = (status ?? "Available").Trim();
+        string[] allowedManualStatuses = { "Available", "Maintenance" };
+
+        if (!ModelState.IsValid || string.IsNullOrEmpty(tableCode) || tableTypeId <= 0 || floorNumber <= 0 || (id == 0 && (quantity <= 0 || quantity > 50)))
+        {
+            TempData["Error"] = "Thông tin bàn không hợp lệ: Vui lòng nhập Mã bàn, chọn Loại bàn, Tầng (>= 1) và Số lượng bàn cần thêm (1 - 50).";
+            return RedirectToAction(nameof(Index), new { editTableId = id > 0 ? (int?)id : null });
+        }
+
+        if (!allowedManualStatuses.Contains(status))
+        {
+            status = "Available";
+        }
+
+        var tableType = await _context.TableTypes.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tableTypeId);
+        if (tableType == null)
+        {
+            TempData["Error"] = "Loại bàn đã chọn không tồn tại.";
+            return RedirectToAction(nameof(Index), new { editTableId = id > 0 ? (int?)id : null });
+        }
+
+        if (id == 0)
+        {
+            if (quantity == 1)
+            {
+                if (await _context.BilliardTables.AnyAsync(t => t.TableCode == tableCode))
+                {
+                    TempData["Error"] = $"Mã bàn '{tableCode}' đã tồn tại trong hệ thống.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                _context.BilliardTables.Add(new BilliardTable
+                {
+                    TableCode = tableCode,
+                    TableTypeId = tableTypeId,
+                    FloorNumber = floorNumber,
+                    Status = status
+                });
+                await _context.SaveChangesAsync();
+                TempData["Success"] = $"Đã thêm bàn \"{tableCode}\" ({tableType.Name} · Tầng {floorNumber}).";
+            }
+            else
+            {
+                var existingCodes = new HashSet<string>(
+                    await _context.BilliardTables.AsNoTracking().Select(t => t.TableCode).ToListAsync(),
+                    StringComparer.OrdinalIgnoreCase);
+
+                // Tách phần tiền tố và số bắt đầu nếu mã bàn có chứa số ở cuối (VD: B07 -> tiền tố B, bắt đầu từ 7)
+                int splitIdx = tableCode.Length;
+                while (splitIdx > 0 && char.IsDigit(tableCode[splitIdx - 1]))
+                {
+                    splitIdx--;
+                }
+
+                string prefix = splitIdx < tableCode.Length ? tableCode[..splitIdx] : tableCode;
+                int nextNum = 1;
+                int padWidth = 2;
+                if (splitIdx < tableCode.Length && int.TryParse(tableCode[splitIdx..], out int parsedStart) && parsedStart > 0)
+                {
+                    nextNum = parsedStart;
+                    padWidth = Math.Max(2, tableCode.Length - splitIdx);
+                }
+
+                var createdCodes = new List<string>();
+                while (createdCodes.Count < quantity && nextNum < 10000)
+                {
+                    string candidate = $"{prefix}{nextNum.ToString().PadLeft(padWidth, '0')}";
+                    if (!existingCodes.Contains(candidate))
+                    {
+                        existingCodes.Add(candidate);
+                        createdCodes.Add(candidate);
+                        _context.BilliardTables.Add(new BilliardTable
+                        {
+                            TableCode = candidate,
+                            TableTypeId = tableTypeId,
+                            FloorNumber = floorNumber,
+                            Status = status
+                        });
+                    }
+                    nextNum++;
+                }
+
+                if (createdCodes.Count > 0)
+                {
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = $"Đã thêm {createdCodes.Count} bàn [{tableType.Name}] tại Tầng {floorNumber}: {string.Join(", ", createdCodes)}.";
+                }
+            }
+        }
+        else
+        {
+            if (await _context.BilliardTables.AnyAsync(t => t.TableCode == tableCode && t.Id != id))
+            {
+                TempData["Error"] = $"Mã bàn '{tableCode}' đã tồn tại trong hệ thống.";
+                return RedirectToAction(nameof(Index), new { editTableId = id });
+            }
+
+            var existing = await _context.BilliardTables.FindAsync(id);
+            if (existing == null) return NotFound();
+
+            existing.TableCode = tableCode;
+            existing.TableTypeId = tableTypeId;
+            existing.FloorNumber = floorNumber;
+
+            if (existing.Status is "Available" or "Maintenance")
+            {
+                existing.Status = status;
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = $"Đã cập nhật thông tin bàn \"{tableCode}\".";
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateTableStatus(int id, string status)
+    {
+        status = (status ?? string.Empty).Trim();
+        string[] allowedStatuses = { "Available", "Maintenance" };
+        if (!allowedStatuses.Contains(status))
+        {
+            TempData["Error"] = "Trạng thái bàn điều chỉnh không hợp lệ (chỉ hỗ trợ Còn trống hoặc Bảo trì).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var table = await _context.BilliardTables.FindAsync(id);
+        if (table == null) return NotFound();
+
+        if (table.Status == "InUse")
+        {
+            TempData["Error"] = $"Bàn \"{table.TableCode}\" đang được sử dụng, không thể đổi trạng thái thủ công.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        table.Status = status;
+        await _context.SaveChangesAsync();
+
+        string statusLabel = status switch
+        {
+            "Available" => "Còn trống",
+            "Maintenance" => "Bảo trì",
+            _ => status
+        };
+
+        TempData["Success"] = $"Đã chuyển trạng thái bàn \"{table.TableCode}\" sang [{statusLabel}].";
         return RedirectToAction(nameof(Index));
     }
 

@@ -14,6 +14,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<TableType>               TableTypes               => Set<TableType>();
     public DbSet<PricingConfig>           PricingConfigs           => Set<PricingConfig>();
     public DbSet<PaymentTransaction>      PaymentTransactions      => Set<PaymentTransaction>();
+    public DbSet<PaymentIntent>           PaymentIntents           => Set<PaymentIntent>();
     public DbSet<BilliardTable>           BilliardTables           => Set<BilliardTable>();
     public DbSet<WorkShift>               WorkShifts               => Set<WorkShift>();
     public DbSet<PlaySession>             PlaySessions             => Set<PlaySession>();
@@ -88,7 +89,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.TierName).HasMaxLength(50).IsRequired();
             e.Property(x => x.DiscountPercent).HasColumnType("decimal(5,2)");
             e.Property(x => x.SpendThreshold).HasColumnType("decimal(18,2)");
-            e.Property(x => x.BirthdayVoucherValue).HasColumnType("decimal(18,2)");
         });
 
         // PointTransactions (TV2)
@@ -256,10 +256,31 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.ToTable("PaymentTransactions");
             e.Property(x => x.AmountPaid).HasColumnType("decimal(18,2)");
             e.Property(x => x.PaymentMethod).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.GatewayRefCode).HasMaxLength(100);
             e.Property(x => x.TransactionTimeUtc).HasColumnType("datetime2(0)");
             e.Property(x => x.ReceivedById).HasMaxLength(450);
             e.HasOne<WorkShift>().WithMany().HasForeignKey(x => x.WorkShiftId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ReceivedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<PaymentIntent>(e =>
+        {
+            e.ToTable("PaymentIntents");
+            e.Property(x => x.ReferenceCode).HasMaxLength(50).IsUnicode(false).IsRequired();
+            e.Property(x => x.ExpectedAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Provider).HasMaxLength(30).IsUnicode(false).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false).IsRequired();
+            e.Property(x => x.ProviderTransactionId).HasMaxLength(100);
+            e.Property(x => x.CustomerId).HasMaxLength(450);
+            e.Property(x => x.PlaytimeAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.FandBAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.VoucherCode).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.CashierId).HasMaxLength(450);
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ExpiresAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ConfirmedAtUtc).HasColumnType("datetime2(0)");
+            e.HasIndex(x => x.ReferenceCode).IsUnique();
+            e.HasIndex(x => x.ProviderTransactionId).IsUnique().HasFilter("[ProviderTransactionId] IS NOT NULL");
         });
 
         // WorkShifts (Hung)

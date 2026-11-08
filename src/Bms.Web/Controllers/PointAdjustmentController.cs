@@ -75,10 +75,16 @@ public class PointAdjustmentController : Controller
             actorId = await _db.Users.Select(u => u.Id).FirstAsync();
         }
 
+        var actor = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == actorId);
+        var actorDisplay = actor != null
+            ? (!string.IsNullOrWhiteSpace(actor.EmployeeCode) ? $"{actor.FullName} ({actor.EmployeeCode})" : actor.FullName)
+            : (User.Identity?.Name ?? "Nhân viên");
+        var actorRoleLabel = IsManagerOrAdmin ? "Manager yêu cầu" : "Nhân viên yêu cầu";
+
         var now = DateTime.UtcNow;
 
-        // BR-F2-1: Nếu người lập là Manager/Admin và |điểm| <= 50 -> tự động duyệt ngay
-        if (IsManagerOrAdmin && Math.Abs(points) <= 50)
+        // BR-F2-1: Nếu người lập là Manager -> ghi nhận tên người yêu cầu (Manager) và tự động phê duyệt ngay vào sổ cái điểm
+        if (IsManagerOrAdmin)
         {
             var ownTx = _db.Database.CurrentTransaction == null
                 ? await _db.Database.BeginTransactionAsync()
@@ -95,18 +101,19 @@ public class PointAdjustmentController : Controller
                     RequestedAtUtc = now,
                     ReviewedById = actorId,
                     ReviewedAtUtc = now,
-                    ReviewNote = "Tự động duyệt (Manager, |điểm| <= 50)"
+                    ReviewNote = "Manager đã phê duyệt"
                 };
                 _db.PointAdjustmentRequests.Add(req);
                 await _db.SaveChangesAsync();
 
+                var ledgerReason = $"{fullReason} [Người yêu cầu: {actorDisplay} — {actorRoleLabel}]";
                 var ledgerRes = await _ledger.PostAsync(
                     customerId: customerId,
                     delta: points,
                     type: PointTransaction.Adjust,
                     referenceCode: $"ADJ-{req.Id}",
                     invoiceId: null,
-                    reason: fullReason,
+                    reason: ledgerReason,
                     actorId: actorId);
 
                 if (!ledgerRes.Success)
@@ -117,11 +124,11 @@ public class PointAdjustmentController : Controller
                 }
 
                 req.PointTransactionId = ledgerRes.TransactionId;
-                AppendNotificationAndAudit(customerId, points, fullReason, ledgerRes.BalanceAfter, actorId, now);
+                AppendNotificationAndAudit(customerId, points, ledgerReason, ledgerRes.BalanceAfter, actorId, now);
                 await _db.SaveChangesAsync();
                 if (ownTx != null) await ownTx.CommitAsync();
 
-                TempData["Success"] = $"Đã điều chỉnh {(points > 0 ? "+" : "")}{points} điểm cho {customer.FullName} (tự động duyệt). Số dư mới: {ledgerRes.BalanceAfter} điểm.";
+                TempData["Success"] = $"Đã tạo và duyệt điều chỉnh {(points > 0 ? "+" : "")}{points} điểm cho {customer.FullName} (Người yêu cầu: {actorDisplay} — {actorRoleLabel}). Số dư mới: {ledgerRes.BalanceAfter} điểm.";
                 return RedirectBack(customerId, returnTo);
             }
             finally
@@ -130,7 +137,7 @@ public class PointAdjustmentController : Controller
             }
         }
 
-        // BR-F2-2: Phiếu do Staff lập -> luôn chuyển sang trạng thái Pending chờ Manager phê duyệt
+        // BR-F2-2: Phiếu do Staff lập -> gán RequestedById của nhân viên và chuyển sang trạng thái Pending chờ Manager phê duyệt
         var pendingReq = new PointAdjustmentRequest
         {
             CustomerId = customerId,
@@ -143,7 +150,7 @@ public class PointAdjustmentController : Controller
         _db.PointAdjustmentRequests.Add(pendingReq);
         await _db.SaveChangesAsync();
 
-        TempData["Success"] = $"Đã lập phiếu điều chỉnh {(points > 0 ? "+" : "")}{points} điểm cho {customer.FullName} (Trạng thái: Đang chờ Manager phê duyệt).";
+        TempData["Success"] = $"Đã lập phiếu điều chỉnh {(points > 0 ? "+" : "")}{points} điểm cho {customer.FullName} (Người yêu cầu: {actorDisplay} — {actorRoleLabel}, đang chờ Manager phê duyệt).";
         return RedirectBack(customerId, returnTo);
     }
 
@@ -155,6 +162,7 @@ public class PointAdjustmentController : Controller
     {
         var req = await _db.PointAdjustmentRequests
             .Include(r => r.Customer)
+            .Include(r => r.RequestedBy)
             .FirstOrDefaultAsync(r => r.Id == id);
 
         if (req == null) return NotFound();
@@ -178,6 +186,16 @@ public class PointAdjustmentController : Controller
             reviewerId = await _db.Users.Where(u => u.Id != req.RequestedById).Select(u => u.Id).FirstOrDefaultAsync() ?? req.RequestedById;
         }
 
+        var reqActorDisplay = req.RequestedBy != null
+            ? (!string.IsNullOrWhiteSpace(req.RequestedBy.EmployeeCode) ? $"{req.RequestedBy.FullName} ({req.RequestedBy.EmployeeCode})" : req.RequestedBy.FullName)
+            : req.RequestedById;
+        var isReqManager = await (from ur in _db.UserRoles.AsNoTracking()
+                                  join rl in _db.Roles.AsNoTracking() on ur.RoleId equals rl.Id
+                                  where ur.UserId == req.RequestedById && (rl.Name == "Manager" || rl.Name == "Admin")
+                                  select rl.Name).AnyAsync();
+        var reqRoleText = isReqManager ? "Manager yêu cầu" : "Nhân viên yêu cầu";
+        var ledgerReason = $"{req.Reason} [Người yêu cầu: {reqActorDisplay} — {reqRoleText}]";
+
         var ownTx = _db.Database.CurrentTransaction == null
             ? await _db.Database.BeginTransactionAsync()
             : null;
@@ -190,8 +208,8 @@ public class PointAdjustmentController : Controller
                 type: PointTransaction.Adjust,
                 referenceCode: $"ADJ-{req.Id}",
                 invoiceId: null,
-                reason: req.Reason,
-                actorId: reviewerId);
+                reason: ledgerReason,
+                actorId: !string.IsNullOrEmpty(req.RequestedById) ? req.RequestedById : reviewerId);
 
             if (!ledgerRes.Success)
             {
@@ -204,14 +222,14 @@ public class PointAdjustmentController : Controller
             req.Status = PointAdjustmentRequest.StatusApproved;
             req.ReviewedById = reviewerId;
             req.ReviewedAtUtc = now;
-            req.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? "Manager đã phê duyệt" : reviewNote.Trim();
+            req.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? $"Manager đã phê duyệt (Đơn của: {reqActorDisplay})" : reviewNote.Trim();
             req.PointTransactionId = ledgerRes.TransactionId;
 
-            AppendNotificationAndAudit(req.CustomerId, req.Points, req.Reason, ledgerRes.BalanceAfter, reviewerId, now);
+            AppendNotificationAndAudit(req.CustomerId, req.Points, ledgerReason, ledgerRes.BalanceAfter, reviewerId, now);
             await _db.SaveChangesAsync();
             if (ownTx != null) await ownTx.CommitAsync();
 
-            TempData["Success"] = $"Manager đã phê duyệt phiếu #{id}: {(req.Points > 0 ? "+" : "")}{req.Points} điểm cho {req.Customer?.FullName}.";
+            TempData["Success"] = $"Manager đã phê duyệt phiếu #{id} (Người yêu cầu: {reqActorDisplay}): {(req.Points > 0 ? "+" : "")}{req.Points} điểm cho {req.Customer?.FullName}.";
             return RedirectToAction(nameof(Pending));
         }
         catch
@@ -294,7 +312,7 @@ public class PointAdjustmentController : Controller
             .OrderByDescending(r => r.RequestedAtUtc)
             .ToListAsync();
 
-        var history = await _db.PointAdjustmentRequests.AsNoTracking()
+        var recentHistory = await _db.PointAdjustmentRequests.AsNoTracking()
             .Include(r => r.Customer)
             .Include(r => r.RequestedBy)
             .Include(r => r.ReviewedBy)
@@ -302,6 +320,39 @@ public class PointAdjustmentController : Controller
             .OrderByDescending(r => r.ReviewedAtUtc ?? r.RequestedAtUtc)
             .Take(25)
             .ToListAsync();
+
+        var requesterIds = pending.Select(r => r.RequestedById)
+            .Concat(recentHistory.Select(r => r.RequestedById))
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Distinct()
+            .ToList();
+
+        var requesterRoleLabels = new Dictionary<string, string>();
+        if (requesterIds.Count > 0)
+        {
+            var rolePairs = await (from ur in _db.UserRoles.AsNoTracking()
+                                   join r in _db.Roles.AsNoTracking() on ur.RoleId equals r.Id
+                                   where requesterIds.Contains(ur.UserId)
+                                   select new { ur.UserId, RoleName = r.Name })
+                                   .ToListAsync();
+
+            foreach (var id in requesterIds)
+            {
+                var roles = rolePairs.Where(x => x.UserId == id).Select(x => x.RoleName).ToList();
+                if (roles.Contains("Manager") || roles.Contains("Admin"))
+                    requesterRoleLabels[id] = "Manager yêu cầu";
+                else
+                    requesterRoleLabels[id] = "Nhân viên yêu cầu";
+            }
+        }
+
+        foreach (var h in recentHistory)
+        {
+            if (!string.IsNullOrEmpty(h.ReviewNote) && h.ReviewNote.Contains("Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                h.ReviewNote = h.ReviewNote.Replace("Admin", "Manager", StringComparison.OrdinalIgnoreCase);
+            }
+        }
 
         var roleId = await _db.Roles.Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync();
         var customers = await _db.Users.AsNoTracking()
@@ -319,12 +370,24 @@ public class PointAdjustmentController : Controller
             })
             .ToListAsync();
 
+        var curActor = !string.IsNullOrEmpty(CurrentActorId)
+            ? await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == CurrentActorId)
+            : null;
+        var curRequesterName = curActor != null
+            ? (!string.IsNullOrWhiteSpace(curActor.EmployeeCode) ? $"{curActor.FullName} ({curActor.EmployeeCode})" : curActor.FullName)
+            : (User.Identity?.Name ?? "Nhân viên");
+        var curRequesterRoleLabel = IsManagerOrAdmin ? "Manager yêu cầu" : "Nhân viên yêu cầu";
+
         return new PointAdjustmentIndexViewModel
         {
             PendingRequests = pending,
-            RecentHistory = history,
+            RecentHistory = recentHistory,
             Customers = customers,
-            SelectedCustomerId = customerId
+            SelectedCustomerId = customerId,
+            RequesterRoleLabels = requesterRoleLabels,
+            CurrentRequesterName = curRequesterName,
+            CurrentRequesterRoleLabel = curRequesterRoleLabel,
+            IsManagerRequester = IsManagerOrAdmin
         };
     }
 }

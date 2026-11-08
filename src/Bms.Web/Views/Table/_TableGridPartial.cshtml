@@ -29,11 +29,10 @@
             {
                 "Available" => "status-available",
                 "InUse" => "status-inuse",
-                "AwaitingPayment" => "status-awaitingpayment",
                 "Maintenance" => "status-maintenance",
-                "Inactive" => "status-inactive",
-                _ => "status-unknown"
+                _ => "status-available"
             };
+            var isComboOverdue = table.DisplayStatus == "Đã hết giờ Combo (Tính vượt giờ)";
 
             string? sessionStartIso = null;
             if (table.SessionStartUtc.HasValue)
@@ -57,6 +56,7 @@
                  data-display-status="@table.DisplayStatus"
                  data-has-combo="@(table.HasCombo ? "true" : "false")"
                  data-combo-minutes="@table.TotalComboMinutes"
+                 @if (isComboOverdue) { <text>data-time-state="overdue"</text> }
                  @if (!string.IsNullOrEmpty(sessionStartIso)) { <text>data-session-start="@sessionStartIso"</text> }>
                 <div class="table-card-top">
                     <span class="table-code" title="@table.TableCode">@table.TableCode</span>

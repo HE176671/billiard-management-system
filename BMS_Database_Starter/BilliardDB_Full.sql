@@ -144,7 +144,7 @@ BEGIN TRY
         CONSTRAINT FK_Table_Type FOREIGN KEY (TableTypeId) REFERENCES dbo.TableTypes(Id),
         CONSTRAINT CK_Table_Code CHECK (LEN(LTRIM(RTRIM(TableCode))) > 0),
         CONSTRAINT CK_Table_Floor CHECK (FloorNumber >= 0),
-        CONSTRAINT CK_Table_Status CHECK (Status IN ('Available','InUse','AwaitingPayment','Maintenance','Inactive'))
+        CONSTRAINT CK_Table_Status CHECK (Status IN ('Available','InUse','Maintenance'))
     );
     CREATE INDEX IX_BilliardTables_Type_Status ON dbo.BilliardTables(TableTypeId, Status);
 
@@ -289,6 +289,39 @@ BEGIN TRY
         CONSTRAINT CK_Payment_Amount CHECK (AmountPaid > 0)
     );
 
+    CREATE UNIQUE INDEX UX_PaymentTransactions_GatewayRefCode
+        ON dbo.PaymentTransactions(GatewayRefCode) WHERE GatewayRefCode IS NOT NULL;
+
+    CREATE TABLE dbo.PaymentIntents (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_PaymentIntents PRIMARY KEY,
+        InvoiceId int NOT NULL,
+        ReferenceCode varchar(50) NOT NULL CONSTRAINT UQ_PaymentIntents_ReferenceCode UNIQUE,
+        ExpectedAmount decimal(18,2) NOT NULL,
+        Provider varchar(30) NOT NULL CONSTRAINT DF_PaymentIntent_Provider DEFAULT 'SePay',
+        Status varchar(20) NOT NULL CONSTRAINT DF_PaymentIntent_Status DEFAULT 'Pending',
+        ProviderTransactionId nvarchar(100) NULL,
+        CustomerId nvarchar(450) NULL,
+        SessionId int NULL,
+        PlaytimeAmount decimal(18,2) NOT NULL,
+        FandBAmount decimal(18,2) NOT NULL,
+        PointsToRedeem int NOT NULL CONSTRAINT DF_PaymentIntent_Points DEFAULT 0,
+        VoucherCode varchar(20) NULL,
+        CashierId nvarchar(450) NULL,
+        CreatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_PaymentIntent_Created DEFAULT SYSUTCDATETIME(),
+        ExpiresAtUtc datetime2(0) NOT NULL,
+        ConfirmedAtUtc datetime2(0) NULL,
+        CONSTRAINT FK_PaymentIntent_Invoice FOREIGN KEY (InvoiceId) REFERENCES dbo.Invoices(Id),
+        CONSTRAINT FK_PaymentIntent_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.AspNetUsers(Id),
+        CONSTRAINT FK_PaymentIntent_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+        CONSTRAINT FK_PaymentIntent_Cashier FOREIGN KEY (CashierId) REFERENCES dbo.AspNetUsers(Id),
+        CONSTRAINT CK_PaymentIntent_Amount CHECK (ExpectedAmount > 0),
+        CONSTRAINT CK_PaymentIntent_Status CHECK (Status IN ('Pending','Confirmed','Expired','Failed')),
+        CONSTRAINT CK_PaymentIntent_Points CHECK (PointsToRedeem >= 0)
+    );
+    CREATE UNIQUE INDEX UX_PaymentIntents_ProviderTransactionId ON dbo.PaymentIntents(ProviderTransactionId)
+        WHERE ProviderTransactionId IS NOT NULL;
+    CREATE INDEX IX_PaymentIntents_Status_Expires ON dbo.PaymentIntents(Status, ExpiresAtUtc);
+
     CREATE TABLE dbo.Combos (
         Id int IDENTITY NOT NULL CONSTRAINT PK_Combos PRIMARY KEY,
         Name nvarchar(100) NOT NULL CONSTRAINT UQ_Combos_Name UNIQUE,
@@ -429,7 +462,7 @@ BEGIN
         BEGIN TRANSACTION;
         DECLARE @TableStatus varchar(20);
         SELECT @TableStatus = Status FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TableId;
-        IF @TableStatus IS NULL OR @TableStatus IN ('Maintenance','Inactive')
+        IF @TableStatus IS NULL OR @TableStatus = 'Maintenance'
             THROW 51103, N'Table is not bookable.', 1;
         IF EXISTS (SELECT 1 FROM dbo.Bookings
             WHERE TableId = @TableId AND Status IN ('Confirmed','CheckedIn')
@@ -591,7 +624,7 @@ BEGIN
         UPDATE dbo.PlaySessions SET EndAtUtc = @Now, ClosedById = @StaffId, Status = 'Closed',
             PlaytimeAmount = ROUND(CONVERT(decimal(18,2),DATEDIFF_BIG(second,@Start,@Now)) * @Rate / 3600.0, 0)
             WHERE Id = @SessionId;
-        UPDATE dbo.BilliardTables SET Status = 'AwaitingPayment' WHERE Id = @TableId;
+        UPDATE dbo.BilliardTables SET Status = 'Available' WHERE Id = @TableId;
         IF @BookingId IS NOT NULL UPDATE dbo.Bookings SET Status = 'Completed' WHERE Id = @BookingId;
         COMMIT;
         SELECT Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status
@@ -652,7 +685,7 @@ BEGIN TRY
     DECLARE @Carom int = (SELECT Id FROM dbo.TableTypes WHERE Name=N'Carom');
     INSERT dbo.BilliardTables(TableCode,TableTypeId,FloorNumber,Status) VALUES
         (N'B01',@Pool,1,'InUse'),(N'B02',@Pool,1,'Available'),
-        (N'B03',@Pool,1,'Available'),(N'B04',@Carom,2,'AwaitingPayment'),
+        (N'B03',@Pool,1,'Available'),(N'B04',@Carom,2,'Available'),
         (N'B05',@Carom,2,'Maintenance'),(N'B06',@Carom,2,'Available');
     DECLARE @B01 int=(SELECT Id FROM dbo.BilliardTables WHERE TableCode=N'B01');
     DECLARE @B02 int=(SELECT Id FROM dbo.BilliardTables WHERE TableCode=N'B02');

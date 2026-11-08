@@ -18,11 +18,6 @@
     <div class="text-muted" style="font-size:0.85rem">
         Số liệu tổng hợp trong 12 tháng gần nhất theo lịch sử giao dịch hội viên
     </div>
-    <div class="d-flex gap-2">
-        <a asp-controller="Campaign" asp-action="Index" asp-route-segment="AtRisk" class="btn-primary-bms">
-            <i class="bi bi-megaphone"></i> Gửi ưu đãi khách vắng mặt
-        </a>
-    </div>
 </div>
 
 <!-- ═══════════ 4 CHỈ SỐ TỔNG QUAN ═══════════ -->
@@ -65,9 +60,9 @@
     </div>
 </div>
 
-<!-- ═══════════ 3 BIỂU ĐỒ THỐNG KÊ ═══════════ -->
+<!-- ═══════════ 2 BIỂU ĐỒ THỐNG KÊ ═══════════ -->
 <div class="row g-3 mb-4">
-    <div class="col-lg-4">
+    <div class="col-lg-6">
         <div class="data-card p-3 h-100">
             <div class="fw-semibold mb-1" style="font-size:0.9rem">Nhóm hội viên theo tần suất ghé</div>
             <div class="text-muted mb-2" style="font-size:0.75rem">Bấm vào từng nhóm để xem danh sách chi tiết</div>
@@ -85,19 +80,11 @@
         </div>
     </div>
 
-    <div class="col-lg-4">
+    <div class="col-lg-6">
         <div class="data-card p-3 h-100">
             <div class="fw-semibold mb-1" style="font-size:0.9rem">Cơ cấu hạng thành viên</div>
             <div class="text-muted mb-2" style="font-size:0.75rem">Theo mức chi tiêu tích lũy 12 tháng</div>
             <div style="height:240px"><canvas id="tierBarChart"></canvas></div>
-        </div>
-    </div>
-
-    <div class="col-lg-4">
-        <div class="data-card p-3 h-100">
-            <div class="fw-semibold mb-1" style="font-size:0.9rem">Điểm tích lũy &amp; đổi điểm (6 tháng)</div>
-            <div class="text-muted mb-2" style="font-size:0.75rem">So sánh lượng điểm cấp ra và điểm khách đã sử dụng</div>
-            <div style="height:240px"><canvas id="pointsLineChart"></canvas></div>
         </div>
     </div>
 </div>
@@ -105,9 +92,9 @@
 <!-- ═══════════ 2 BẢNG DANH SÁCH TIÊU BIỂU ═══════════ -->
 <div class="row g-3">
     <div class="col-lg-6">
-        <div class="data-card">
+        <div class="data-card d-flex flex-column h-100">
             <div class="data-card-header">
-                <span class="data-card-title"><i class="bi bi-award text-warning me-2"></i>10 hội viên chi tiêu cao nhất (12 tháng)</span>
+                <span class="data-card-title"><i class="bi bi-award text-warning me-2"></i>Hội viên chi tiêu cao nhất (12 tháng) (@Model.TopSpendersTotalCount)</span>
             </div>
             @if (!Model.TopSpenders12M.Any())
             {
@@ -117,8 +104,10 @@
             }
             else
             {
-                <div class="table-responsive">
-                    <table class="table table-hover">
+                var topStart = (Model.TopSpendersPage - 1) * Model.PageSize + 1;
+                var topEnd = Math.Min(Model.TopSpendersPage * Model.PageSize, Model.TopSpendersTotalCount);
+                <div class="table-responsive flex-grow-1">
+                    <table class="table table-hover mb-0">
                         <thead>
                             <tr>
                                 <th>Hội viên</th>
@@ -147,17 +136,35 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top flex-wrap gap-2" style="background:#f8fafc;font-size:0.8rem">
+                    <div class="text-muted">
+                        Hiển thị <strong>@topStart–@topEnd</strong> / <strong>@Model.TopSpendersTotalCount</strong> hội viên (10 người/trang)
+                    </div>
+                    <nav aria-label="Phân trang hội viên chi tiêu cao nhất">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(Model.TopSpendersPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-topPage="@(Model.TopSpendersPage - 1)" asp-route-riskPage="@Model.AtRiskPage">Trước</a>
+                            </li>
+                            @for (int p = 1; p <= Model.TopSpendersTotalPages; p++)
+                            {
+                                <li class="page-item @(p == Model.TopSpendersPage ? "active" : "")">
+                                    <a class="page-link" asp-action="Index" asp-route-topPage="@p" asp-route-riskPage="@Model.AtRiskPage">@p</a>
+                                </li>
+                            }
+                            <li class="page-item @(Model.TopSpendersPage >= Model.TopSpendersTotalPages ? "disabled" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-topPage="@(Model.TopSpendersPage + 1)" asp-route-riskPage="@Model.AtRiskPage">Sau</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
             }
         </div>
     </div>
 
     <div class="col-lg-6">
-        <div class="data-card">
+        <div class="data-card d-flex flex-column h-100">
             <div class="data-card-header">
-                <span class="data-card-title"><i class="bi bi-clock-history text-danger me-2"></i>Khách quen vắng mặt trên 30 ngày</span>
-                <a asp-controller="Campaign" asp-action="Index" asp-route-segment="AtRisk" class="btn-primary-bms py-1 px-2" style="font-size:0.75rem">
-                    <i class="bi bi-send"></i> Gửi ưu đãi
-                </a>
+                <span class="data-card-title"><i class="bi bi-clock-history text-danger me-2"></i>Khách quen vắng mặt trên 30 ngày (@Model.AtRiskTotalCount)</span>
             </div>
             @if (!Model.HighValueAtRisk.Any())
             {
@@ -167,8 +174,10 @@
             }
             else
             {
-                <div class="table-responsive">
-                    <table class="table table-hover">
+                var riskStart = (Model.AtRiskPage - 1) * Model.PageSize + 1;
+                var riskEnd = Math.Min(Model.AtRiskPage * Model.PageSize, Model.AtRiskTotalCount);
+                <div class="table-responsive flex-grow-1">
+                    <table class="table table-hover mb-0">
                         <thead>
                             <tr>
                                 <th>Hội viên</th>
@@ -200,6 +209,27 @@
                             }
                         </tbody>
                     </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top flex-wrap gap-2" style="background:#f8fafc;font-size:0.8rem">
+                    <div class="text-muted">
+                        Hiển thị <strong>@riskStart–@riskEnd</strong> / <strong>@Model.AtRiskTotalCount</strong> hội viên (10 người/trang)
+                    </div>
+                    <nav aria-label="Phân trang khách quen vắng mặt">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(Model.AtRiskPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-topPage="@Model.TopSpendersPage" asp-route-riskPage="@(Model.AtRiskPage - 1)">Trước</a>
+                            </li>
+                            @for (int p = 1; p <= Model.AtRiskTotalPages; p++)
+                            {
+                                <li class="page-item @(p == Model.AtRiskPage ? "active" : "")">
+                                    <a class="page-link" asp-action="Index" asp-route-topPage="@Model.TopSpendersPage" asp-route-riskPage="@p">@p</a>
+                                </li>
+                            }
+                            <li class="page-item @(Model.AtRiskPage >= Model.AtRiskTotalPages ? "disabled" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-topPage="@Model.TopSpendersPage" asp-route-riskPage="@(Model.AtRiskPage + 1)">Sau</a>
+                            </li>
+                        </ul>
+                    </nav>
                 </div>
             }
         </div>
@@ -255,30 +285,6 @@
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-                }
-            });
-        }
-
-        const flowLabels = @Html.Raw(JsonSerializer.Serialize(Model.MonthlyPointsFlow.Select(x => x.MonthLabel)));
-        const flowEarned = @Html.Raw(JsonSerializer.Serialize(Model.MonthlyPointsFlow.Select(x => x.EarnedPoints)));
-        const flowRedeemed = @Html.Raw(JsonSerializer.Serialize(Model.MonthlyPointsFlow.Select(x => x.RedeemedPoints)));
-
-        const lineCtx = document.getElementById('pointsLineChart');
-        if (lineCtx) {
-            new Chart(lineCtx, {
-                type: 'line',
-                data: {
-                    labels: flowLabels,
-                    datasets: [
-                        { label: 'Điểm tích lũy', data: flowEarned, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, fill: true },
-                        { label: 'Điểm đã đổi', data: flowRedeemed, borderColor: '#e94560', backgroundColor: 'rgba(233,69,96,0.1)', tension: 0.3, fill: true }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-                    scales: { y: { beginAtZero: true } }
                 }
             });
         }

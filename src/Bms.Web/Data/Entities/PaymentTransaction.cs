@@ -8,6 +8,8 @@ public class PaymentTransaction
     public int InvoiceId { get; set; }
     public string PaymentMethod { get; set; } = "";
     public decimal AmountPaid { get; set; }
+    /// <summary>Mã tham chiếu nội bộ hoặc mã giao dịch từ cổng thanh toán, dùng để chống ghi trùng.</summary>
+    public string? GatewayRefCode { get; set; }
     public DateTime TransactionTimeUtc { get; set; }
     /// <summary>Ca nhận giao dịch. Bắt buộc với tiền mặt (TV3 gọi IShiftService), NULL với VNPay/IPN.</summary>
     public int? WorkShiftId { get; set; }

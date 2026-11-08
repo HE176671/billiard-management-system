@@ -3,16 +3,20 @@
     var s = Model.Summary;
     ViewData["Title"] = $"Chi tiết ca #{s.Shift.Id}";
     Layout = "_AdminLayout";
-    var isAdmin = User.IsInRole("Admin");
+    var isManagerOrAdmin = User.IsInRole("Manager") || User.IsInRole("Admin");
 }
 <partial name="_Alerts" />
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-    <a asp-action="@(isAdmin ? "Manage" : "History")" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <a asp-action="@(isManagerOrAdmin ? "Manage" : "Index")" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
     <h5 class="mb-0">Ca #@s.Shift.Id — @s.StaffName</h5>
     @if (s.IsActive) { <span class="badge-active">Đang mở</span> } else { <span class="badge bg-secondary">Đã đóng</span> }
     <span class="text-muted ms-2" style="font-size:0.85rem">
         @s.Shift.StartTimeUtc.ToVn().ToString("HH:mm dd/MM/yyyy") → @(s.Shift.EndTimeUtc.ToVn()?.ToString("HH:mm dd/MM/yyyy") ?? "đang mở")
     </span>
+    @if (!isManagerOrAdmin)
+    {
+        <a asp-action="Index" class="btn-outline-bms ms-auto"><i class="bi bi-cash-coin"></i> Về Ca của tôi</a>
+    }
 </div>
 
 <partial name="_SummaryCards" model="s" />

@@ -89,6 +89,16 @@ public class OrderController : Controller
             return RedirectToAction(nameof(Table), new { tableCode });
         }
 
+        var paymentLocked = await _db.PaymentIntents.AsNoTracking()
+            .AnyAsync(p => p.SessionId == activeSession.Id
+                        && p.Status == PaymentIntent.StatusPending
+                        && p.ExpiresAtUtc > DateTime.UtcNow);
+        if (paymentLocked)
+        {
+            TempData["Error"] = "Bàn đang chờ xác nhận thanh toán, không thể gọi thêm món. Vui lòng liên hệ nhân viên.";
+            return RedirectToAction(nameof(Table), new { tableCode });
+        }
+
         // 2. Kiểm tra giỏ hàng
         var validItems = input.Items?
             .Where(i => i.Quantity > 0)
@@ -171,7 +181,7 @@ public class OrderController : Controller
     // ─────────────────────────────────────────────────────────────
 
     // GET /Order/Counter (Staff thao tác)
-    [Authorize(Roles = "Staff,Admin")]
+    [Authorize(Roles = "Staff")]
     [HttpGet]
     public async Task<IActionResult> Counter(int? sessionId)
     {
@@ -226,7 +236,7 @@ public class OrderController : Controller
     }
 
     // POST /Order/SubmitStaffOrder (Staff gọi trực tiếp cho bàn)
-    [Authorize(Roles = "Staff,Admin")]
+    [Authorize(Roles = "Staff")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SubmitStaffOrder(int sessionId, SubmitOrderInputModel input)
@@ -239,6 +249,16 @@ public class OrderController : Controller
         {
             TempData["Error"] = "Phiên chơi không tồn tại hoặc đã kết thúc.";
             return RedirectToAction(nameof(Counter), new { tab = "table" });
+        }
+
+        var paymentLocked = await _db.PaymentIntents.AsNoTracking()
+            .AnyAsync(p => p.SessionId == session.Id
+                        && p.Status == PaymentIntent.StatusPending
+                        && p.ExpiresAtUtc > DateTime.UtcNow);
+        if (paymentLocked)
+        {
+            TempData["Error"] = "Bàn đang chờ xác nhận thanh toán, không thể thêm món vào hóa đơn.";
+            return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
         }
 
         var validItems = input.Items?.Where(i => i.Quantity > 0).ToList() ?? new List<OrderItemInputModel>();
@@ -308,7 +328,7 @@ public class OrderController : Controller
     }
 
     // POST /Order/SubmitCounterTakeaway (Khách mua lẻ tại quầy / Mang về không vào bàn)
-    [Authorize(Roles = "Staff,Admin")]
+    [Authorize(Roles = "Staff")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SubmitCounterTakeaway(SubmitOrderInputModel input)
@@ -404,7 +424,7 @@ public class OrderController : Controller
     }
 
     // GET /Order/Manage (Quản lý các đơn Pending từ khách quét QR)
-    [Authorize(Roles = "Staff,Admin")]
+    [Authorize(Roles = "Staff")]
     [HttpGet]
     public async Task<IActionResult> Manage()
     {
@@ -420,21 +440,66 @@ public class OrderController : Controller
     }
 
     // POST /Order/ApproveOrder (Staff duyệt đơn Pending -> Served và trừ tồn kho)
-    [Authorize(Roles = "Staff,Admin")]
+    [Authorize(Roles = "Staff")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveOrder(int orderId, string? returnUrl = null)
     {
-        using var tx = await _db.Database.BeginTransactionAsync();
+        // Trong request bình thường action tự mở transaction. Khi được gọi bên trong
+        // một transaction nghiệp vụ/test lớn hơn thì tham gia transaction hiện hữu.
+        await using var tx = _db.Database.CurrentTransaction == null
+            ? await _db.Database.BeginTransactionAsync()
+            : null;
         try
         {
+            int claimed = await _db.Orders
+                .Where(o => o.Id == orderId && o.Status == OrderConstants.StatusPending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(o => o.Status, OrderConstants.StatusPreparing));
+
+            if (claimed == 0)
+            {
+                if (tx != null) await tx.RollbackAsync();
+                TempData["Error"] = "Đơn không tồn tại hoặc đã được nhân viên khác xử lý.";
+                return RedirectToReturnUrl(returnUrl);
+            }
+
+            // ExecuteUpdate chạy trực tiếp trên DB nên loại bản Order cũ khỏi tracker
+            // trước khi nạp lại trạng thái Preparing.
+            var trackedOrder = _db.ChangeTracker.Entries<Order>()
+                .FirstOrDefault(e => e.Entity.Id == orderId);
+            if (trackedOrder != null)
+            {
+                trackedOrder.State = EntityState.Detached;
+            }
+
             var order = await _db.Orders
+                .Include(o => o.Session)
                 .Include(o => o.OrderDetails).ThenInclude(d => d.Product)
                 .FirstOrDefaultAsync(o => o.Id == orderId);
 
-            if (order == null || order.Status != OrderConstants.StatusPending)
+            if (order == null || order.Status != OrderConstants.StatusPreparing)
             {
+                if (tx != null) await tx.RollbackAsync();
                 TempData["Error"] = "Đơn không tồn tại hoặc không ở trạng thái Chờ xử lý.";
+                return RedirectToReturnUrl(returnUrl);
+            }
+
+            if (order.Session.Status != "Active")
+            {
+                if (tx != null) await tx.RollbackAsync();
+                TempData["Error"] = "Phiên bàn đã kết thúc, không thể duyệt thêm món.";
+                return RedirectToReturnUrl(returnUrl);
+            }
+
+            var paymentLocked = await _db.PaymentIntents.AsNoTracking()
+                .AnyAsync(p => p.SessionId == order.SessionId
+                            && p.Status == PaymentIntent.StatusPending
+                            && p.ExpiresAtUtc > DateTime.UtcNow);
+            if (paymentLocked)
+            {
+                if (tx != null) await tx.RollbackAsync();
+                TempData["Error"] = "Bàn đang chờ xác nhận thanh toán. Hãy hoàn tất hoặc hủy yêu cầu thanh toán trước khi duyệt món.";
                 return RedirectToReturnUrl(returnUrl);
             }
 
@@ -443,7 +508,7 @@ public class OrderController : Controller
             {
                 if (detail.Product.StockQuantity < detail.Quantity)
                 {
-                    await tx.RollbackAsync();
+                    if (tx != null) await tx.RollbackAsync();
                     TempData["Error"] = $"Không thể duyệt: Món '{detail.Product.Name}' không đủ tồn kho (còn {detail.Product.StockQuantity}, yêu cầu {detail.Quantity}).";
                     return RedirectToReturnUrl(returnUrl);
                 }
@@ -457,14 +522,14 @@ public class OrderController : Controller
             order.Status = OrderConstants.StatusServed;
 
             await _db.SaveChangesAsync();
-            await tx.CommitAsync();
+            if (tx != null) await tx.CommitAsync();
 
             TempData["Success"] = $"Đã duyệt đơn #{order.Id} và trừ tồn kho thành công.";
             return RedirectToReturnUrl(returnUrl);
         }
         catch (Exception ex)
         {
-            await tx.RollbackAsync();
+            if (tx != null) await tx.RollbackAsync();
             _logger.LogError(ex, "Lỗi khi duyệt đơn {OrderId}", orderId);
             TempData["Error"] = "Có lỗi xảy ra khi duyệt đơn.";
             return RedirectToReturnUrl(returnUrl);
@@ -472,22 +537,23 @@ public class OrderController : Controller
     }
 
     // POST /Order/CancelOrder (Staff hủy đơn)
-    [Authorize(Roles = "Staff,Admin")]
+    [Authorize(Roles = "Staff")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CancelOrder(int orderId, string? returnUrl = null)
     {
-        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId);
-        if (order == null)
+        int cancelled = await _db.Orders
+            .Where(o => o.Id == orderId && o.Status == OrderConstants.StatusPending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(o => o.Status, OrderConstants.StatusCancelled));
+
+        if (cancelled == 0)
         {
-            TempData["Error"] = "Đơn không tồn tại.";
+            TempData["Error"] = "Chỉ có thể hủy đơn đang chờ Staff xác nhận.";
             return RedirectToReturnUrl(returnUrl);
         }
 
-        order.Status = OrderConstants.StatusCancelled;
-        await _db.SaveChangesAsync();
-
-        TempData["Success"] = $"Đã hủy đơn #{order.Id}.";
+        TempData["Success"] = $"Đã hủy đơn #{orderId}.";
         return RedirectToReturnUrl(returnUrl);
     }
 

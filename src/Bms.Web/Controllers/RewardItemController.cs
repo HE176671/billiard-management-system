@@ -65,10 +65,22 @@ public class RewardItemController : Controller
         code = (code ?? string.Empty).Trim().ToUpperInvariant();
         name = (name ?? string.Empty).Trim();
 
-        if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(name) || pointCost <= 0)
+        if (!ModelState.IsValid)
         {
-            TempData["Error"] = "Mã quà, tên quà không được trống và số điểm phải > 0.";
-            return RedirectToAction(nameof(Index));
+            TempData["Error"] = "Dữ liệu nhập không hợp lệ: Điểm đổi và Giá trị quy đổi (VND) chỉ được nhập số từ 0 trở lên (không được nhập ký tự đặc biệt hoặc chữ cái).";
+            return RedirectToAction(nameof(Index), new { editId = id > 0 ? (int?)id : null });
+        }
+
+        if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(name))
+        {
+            TempData["Error"] = "Mã quà và tên phần quà không được để trống.";
+            return RedirectToAction(nameof(Index), new { editId = id > 0 ? (int?)id : null });
+        }
+
+        if (pointCost < 0 || (discountValue.HasValue && discountValue.Value < 0))
+        {
+            TempData["Error"] = "Điểm đổi và Giá trị quy đổi (VND) phải từ 0 trở lên (không được nhập số âm).";
+            return RedirectToAction(nameof(Index), new { editId = id > 0 ? (int?)id : null });
         }
 
         if (await _db.RewardItems.AnyAsync(r => r.Code == code && r.Id != id))
@@ -76,6 +88,8 @@ public class RewardItemController : Controller
             TempData["Error"] = $"Mã quà {code} đã tồn tại.";
             return RedirectToAction(nameof(Index), new { editId = id > 0 ? (int?)id : null });
         }
+
+        decimal normalizedDiscount = discountValue ?? 0m;
 
         if (id == 0)
         {
@@ -86,12 +100,12 @@ public class RewardItemController : Controller
                 Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
                 PointCost = pointCost,
                 RewardType = rewardType,
-                DiscountValue = discountValue,
+                DiscountValue = normalizedDiscount,
                 ValidDays = Math.Max(1, validDays),
                 MinTierId = minTierId,
                 IsActive = isActive
             });
-            TempData["Success"] = $"Đã thêm phần quà \"{name}\" ({pointCost} điểm).";
+            TempData["Success"] = $"Đã thêm phần quà \"{name}\" ({pointCost} điểm · {normalizedDiscount:N0} VND).";
         }
         else
         {
@@ -103,11 +117,23 @@ public class RewardItemController : Controller
             existing.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
             existing.PointCost = pointCost;
             existing.RewardType = rewardType;
-            existing.DiscountValue = discountValue;
+            existing.DiscountValue = normalizedDiscount;
             existing.ValidDays = Math.Max(1, validDays);
             existing.MinTierId = minTierId;
             existing.IsActive = isActive;
-            TempData["Success"] = $"Đã cập nhật phần quà \"{name}\" (Trạng thái: {(isActive ? "Đang mở" : "Đã đóng")}).";
+
+            // Đồng bộ ngay các voucher đang Active chưa sử dụng thuộc phần quà này
+            var activeVouchers = await _db.CustomerVouchers
+                .Where(v => v.RewardItemId == existing.Id && v.Status == CustomerVoucher.StatusActive)
+                .ToListAsync();
+            foreach (var v in activeVouchers)
+            {
+                v.Title = existing.Name;
+                v.VoucherType = existing.RewardType;
+                v.DiscountValue = existing.DiscountValue;
+            }
+
+            TempData["Success"] = $"Đã cập nhật phần quà \"{name}\" và đồng bộ {activeVouchers.Count} mã voucher đang hoạt động.";
         }
 
         await _db.SaveChangesAsync();

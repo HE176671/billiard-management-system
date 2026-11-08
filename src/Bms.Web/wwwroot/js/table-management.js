@@ -70,6 +70,8 @@
     let pollingAbortController = null;
     let pollingRequestId = 0;
 
+    let currentStatusFilter = 'all';
+
     const vnDateTimeFormatter = new Intl.DateTimeFormat('vi-VN', {
         timeZone: 'Asia/Ho_Chi_Minh',
         year: 'numeric',
@@ -96,9 +98,8 @@
         hour12: false
     });
 
-    const vnCurrencyFormatter = new Intl.NumberFormat('vi-VN', {
-        style: 'currency',
-        currency: 'VND'
+    const vnNumberFormatter = new Intl.NumberFormat('vi-VN', {
+        maximumFractionDigits: 0
     });
 
     // =========================================================================
@@ -139,8 +140,8 @@
     }
 
     function formatVnCurrency(amount) {
-        if (amount === null || amount === undefined || isNaN(amount)) return '0 ₫';
-        return vnCurrencyFormatter.format(amount);
+        if (amount === null || amount === undefined || isNaN(amount)) return '0 VND';
+        return `${vnNumberFormatter.format(Math.round(Number(amount)))} VND`;
     }
 
     function formatElapsedSeconds(totalSeconds) {
@@ -186,7 +187,7 @@
     // =========================================================================
 
     /**
-     * Tính trạng thái thời gian Combo của phiên đang chơi
+     * Tính trạng thái thời gian Combo của phiên đang sử dụng
      */
     function getComboTimeState(startMs, comboMinutes, nowMs, tableStatus) {
         if (!startMs || isNaN(startMs) || !comboMinutes || comboMinutes <= 0 || !nowMs || isNaN(nowMs) || tableStatus !== 'InUse') {
@@ -200,26 +201,20 @@
         const comboEndMs = startMs + comboMinutes * 60000;
         const remainingMs = comboEndMs - nowMs;
 
-        if (remainingMs > 600000) { // Còn > 10 phút
+        if (remainingMs > 0) {
             return {
                 state: 'normal',
                 cardText: `Còn ${formatRemainingTime(remainingMs)}`,
                 panelText: `Còn ${formatRemainingTime(remainingMs)} (trong gói ${comboMinutes}p)`
             };
-        } else if (remainingMs > 0) { // Còn <= 10 phút
-            return {
-                state: 'warning',
-                cardText: `Sắp hết (${formatRemainingTime(remainingMs)})`,
-                panelText: `Sắp hết giờ Combo: còn ${formatRemainingTime(remainingMs)}`
-            };
-        } else {
-            const overtimeMs = Math.abs(remainingMs);
-            return {
-                state: 'overdue',
-                cardText: `Vượt +${formatRemainingTime(overtimeMs)}`,
-                panelText: `Đã hết giờ Combo — Vượt +${formatRemainingTime(overtimeMs)} (đang tính tiền giờ)`
-            };
         }
+
+        const overtimeMs = Math.abs(remainingMs);
+        return {
+            state: 'overdue',
+            cardText: `Vượt +${formatRemainingTime(overtimeMs)}`,
+            panelText: `Đã hết giờ Combo — Vượt +${formatRemainingTime(overtimeMs)} (tính vượt giờ)`
+        };
     }
 
     function showToast(message, type = 'success', delay = 4500) {
@@ -362,12 +357,8 @@
 
             if (!prev || prev !== info.state) {
                 notifiedComboStates.set(key, info.state);
-                if (!isInitialScan) {
-                    if (info.state === 'warning') {
-                        showToast(`Bàn ${tableCode} sắp hết thời gian Combo (còn dưới 10 phút).`, 'warning', 5500);
-                    } else if (info.state === 'overdue') {
-                        showToast(`Bàn ${tableCode} đã kết thúc thời gian Combo và bắt đầu tính tiền theo giờ bình thường!`, 'warning', 6500);
-                    }
+                if (!isInitialScan && info.state === 'overdue') {
+                    showToast(`Bàn ${tableCode} đã hết giờ Combo (chuyển sang tính vượt giờ theo phút)!`, 'warning', 6500);
                 }
             }
         });
@@ -378,16 +369,19 @@
     function updateClocks() {
         const nowServerMs = Date.now() - deltaOffset;
         const cards = document.querySelectorAll('#table-grid-container .table-card');
+        let timeStateChanged = false;
 
         cards.forEach(card => {
             const status = card.getAttribute('data-status') || '';
-            const displayStatus = card.getAttribute('data-display-status') || '';
+            const prevTimeState = card.getAttribute('data-time-state') || '';
+            let displayStatus = card.getAttribute('data-display-status') || '';
             const clockEl = card.querySelector('.table-clock');
             const statusTextEl = card.querySelector('.status-text');
             const sessionStartStr = card.getAttribute('data-session-start');
             const hasCombo = card.getAttribute('data-has-combo') === 'true';
             const comboMinutes = parseInt(card.getAttribute('data-combo-minutes') || '0', 10);
             const remainingEl = card.querySelector('.table-remaining');
+            const tableCode = card.getAttribute('data-table-code') || '';
 
             if (status === 'InUse' && sessionStartStr) {
                 const startParsed = Date.parse(sessionStartStr);
@@ -399,14 +393,17 @@
                     if (hasCombo && comboMinutes > 0 && remainingEl) {
                         const comboInfo = getComboTimeState(startParsed, comboMinutes, nowServerMs, status);
                         remainingEl.textContent = comboInfo.cardText;
-                        if (comboInfo.state === 'warning' || comboInfo.state === 'overdue') {
-                            card.setAttribute('data-time-state', comboInfo.state);
+                        if (comboInfo.state === 'overdue') {
+                            card.setAttribute('data-time-state', 'overdue');
+                            displayStatus = 'Đã hết giờ Combo (Tính vượt giờ)';
                         } else {
                             card.removeAttribute('data-time-state');
+                            displayStatus = 'Đang sử dụng';
                         }
                     } else {
                         if (remainingEl) remainingEl.textContent = '--';
                         card.removeAttribute('data-time-state');
+                        displayStatus = 'Đang sử dụng';
                     }
                 } else {
                     if (clockEl) clockEl.textContent = '--';
@@ -419,10 +416,23 @@
                 card.removeAttribute('data-time-state');
             }
 
+            card.setAttribute('data-display-status', displayStatus);
+            if (tableCode && displayStatus) {
+                card.setAttribute('aria-label', `Bàn ${tableCode}, ${displayStatus}`);
+            }
             if (statusTextEl) {
                 statusTextEl.textContent = displayStatus;
             }
+
+            const nextTimeState = card.getAttribute('data-time-state') || '';
+            if (prevTimeState !== nextTimeState) {
+                timeStateChanged = true;
+            }
         });
+
+        if (timeStateChanged) {
+            updateTableFilterAndCounts(false);
+        }
 
         const panel = document.getElementById('table-detail-panel');
         const isPanelVisible = panel && !panel.classList.contains('d-none');
@@ -447,17 +457,18 @@
 
             const elComboRemaining = document.getElementById('detail-combo-remaining');
             const rowComboRemaining = document.getElementById('detail-combo-remaining-row');
+            const elStatus = document.getElementById('detail-status');
             if (elComboRemaining && rowComboRemaining) {
                 if (currentSelectedTable.hasCombo && currentSelectedTable.totalComboMinutes > 0 && currentSelectedTable.status === 'InUse' && currentSelectedTable.startAtUtc) {
                     const startMs = Date.parse(currentSelectedTable.startAtUtc);
                     const info = getComboTimeState(startMs, currentSelectedTable.totalComboMinutes, nowServerMs, currentSelectedTable.status);
                     elComboRemaining.textContent = info.panelText;
-                    elComboRemaining.className = 'detail-val duration-val ' + (info.state === 'overdue' ? 'text-danger fw-bold' : info.state === 'warning' ? 'text-warning-emphasis fw-bold' : 'text-success');
+                    elComboRemaining.className = 'detail-val duration-val ' + (info.state === 'overdue' ? 'text-danger fw-bold' : 'text-success');
                     rowComboRemaining.classList.remove('d-none');
-                } else if (currentSelectedTable.hasCombo && currentSelectedTable.totalComboMinutes > 0 && currentSelectedTable.status === 'AwaitingPayment') {
-                    elComboRemaining.textContent = `Tổng gói ${currentSelectedTable.totalComboMinutes} phút`;
-                    elComboRemaining.className = 'detail-val duration-val text-primary';
-                    rowComboRemaining.classList.remove('d-none');
+
+                    const liveStatus = info.state === 'overdue' ? 'Đã hết giờ Combo (Tính vượt giờ)' : 'Đang sử dụng';
+                    currentSelectedTable.displayStatus = liveStatus;
+                    if (elStatus) elStatus.textContent = liveStatus;
                 } else {
                     rowComboRemaining.classList.add('d-none');
                 }
@@ -515,11 +526,10 @@
         const hasCombo = Boolean(detail.hasCombo ?? detail.HasCombo);
         const comboAmount = Number(detail.comboAmount ?? detail.ComboAmount ?? 0);
         const overtimeAmount = Number(detail.overtimeAmount ?? detail.OvertimeAmount ?? 0);
-        const playtimeAmount = detail.playtimeAmount ?? detail.PlaytimeAmount;
         const estimatedAmount = detail.estimatedAmount ?? detail.EstimatedAmount;
         const serverTime = detail.serverTimeUtc ?? detail.ServerTimeUtc;
 
-        if (status !== 'InUse' && status !== 'AwaitingPayment') {
+        if (status !== 'InUse') {
             if (boxPricing) boxPricing.classList.add('d-none');
             return;
         }
@@ -531,7 +541,7 @@
             if (elOvertimeAmt) {
                 elOvertimeAmt.textContent = overtimeAmount > 0
                     ? formatVnCurrency(overtimeAmount)
-                    : '0 ₫ (Trong giờ Combo)';
+                    : '0 VND (Trong giờ Combo)';
             }
             if (rowOvertimeAmt) rowOvertimeAmt.classList.remove('d-none');
         } else {
@@ -539,22 +549,13 @@
             if (rowOvertimeAmt) rowOvertimeAmt.classList.add('d-none');
         }
 
-        if (status === 'InUse') {
-            if (elPlaytimeLabel) elPlaytimeLabel.textContent = hasCombo ? 'Tổng tiền bàn (tạm tính):' : 'Tạm tính:';
-            if (elPlaytimeAmount) {
-                if (estimatedAmount !== null && estimatedAmount !== undefined) {
-                    const timeStr = serverTime ? ` (cập nhật ${formatVnTimeWithSeconds(serverTime)})` : '';
-                    elPlaytimeAmount.textContent = `${formatVnCurrency(estimatedAmount)}${timeStr}`;
-                } else {
-                    elPlaytimeAmount.textContent = '--';
-                }
-            }
-        } else if (status === 'AwaitingPayment') {
-            if (elPlaytimeLabel) elPlaytimeLabel.textContent = 'Tổng tiền bàn (đã chốt):';
-            if (elPlaytimeAmount) {
-                elPlaytimeAmount.textContent = (playtimeAmount !== null && playtimeAmount !== undefined)
-                    ? formatVnCurrency(playtimeAmount)
-                    : '--';
+        if (elPlaytimeLabel) elPlaytimeLabel.textContent = hasCombo ? 'Tổng tiền bàn (tạm tính):' : 'Tạm tính:';
+        if (elPlaytimeAmount) {
+            if (estimatedAmount !== null && estimatedAmount !== undefined) {
+                const timeStr = serverTime ? ` (cập nhật ${formatVnTimeWithSeconds(serverTime)})` : '';
+                elPlaytimeAmount.textContent = `${formatVnCurrency(estimatedAmount)}${timeStr}`;
+            } else {
+                elPlaytimeAmount.textContent = '--';
             }
         }
 
@@ -607,7 +608,10 @@
         currentSelectedTable.totalComboMinutes = Number(detail.totalComboMinutes ?? detail.TotalComboMinutes ?? 0);
         currentSelectedTable.comboAmount = Number(detail.comboAmount ?? detail.ComboAmount ?? 0);
         currentSelectedTable.overtimeAmount = Number(detail.overtimeAmount ?? detail.OvertimeAmount ?? 0);
-        currentSelectedTable.hourlyRate = detail.hourlyRate ?? detail.HourlyRate ?? 0;
+        const snapshotRate = detail.hourlyRateSnapshot ?? detail.HourlyRateSnapshot;
+        currentSelectedTable.hourlyRate = (snapshotRate !== null && snapshotRate !== undefined && Number(snapshotRate) > 0)
+            ? Number(snapshotRate)
+            : Number(detail.hourlyRate ?? detail.HourlyRate ?? 0);
         currentSelectedTable.segments = detail.segments ?? detail.Segments ?? [];
         currentSelectedTable.combos = detail.combos ?? detail.Combos ?? [];
 
@@ -622,7 +626,6 @@
         const elTableName = document.getElementById('detail-table-name');
         const elStatus = document.getElementById('detail-status');
         const elHourlyRate = document.getElementById('detail-hourly-rate');
-        const elCustomer = document.getElementById('detail-customer');
         const elStartTime = document.getElementById('detail-start-time');
         const elEndTime = document.getElementById('detail-end-time');
         const rowEndTime = document.getElementById('detail-end-time-row');
@@ -632,16 +635,6 @@
         if (elStatus) elStatus.textContent = currentSelectedTable.displayStatus || '--';
         if (elHourlyRate) elHourlyRate.textContent = `${formatVnCurrency(currentSelectedTable.hourlyRate)}/giờ`;
 
-        const customerName = detail.customerFullName ?? detail.CustomerFullName;
-        const customerPhone = detail.customerPhone ?? detail.CustomerPhone;
-        if (elCustomer) {
-            if (customerName) {
-                elCustomer.textContent = customerPhone ? `${customerName} (${customerPhone})` : customerName;
-            } else {
-                elCustomer.textContent = 'Khách vãng lai';
-            }
-        }
-
         if (elStartTime) {
             elStartTime.textContent = currentSelectedTable.startAtUtc ? formatVnDateTime(currentSelectedTable.startAtUtc) : '--';
         }
@@ -649,7 +642,7 @@
             elEndTime.textContent = currentSelectedTable.endAtUtc ? formatVnDateTime(currentSelectedTable.endAtUtc) : '--';
         }
         if (rowEndTime) {
-            if (currentSelectedTable.endAtUtc || currentSelectedTable.status === 'AwaitingPayment') {
+            if (currentSelectedTable.endAtUtc) {
                 rowEndTime.classList.remove('d-none');
             } else {
                 rowEndTime.classList.add('d-none');
@@ -692,13 +685,12 @@
 
             const nameSpan = document.createElement('span');
             nameSpan.className = 'combo-purchase-name';
-            const qty = c.quantity ?? c.Quantity ?? 1;
             const cName = c.comboName ?? c.ComboName ?? 'Combo';
-            nameSpan.textContent = qty > 1 ? `${cName} ×${qty}` : cName;
+            nameSpan.textContent = cName;
 
             const priceSpan = document.createElement('span');
             priceSpan.className = 'combo-purchase-price';
-            const subtotal = c.subtotal ?? c.Subtotal ?? ((c.unitPrice ?? c.UnitPrice ?? 0) * qty);
+            const subtotal = c.subtotal ?? c.Subtotal ?? (c.unitPrice ?? c.UnitPrice ?? 0);
             priceSpan.textContent = formatVnCurrency(subtotal);
 
             header.appendChild(nameSpan);
@@ -718,7 +710,7 @@
                 itemsDiv.className = 'combo-purchase-items';
                 const itemTexts = items.map(i => {
                     const pName = i.productName ?? i.ProductName ?? '';
-                    const tQty = i.totalQuantity ?? i.TotalQuantity ?? ((i.quantityPerCombo ?? i.QuantityPerCombo ?? 1) * qty);
+                    const tQty = i.totalQuantity ?? i.TotalQuantity ?? (i.quantityPerCombo ?? i.QuantityPerCombo ?? 1);
                     return `${pName} ×${tQty}`;
                 });
                 itemsDiv.textContent = `Món kèm: ${itemTexts.join(', ')}`;
@@ -761,7 +753,7 @@
             const startUtc = seg.startAtUtc ?? seg.StartAtUtc;
             const endUtc = seg.endAtUtc ?? seg.EndAtUtc;
             const startTimeStr = startUtc ? formatVnTimeOnly(startUtc) : '--:--';
-            const endTimeStr = endUtc ? formatVnTimeOnly(endUtc) : 'đang chơi';
+            const endTimeStr = endUtc ? formatVnTimeOnly(endUtc) : 'đang sử dụng';
 
             const timeSpan = document.createElement('span');
             timeSpan.className = 'segment-item-time';
@@ -796,8 +788,83 @@
     }
 
     // =========================================================================
-    // PHẦN 6: CHỌN BÀN, ĐÓNG PANEL & TỰ ĐỘNG ĐỒNG BỘ SƠ ĐỒ BÀN (POLLING 10S)
+    // PHẦN 6: CHỌN BÀN, LỌC TRẠNG THÁI, ĐÓNG PANEL & TỰ ĐỘNG ĐỒNG BỘ SƠ ĐỒ BÀN
     // =========================================================================
+
+    function isCardMatchingFilter(status, isOverdue, filterMode) {
+        if (filterMode === 'inuse') {
+            return status === 'InUse' && !isOverdue;
+        }
+        if (filterMode === 'available') {
+            return status === 'Available';
+        }
+        if (filterMode === 'overdue') {
+            return status === 'InUse' && isOverdue;
+        }
+        if (filterMode === 'maintenance') {
+            return status === 'Maintenance';
+        }
+        return true;
+    }
+
+    function updateTableFilterAndCounts(closeHiddenSelection = false) {
+        const cards = document.querySelectorAll('#table-grid-container .table-card');
+        let totalCount = 0;
+        let inUseCount = 0;
+        let availableCount = 0;
+        let overdueCount = 0;
+        let maintenanceCount = 0;
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+            const status = card.getAttribute('data-status') || '';
+            const isOverdue = status === 'InUse' && (
+                card.getAttribute('data-time-state') === 'overdue' ||
+                card.getAttribute('data-display-status') === 'Đã hết giờ Combo (Tính vượt giờ)'
+            );
+
+            totalCount++;
+            if (status === 'InUse' && !isOverdue) inUseCount++;
+            else if (status === 'Available') availableCount++;
+            else if (status === 'InUse' && isOverdue) overdueCount++;
+            else if (status === 'Maintenance') maintenanceCount++;
+
+            const matches = isCardMatchingFilter(status, isOverdue, currentStatusFilter);
+            card.classList.toggle('d-none', !matches);
+            if (matches) visibleCount++;
+        });
+
+        const elAll = document.getElementById('filter-count-all');
+        const elInUse = document.getElementById('filter-count-inuse');
+        const elAvailable = document.getElementById('filter-count-available');
+        const elOverdue = document.getElementById('filter-count-overdue');
+        const elMaintenance = document.getElementById('filter-count-maintenance');
+        if (elAll) elAll.textContent = String(totalCount);
+        if (elInUse) elInUse.textContent = String(inUseCount);
+        if (elAvailable) elAvailable.textContent = String(availableCount);
+        if (elOverdue) elOverdue.textContent = String(overdueCount);
+        if (elMaintenance) elMaintenance.textContent = String(maintenanceCount);
+
+        document.querySelectorAll('.quick-filter-radio').forEach(lbl => {
+            const radio = lbl.querySelector('input[name="tableQuickFilter"]');
+            lbl.classList.toggle('active', Boolean(radio && radio.value === currentStatusFilter));
+        });
+
+        const emptyFilterEl = document.getElementById('table-filter-empty');
+        const gridEl = document.getElementById('table-grid');
+        if (emptyFilterEl) {
+            const shouldShowEmpty = totalCount > 0 && visibleCount === 0;
+            emptyFilterEl.classList.toggle('d-none', !shouldShowEmpty);
+            if (gridEl) gridEl.classList.toggle('d-none', shouldShowEmpty);
+        }
+
+        if (closeHiddenSelection && currentSelectedTable.id) {
+            const selectedCard = document.querySelector(`#table-grid-container .table-card[data-table-id="${currentSelectedTable.id}"]`);
+            if (selectedCard && selectedCard.classList.contains('d-none')) {
+                closeDetailPanel(false);
+            }
+        }
+    }
 
     function closeDetailPanel(returnFocus = true) {
         if (isOpenFormVisible) hideOpenForm(false);
@@ -899,6 +966,7 @@
 
         container.innerHTML = html;
         recalculateDeltaOffset();
+        updateTableFilterAndCounts(false);
         updateClocks();
 
         const panel = document.getElementById('table-detail-panel');
@@ -989,8 +1057,13 @@
     }
 
     // =========================================================================
-    // PHẦN 7: LUỒNG MỞ BÀN (OPEN TABLE + TÌM KHÁCH HÀNG TÙY CHỌN)
+    // PHẦN 7: LUỒNG MỞ BÀN (CHỌN 1 TRONG 2 CHẾ ĐỘ: TÍNH GIỜ CHƠI HOẶC GÓI COMBO)
     // =========================================================================
+
+    function getSelectedOpenBillingMode() {
+        const comboRadio = document.getElementById('mode-combo');
+        return (comboRadio && comboRadio.checked) ? 'combo' : 'hourly';
+    }
 
     function updateOpenFormPreview() {
         if (!isOpenFormVisible) return;
@@ -999,45 +1072,23 @@
         if (elStart) elStart.textContent = formatVnTimeWithSeconds(nowServerMs);
     }
 
-    async function searchCustomersForOpenForm(keyword = '') {
-        const requestId = ++customerSearchRequestId;
-        const selectEl = document.getElementById('select-open-customer');
-        if (!selectEl) return;
+    function handleBillingModeChange() {
+        const mode = getSelectedOpenBillingMode();
+        const comboSection = document.getElementById('open-combo-section');
+        const lblHourly = document.getElementById('lbl-mode-hourly');
+        const lblCombo = document.getElementById('lbl-mode-combo');
+        const btnConfirmOpen = document.getElementById('btn-confirm-open');
 
-        const prevSelected = selectEl.value;
-
-        try {
-            const response = await fetch(`/Table/SearchCustomers?keyword=${encodeURIComponent(keyword)}`, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-                credentials: 'same-origin'
-            });
-            if (requestId !== customerSearchRequestId || !response.ok) return;
-            const result = await response.json();
-            if (requestId !== customerSearchRequestId) return;
-
-            const customers = result.data ?? result.Data ?? [];
-            selectEl.replaceChildren();
-
-            const walkInOpt = document.createElement('option');
-            walkInOpt.value = '';
-            walkInOpt.textContent = '-- Khách vãng lai (Không chọn tài khoản) --';
-            selectEl.appendChild(walkInOpt);
-
-            customers.forEach(c => {
-                const opt = document.createElement('option');
-                const id = c.id ?? c.Id ?? '';
-                const name = c.fullName ?? c.FullName ?? '';
-                const phone = c.phoneNumber ?? c.PhoneNumber ?? '';
-                opt.value = id;
-                opt.textContent = phone ? `${name} — ${phone}` : name;
-                selectEl.appendChild(opt);
-            });
-
-            if (prevSelected && Array.from(selectEl.options).some(o => o.value === prevSelected)) {
-                selectEl.value = prevSelected;
-            }
-        } catch {
+        if (mode === 'combo') {
+            if (comboSection) comboSection.classList.remove('d-none');
+            if (lblCombo) lblCombo.classList.add('bg-light', 'border-warning');
+            if (lblHourly) lblHourly.classList.remove('bg-light', 'border-primary');
+            loadActiveCombosCatalog();
+        } else {
+            if (comboSection) comboSection.classList.add('d-none');
+            if (lblHourly) lblHourly.classList.add('bg-light', 'border-primary');
+            if (lblCombo) lblCombo.classList.remove('bg-light', 'border-warning');
+            if (btnConfirmOpen) btnConfirmOpen.disabled = isProcessing;
         }
     }
 
@@ -1053,10 +1104,10 @@
         if (formEl) formEl.classList.remove('d-none');
         if (actionsBox) actionsBox.classList.add('d-none');
 
-        const inputSearch = document.getElementById('input-customer-search');
-        if (inputSearch) inputSearch.value = '';
-        searchCustomersForOpenForm('');
+        const hourlyRadio = document.getElementById('mode-hourly');
+        if (hourlyRadio) hourlyRadio.checked = true;
 
+        handleBillingModeChange();
         updateOpenFormPreview();
         updateButtons();
     }
@@ -1082,19 +1133,27 @@
             return;
         }
 
+        const billingMode = getSelectedOpenBillingMode();
+        const selectCombo = document.getElementById('select-combo-package');
+        const comboId = selectCombo ? parseInt(selectCombo.value, 10) : 0;
+
+        if (billingMode === 'combo' && (!comboId || comboId <= 0)) {
+            showToast('Vui lòng chọn một gói Combo để mở bàn theo chế độ Combo.', 'warning');
+            return;
+        }
+
         isProcessing = true;
         updateButtons();
 
         const targetTableId = currentSelectedTable.id;
         const targetTableCode = currentSelectedTable.code;
-        const selectCustomer = document.getElementById('select-open-customer');
-        const customerId = selectCustomer && selectCustomer.value ? selectCustomer.value : '';
 
         try {
             const params = new URLSearchParams();
             params.append('TableId', targetTableId);
-            if (customerId) {
-                params.append('CustomerId', customerId);
+            params.append('BillingMode', billingMode);
+            if (billingMode === 'combo' && comboId > 0) {
+                params.append('ComboId', comboId);
             }
             params.append('__RequestVerificationToken', token);
 
@@ -1113,7 +1172,8 @@
                 hideOpenForm(false);
                 const data = result.data ?? result.Data;
                 const startUtc = data?.startAtUtc ?? data?.StartAtUtc;
-                showToast(`Đã mở bàn ${targetTableCode} lúc ${startUtc ? formatVnTimeOnly(startUtc) : '--:--'}.`, 'success');
+                const modeLabel = billingMode === 'combo' ? 'theo gói Combo' : 'tính tiền theo giờ';
+                showToast(serverMessage || `Đã mở bàn ${targetTableCode} (${modeLabel}) lúc ${startUtc ? formatVnTimeOnly(startUtc) : '--:--'}.`, 'success');
                 await reloadTableGrid();
                 await handleTableSelect(targetTableId);
             } else {
@@ -1129,7 +1189,7 @@
     }
 
     // =========================================================================
-    // PHẦN 8: LUỒNG CHỌN COMBO (SELECT COMBO)
+    // PHẦN 8: TẢI DANH MỤC GÓI COMBO CHO CHẾ ĐỘ COMBO KHI MỞ BÀN
     // =========================================================================
 
     async function loadActiveCombosCatalog() {
@@ -1138,12 +1198,12 @@
         const emptyEl = document.getElementById('combo-list-empty');
         const fieldsEl = document.getElementById('combo-form-fields');
         const selectEl = document.getElementById('select-combo-package');
-        const btnConfirm = document.getElementById('btn-confirm-combo');
+        const btnConfirm = document.getElementById('btn-confirm-open');
 
         if (loadingEl) loadingEl.classList.remove('d-none');
         if (emptyEl) emptyEl.classList.add('d-none');
         if (fieldsEl) fieldsEl.classList.add('d-none');
-        if (btnConfirm) btnConfirm.disabled = true;
+        if (btnConfirm && getSelectedOpenBillingMode() === 'combo') btnConfirm.disabled = true;
 
         try {
             const response = await fetch('/Table/GetActiveCombos', {
@@ -1192,132 +1252,47 @@
     }
 
     function updateComboFormPreview() {
-        if (!isComboFormVisible) return;
+        if (!isOpenFormVisible && !isComboFormVisible) return;
         const selectEl = document.getElementById('select-combo-package');
-        const qtyInput = document.getElementById('input-combo-quantity');
         const previewBox = document.getElementById('combo-preview-box');
         const elHours = document.getElementById('preview-combo-hours');
         const elPrice = document.getElementById('preview-combo-price');
         const elItems = document.getElementById('preview-combo-items');
-        const btnConfirm = document.getElementById('btn-confirm-combo');
+        const btnConfirmOpen = document.getElementById('btn-confirm-open');
 
         const selectedId = selectEl ? parseInt(selectEl.value, 10) : 0;
-        const qty = qtyInput ? Math.max(1, parseInt(qtyInput.value, 10) || 1) : 1;
 
         const combo = activeCombosCatalog.find(c => (c.id ?? c.Id) === selectedId);
         if (!combo) {
             if (previewBox) previewBox.classList.add('d-none');
-            if (btnConfirm) btnConfirm.disabled = true;
+            if (btnConfirmOpen && getSelectedOpenBillingMode() === 'combo') btnConfirmOpen.disabled = true;
             return;
         }
 
-        const hoursPerPkg = Number(combo.playtimeHours ?? combo.PlaytimeHours ?? 0);
-        const totalHours = hoursPerPkg * qty;
+        const totalHours = Number(combo.playtimeHours ?? combo.PlaytimeHours ?? 0);
         const totalMins = Math.round(totalHours * 60);
-        const unitPrice = Number(combo.price ?? combo.Price ?? 0);
-        const totalPrice = unitPrice * qty;
+        const totalPrice = Number(combo.price ?? combo.Price ?? 0);
         const items = combo.items ?? combo.Items ?? [];
 
         if (elHours) elHours.textContent = `${totalHours} giờ (${totalMins} phút)`;
         if (elPrice) elPrice.textContent = formatVnCurrency(totalPrice);
         if (elItems) {
             if (items.length > 0) {
-                elItems.textContent = items.map(i => `${i.productName ?? i.ProductName} ×${(i.quantity ?? i.Quantity ?? 1) * qty}`).join(', ');
+                elItems.textContent = items.map(i => `${i.productName ?? i.ProductName} ×${i.quantity ?? i.Quantity ?? 1}`).join(', ');
             } else {
                 elItems.textContent = 'Chỉ bao gồm giờ chơi';
             }
         }
 
         if (previewBox) previewBox.classList.remove('d-none');
-        if (btnConfirm) btnConfirm.disabled = isProcessing;
-    }
-
-    function showComboForm() {
-        if (currentSelectedTable.status !== 'InUse' || !currentSelectedTable.sessionId) return;
-        if (isOpenFormVisible) hideOpenForm(false);
-        if (isCloseFormVisible) hideCloseForm(false);
-        if (isTransferFormVisible) hideTransferForm(false);
-
-        isComboFormVisible = true;
-        const formEl = document.getElementById('combo-session-form');
-        const actionsBox = document.getElementById('action-buttons-box');
-        if (formEl) formEl.classList.remove('d-none');
-        if (actionsBox) actionsBox.classList.add('d-none');
-
-        const qtyInput = document.getElementById('input-combo-quantity');
-        if (qtyInput) qtyInput.value = '1';
-
-        updateButtons();
-        loadActiveCombosCatalog();
-    }
-
-    function hideComboForm(returnFocus = true) {
-        isComboFormVisible = false;
-        const formEl = document.getElementById('combo-session-form');
-        const actionsBox = document.getElementById('action-buttons-box');
-        if (formEl) formEl.classList.add('d-none');
-        if (actionsBox) actionsBox.classList.remove('d-none');
-        updateButtons();
-        if (returnFocus) {
-            const btnCombo = document.getElementById('btn-select-combo');
-            if (btnCombo && !btnCombo.disabled) btnCombo.focus();
+        if (btnConfirmOpen && getSelectedOpenBillingMode() === 'combo') {
+            btnConfirmOpen.disabled = isProcessing;
         }
     }
 
-    async function handleConfirmSelectCombo() {
-        if (isProcessing || currentSelectedTable.status !== 'InUse' || !currentSelectedTable.sessionId) return;
-        const selectEl = document.getElementById('select-combo-package');
-        const qtyInput = document.getElementById('input-combo-quantity');
-        const comboId = selectEl ? parseInt(selectEl.value, 10) : 0;
-        const quantity = qtyInput ? parseInt(qtyInput.value, 10) : 1;
-
-        if (!comboId || quantity <= 0) {
-            showToast('Vui lòng chọn gói Combo và số lượng hợp lệ.', 'warning');
-            return;
-        }
-
-        const token = getVerificationToken();
-        if (!token) return;
-
-        isProcessing = true;
-        updateButtons();
-
-        const targetSessionId = currentSelectedTable.sessionId;
-        const targetTableId = currentSelectedTable.id;
-
-        try {
-            const params = new URLSearchParams();
-            params.append('SessionId', targetSessionId);
-            params.append('ComboId', comboId);
-            params.append('Quantity', quantity);
-            params.append('__RequestVerificationToken', token);
-
-            const response = await fetch('/Table/AddSessionCombo', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: params,
-                credentials: 'same-origin'
-            });
-
-            const result = await response.json();
-            const isSuccess = Boolean(result.success ?? result.Success);
-
-            if (isSuccess) {
-                hideComboForm(false);
-                showToast(result.message ?? result.Message ?? 'Đã thêm gói Combo vào phiên chơi.', 'success');
-                await reloadTableGrid();
-                await handleTableSelect(targetTableId);
-            } else {
-                showToast(result.message ?? result.Message ?? 'Không thể thêm Combo.', 'danger');
-                await reloadTableGrid();
-            }
-        } catch {
-            showToast('Không kết nối được máy chủ.', 'danger');
-        } finally {
-            isProcessing = false;
-            updateButtons();
-        }
-    }
+    function showComboForm() {}
+    function hideComboForm() { isComboFormVisible = false; }
+    async function handleConfirmSelectCombo() {}
 
     // =========================================================================
     // PHẦN 9: LUỒNG ĐÓNG BÀN (CLOSE TABLE & TÓM TẮT TIỀN BÀN / COMBO)
@@ -1418,7 +1393,7 @@
 
             const startAtUtc = data.startAtUtc ?? data.StartAtUtc;
             const serverNowUtc = data.serverNowUtc ?? data.ServerNowUtc;
-            const billedMinutes = data.billedMinutes ?? data.BilledMinutes ?? 15;
+            const billedMinutes = data.billedMinutes ?? data.BilledMinutes ?? 1;
             const hasCombo = Boolean(data.hasCombo ?? data.HasCombo);
             const totalComboMinutes = Number(data.totalComboMinutes ?? data.TotalComboMinutes ?? 0);
             const overtimeMinutes = Number(data.overtimeMinutes ?? data.OvertimeMinutes ?? 0);
@@ -1494,8 +1469,8 @@
                 hideCloseForm(false);
                 const data = result.data ?? result.Data;
                 const playtimeAmount = data?.playtimeAmount ?? data?.PlaytimeAmount ?? 0;
-                const billedMinutes = data?.billedMinutes ?? data?.BilledMinutes ?? 15;
-                showToast(`Đã đóng bàn ${targetTableCode} (${billedMinutes} phút). Tổng tiền bàn: ${formatVnCurrency(playtimeAmount)}`, 'success');
+                const billedMinutes = data?.billedMinutes ?? data?.BilledMinutes ?? 1;
+                showToast(`Đã đóng bàn ${targetTableCode} (${billedMinutes} phút) — Tiền bàn: ${formatVnCurrency(playtimeAmount)}. Bàn đã về Còn trống, vui lòng thanh toán tại mục Tính tiền & Tích điểm.`, 'success', 6000);
                 await reloadTableGrid();
                 await handleTableSelect(targetTableId);
             } else {
@@ -1731,6 +1706,15 @@
             });
         }
 
+        document.querySelectorAll('input[name="tableQuickFilter"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    currentStatusFilter = e.target.value || 'all';
+                    updateTableFilterAndCounts(true);
+                }
+            });
+        });
+
         const btnCloseDetail = document.getElementById('btn-close-detail');
         if (btnCloseDetail) btnCloseDetail.addEventListener('click', () => closeDetailPanel(true));
 
@@ -1748,15 +1732,10 @@
         const btnOpen = document.getElementById('btn-open-table');
         if (btnOpen) btnOpen.addEventListener('click', showOpenForm);
 
-        const inputCustomerSearch = document.getElementById('input-customer-search');
-        if (inputCustomerSearch) {
-            inputCustomerSearch.addEventListener('input', () => {
-                if (customerSearchTimeoutId) clearTimeout(customerSearchTimeoutId);
-                customerSearchTimeoutId = setTimeout(() => {
-                    searchCustomersForOpenForm(inputCustomerSearch.value);
-                }, 250);
-            });
-        }
+        const modeHourlyRadio = document.getElementById('mode-hourly');
+        const modeComboRadio = document.getElementById('mode-combo');
+        if (modeHourlyRadio) modeHourlyRadio.addEventListener('change', handleBillingModeChange);
+        if (modeComboRadio) modeComboRadio.addEventListener('change', handleBillingModeChange);
 
         const btnConfirmOpen = document.getElementById('btn-confirm-open');
         if (btnConfirmOpen) btnConfirmOpen.addEventListener('click', handleConfirmOpenSession);
@@ -1764,20 +1743,8 @@
         const btnCancelOpen = document.getElementById('btn-cancel-open');
         if (btnCancelOpen) btnCancelOpen.addEventListener('click', () => hideOpenForm(true));
 
-        const btnCombo = document.getElementById('btn-select-combo');
-        if (btnCombo) btnCombo.addEventListener('click', showComboForm);
-
         const selectComboPackage = document.getElementById('select-combo-package');
         if (selectComboPackage) selectComboPackage.addEventListener('change', updateComboFormPreview);
-
-        const inputComboQty = document.getElementById('input-combo-quantity');
-        if (inputComboQty) inputComboQty.addEventListener('input', updateComboFormPreview);
-
-        const btnConfirmCombo = document.getElementById('btn-confirm-combo');
-        if (btnConfirmCombo) btnConfirmCombo.addEventListener('click', handleConfirmSelectCombo);
-
-        const btnCancelCombo = document.getElementById('btn-cancel-combo');
-        if (btnCancelCombo) btnCancelCombo.addEventListener('click', () => hideComboForm(true));
 
         const btnClose = document.getElementById('btn-close-table');
         if (btnClose) btnClose.addEventListener('click', showCloseForm);
@@ -1817,6 +1784,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         initEvents();
+        updateTableFilterAndCounts(false);
         updateButtons();
         recalculateDeltaOffset();
         startClockTimer();

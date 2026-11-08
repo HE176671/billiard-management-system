@@ -6,6 +6,13 @@ using Microsoft.EntityFrameworkCore;
 #region Cau hinh MVC, SQL Server, Identity va cookie
 var builder = WebApplication.CreateBuilder(args);
 
+if (builder.Environment.IsDevelopment())
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.AddDebug();
+}
+
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 builder.Services.AddMemoryCache();
@@ -22,6 +29,7 @@ builder.Services.AddScoped<IVoucherService, VoucherService>();
 builder.Services.AddScoped<ICustomerSegmentService, CustomerSegmentService>();
 builder.Services.AddScoped<ICampaignService, CampaignService>();
 builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
+builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddHostedService<LoyaltyDailyJob>();
 
 // Identity — khớp schema SQL V1, khóa login/token dài 128
@@ -85,6 +93,11 @@ app.UseRouting();
 
 app.UseAuthentication();  // phải trước UseAuthorization
 app.UseAuthorization();
+
+app.MapControllerRoute(
+    name: "change_password",
+    pattern: "Profile/ChangePassword",
+    defaults: new { controller = "Profile", action = "ChangePassword" });
 
 app.MapControllerRoute(
     name: "order_table",

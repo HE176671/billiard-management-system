@@ -13,9 +13,25 @@
         <a asp-action="Counter" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-left"></i> Quay lại gọi tại quầy
         </a>
+        <span class="badge bg-light text-secondary border ms-1">Tự cập nhật mỗi 5 giây</span>
     </div>
 </div>
 
+@section Scripts {
+    <script>
+        (() => {
+            let isSubmitting = false;
+            document.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', () => { isSubmitting = true; });
+            });
+            window.setInterval(() => {
+                if (!isSubmitting && document.visibilityState === 'visible') {
+                    window.location.reload();
+                }
+            }, 5000);
+        })();
+    </script>
+}
 @if (TempData["Success"] != null)
 {
     <div class="alert alert-success alert-dismissible fade show rounded-3" role="alert">
