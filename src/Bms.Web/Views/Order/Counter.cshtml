@@ -4,6 +4,7 @@
     ViewData["Title"] = "Gọi món tại quầy & Quản lý F&B";
     var activeSessions = ViewBag.ActiveSessions as List<Bms.Web.Data.Entities.PlaySession> ?? new();
     var selectedSession = ViewBag.SelectedSession as Bms.Web.Data.Entities.PlaySession;
+    var isTableTab = Context.Request.Query.ContainsKey("sessionId") || Context.Request.Query["tab"] == "table";
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -36,12 +37,12 @@
 <!-- Tab chuyển đổi: Khách mua lẻ tại quầy vs Khách ngồi bàn -->
 <ul class="nav nav-pills mb-4 gap-2" id="counterTab" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link active px-4 py-2 rounded-3 fw-bold shadow-xs" id="tab-takeaway-btn" data-bs-toggle="pill" data-bs-target="#tab-takeaway" type="button" role="tab">
+        <button class="nav-link @(!isTableTab ? "active" : "") px-4 py-2 rounded-3 fw-bold shadow-xs" id="tab-takeaway-btn" data-bs-toggle="pill" data-bs-target="#tab-takeaway" type="button" role="tab">
             <i class="bi bi-bag-check me-1"></i> 1. Khách mua lẻ tại quầy (Không vào bàn)
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link px-4 py-2 rounded-3 fw-bold shadow-xs" id="tab-table-btn" data-bs-toggle="pill" data-bs-target="#tab-table" type="button" role="tab">
+        <button class="nav-link @(isTableTab ? "active" : "") px-4 py-2 rounded-3 fw-bold shadow-xs" id="tab-table-btn" data-bs-toggle="pill" data-bs-target="#tab-table" type="button" role="tab">
             <i class="bi bi-grid-3x3 me-1"></i> 2. Gọi thêm cho bàn đang chơi (@activeSessions.Count bàn)
         </button>
     </li>
@@ -51,7 +52,7 @@
     <!-- ══════════════════════════════════════════════════════════════ -->
     <!-- TAB 1: KHÁCH MUA LẺ TẠI QUẦY (MANG VỀ, KHÔNG VÀO BÀN)           -->
     <!-- ══════════════════════════════════════════════════════════════ -->
-    <div class="tab-pane fade show active" id="tab-takeaway" role="tabpanel">
+    <div class="tab-pane fade @(!isTableTab ? "show active" : "")" id="tab-takeaway" role="tabpanel">
         <form asp-action="SubmitCounterTakeaway" method="post" id="takeawayOrderForm">
             @Html.AntiForgeryToken()
 
@@ -147,7 +148,7 @@
     <!-- ══════════════════════════════════════════════════════════════ -->
     <!-- TAB 2: GỌI THÊM CHO BÀN ĐANG CHƠI                             -->
     <!-- ══════════════════════════════════════════════════════════════ -->
-    <div class="tab-pane fade" id="tab-table" role="tabpanel">
+    <div class="tab-pane fade @(isTableTab ? "show active" : "")" id="tab-table" role="tabpanel">
         <!-- Chọn bàn đang chơi -->
         <div class="data-card mb-4 p-3">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
@@ -164,7 +165,7 @@
                     @foreach (var s in activeSessions)
                     {
                         var isCurrent = Model.ActiveSessionId == s.Id;
-                        <a asp-action="Counter" asp-route-sessionId="@s.Id" 
+                        <a asp-action="Counter" asp-route-sessionId="@s.Id" asp-route-tab="table"
                            class="btn @(isCurrent ? "btn-danger fw-bold shadow-sm" : "btn-outline-secondary") btn-sm px-3 py-2 rounded-3">
                             🎱 Bàn @s.BilliardTable.TableCode (@s.BilliardTable.TableType.Name)
                         </a>
@@ -500,6 +501,28 @@
         if (countEl) countEl.textContent = count;
         if (totalEl) totalEl.textContent = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(total);
         if (btnSubmit) btnSubmit.disabled = count === 0;
+    }
+
+    // Ghi nhớ Tab khi nhân viên chuyển đổi thủ công
+    const tabTakeawayBtn = document.getElementById('tab-takeaway-btn');
+    const tabTableBtn = document.getElementById('tab-table-btn');
+    if (tabTakeawayBtn && tabTableBtn) {
+        tabTakeawayBtn.addEventListener('shown.bs.tab', () => {
+            sessionStorage.setItem('order_counter_active_tab', 'takeaway');
+        });
+        tabTableBtn.addEventListener('shown.bs.tab', () => {
+            sessionStorage.setItem('order_counter_active_tab', 'table');
+        });
+
+        // Nếu truy cập không qua link chọn bàn (không có query), khôi phục tab đã lưu
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has('sessionId') && !params.has('tab')) {
+            const saved = sessionStorage.getItem('order_counter_active_tab');
+            if (saved === 'table') {
+                const trigger = new bootstrap.Tab(tabTableBtn);
+                trigger.show();
+            }
+        }
     }
 </script>
 }

@@ -238,14 +238,14 @@ public class OrderController : Controller
         if (session == null)
         {
             TempData["Error"] = "Phiên chơi không tồn tại hoặc đã kết thúc.";
-            return RedirectToAction(nameof(Counter));
+            return RedirectToAction(nameof(Counter), new { tab = "table" });
         }
 
         var validItems = input.Items?.Where(i => i.Quantity > 0).ToList() ?? new List<OrderItemInputModel>();
         if (!validItems.Any())
         {
             TempData["Error"] = OrderConstants.MsgEmptyCart;
-            return RedirectToAction(nameof(Counter), new { sessionId });
+            return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
         }
 
         var aggregatedItems = validItems
@@ -265,7 +265,7 @@ public class OrderController : Controller
                 {
                     await tx.RollbackAsync();
                     TempData["Error"] = $"Món {(prod?.Name ?? "đã chọn")} không đủ số lượng tồn kho (còn {prod?.StockQuantity ?? 0}).";
-                    return RedirectToAction(nameof(Counter), new { sessionId });
+                    return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
                 }
             }
 
@@ -296,14 +296,14 @@ public class OrderController : Controller
             await tx.CommitAsync();
 
             TempData["Success"] = "Đã thêm món thành công cho bàn " + session.BilliardTable.TableCode;
-            return RedirectToAction(nameof(Counter), new { sessionId });
+            return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
         }
         catch (Exception ex)
         {
             await tx.RollbackAsync();
             _logger.LogError(ex, "Lỗi khi staff đặt món cho phiên {SessionId}", sessionId);
             TempData["Error"] = "Có lỗi xảy ra khi tạo đơn.";
-            return RedirectToAction(nameof(Counter), new { sessionId });
+            return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
         }
     }
 
