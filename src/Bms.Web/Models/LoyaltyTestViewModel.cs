@@ -33,6 +33,8 @@ public class LoyaltyTestViewModel
     public decimal CashReceived { get; set; } = 0;
     public decimal FinalAmount => Preview?.FinalAmount ?? Math.Max(0m, PlaytimeAmount + FandBAmount);
     public decimal ChangeAmount => Math.Max(0m, CashReceived - FinalAmount);
+    public bool HasPendingTransfer { get; set; }
+    public DateTime? PendingTransferExpiresAtUtc { get; set; }
 
     // Dữ liệu form cũ để tương thích
     public decimal PaymentFinalAmount { get; set; } = 100000;
@@ -53,6 +55,34 @@ public class CheckoutSessionItemViewModel
     public decimal PlaytimeAmount { get; set; }
     public decimal FandBAmount { get; set; }
     public string Status { get; set; } = string.Empty;
+
+    public int ElapsedMinutes
+    {
+        get
+        {
+            var end = EndAtUtc ?? DateTime.UtcNow;
+            int diff = (int)Math.Round((end - StartAtUtc).TotalMinutes);
+            if (diff <= 1 && PlaytimeAmount > 0 && HourlyRateSnapshot > 0)
+            {
+                int est = (int)Math.Round((PlaytimeAmount / HourlyRateSnapshot) * 60m);
+                if (est > diff) return est;
+            }
+            return Math.Max(1, diff);
+        }
+    }
+
+    public string PlayDurationText
+    {
+        get
+        {
+            int totalMins = ElapsedMinutes;
+            int hours = totalMins / 60;
+            int mins = totalMins % 60;
+            return hours > 0
+                ? $"{hours} giờ {mins:00} phút"
+                : $"{mins} phút";
+        }
+    }
 }
 
 public class SessionOrderLineViewModel

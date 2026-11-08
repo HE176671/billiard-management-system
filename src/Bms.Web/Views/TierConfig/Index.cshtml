@@ -131,10 +131,6 @@
                         <input type="number" name="pointMultiplier" class="form-control" min="1" max="100" step="1" value="2" required />
                     </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Quà sinh nhật (VND)</label>
-                    <input type="number" name="birthdayVoucherValue" class="form-control" min="0" step="10000" value="100000" required />
-                </div>
                 <button type="submit" class="btn-primary-bms w-100 justify-content-center">
                     <i class="bi bi-plus-lg"></i> Thêm hạng thành viên
                 </button>
@@ -160,7 +156,6 @@
                                 <th style="width:190px">Tổng mức chi tiêu (VND)</th>
                                 <th style="width:130px">Giảm giờ (%)</th>
                                 <th style="width:125px">Nhân điểm</th>
-                                <th style="width:170px">Quà sinh nhật (VND)</th>
                                 <th class="text-center" style="width:90px">Hội viên</th>
                                 <th class="text-end" style="width:70px">Xóa</th>
                             </tr>
@@ -188,10 +183,6 @@
                                     <td>
                                         <input type="number" min="1" max="100" step="1" class="form-control form-control-sm"
                                                name="Tiers[@i].PointMultiplier" value="@t.PointMultiplier" required />
-                                    </td>
-                                    <td>
-                                        <input type="number" min="0" step="5000" class="form-control form-control-sm"
-                                               name="Tiers[@i].BirthdayVoucherValue" value="@t.BirthdayVoucherValue" required />
                                     </td>
                                     <td class="text-center"><span class="badge-active">@t.CustomerCount</span></td>
                                     <td class="text-end">

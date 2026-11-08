@@ -51,4 +51,8 @@ public class PlaySession
 
     [InverseProperty(nameof(SessionCombo.PlaySession))]
     public ICollection<SessionCombo> SessionCombos { get; set; } = [];
+
+    [InverseProperty(nameof(Order.Session))]
+    public ICollection<Order> Orders { get; set; } = [];
+
 }

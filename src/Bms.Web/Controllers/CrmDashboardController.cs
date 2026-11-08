@@ -1,4 +1,4 @@
-using Bms.Web.Data;
+﻿using Bms.Web.Data;
 using Bms.Web.Models;
 using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -137,7 +137,6 @@ public class CrmDashboardController : Controller
 
         TempData["Success"] =
             $"Đã chạy LoyaltyDailyJob thành công! " +
-            $"Sinh nhật: +{summary.BirthdayVouchersIssued} voucher · " +
             $"Cảnh báo sắp hết hạn: {summary.ExpiryWarningsSent} · " +
             $"Hết hạn điểm: {summary.PointsExpiredUsers} khách · " +
             $"Voucher quá hạn: {summary.VouchersExpired} · " +

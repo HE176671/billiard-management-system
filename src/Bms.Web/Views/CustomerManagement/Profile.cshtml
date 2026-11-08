@@ -248,7 +248,7 @@
                                             if (canCashier)
                                             {
                                                 <a asp-controller="LoyaltyTest" asp-action="Index"
-                                                   asp-route-customerId="@Model.Id" asp-route-voucherCode="@v.Code"
+                                                   asp-route-customerId="@Model.Id" asp-route-voucherCode="@v.RewardItem?.Code"
                                                    class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
                                                     Dùng khi tính tiền
                                                 </a>

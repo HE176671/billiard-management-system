@@ -158,8 +158,8 @@
         }
         .table td { padding: 0.75rem 1rem; vertical-align: middle; font-size: 0.875rem; }
         .table tbody tr:hover { background: #f8fafc; }
-        .badge-active   { background:#dcfce7; color:#16a34a; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; }
-        .badge-inactive { background:#fee2e2; color:#dc2626; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; }
+        .badge-active   { background:#dcfce7; color:#16a34a; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; white-space:nowrap; display:inline-block; }
+        .badge-inactive { background:#fee2e2; color:#dc2626; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; white-space:nowrap; display:inline-block; }
 
         /* ── Buttons ── */
         .btn-primary-bms {
@@ -258,7 +258,9 @@
             ? "Admin (Phân quyền)"
             : isManager
                 ? "Manager (Quản lý)"
-                : "Staff (Nhân viên)";
+                : isStaff
+                    ? "Staff (Nhân viên)"
+                    : User.IsInRole("Customer") ? "Khách hàng" : "Thành viên";
     }
     <div class="sidebar-nav">
         @if (isAdmin && !isManager)
@@ -266,6 +268,9 @@
             <div class="nav-section-label">Quản trị hệ thống</div>
             <a class="sidebar-link @Active("RoleManagement")" asp-controller="RoleManagement" asp-action="Index">
                 <i class="bi bi-shield-lock"></i> Phân quyền tài khoản
+            </a>
+            <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
+                <i class="bi bi-people"></i> Nhân viên
             </a>
         }
 
@@ -290,7 +295,6 @@
             <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index">
                 <i class="bi bi-grid-3x3"></i> Quản lý bàn
             </a>
-
             <div class="nav-section-label">Quản lý Hội viên &amp; Ưu đãi</div>
             <a class="sidebar-link @Active("CrmDashboard")" asp-controller="CrmDashboard" asp-action="Index">
                 <i class="bi bi-bar-chart-line"></i> Thống kê hội viên
@@ -306,9 +310,6 @@
                 {
                     <span class="badge-count">@pendingAdjustCount</span>
                 }
-            </a>
-            <a class="sidebar-link @Active("Campaign")" asp-controller="Campaign" asp-action="Index">
-                <i class="bi bi-megaphone"></i> Gửi ưu đãi
             </a>
             <a class="sidebar-link @Active("TierConfig")" asp-controller="TierConfig" asp-action="Index">
                 <i class="bi bi-award"></i> Hạng thành viên
@@ -334,10 +335,11 @@
                 <i class="bi bi-receipt-cutoff"></i> Tính tiền &amp; Tích điểm
             </a>
 
-            <div class="nav-section-label">Nghiệp vụ ca làm</div>
+            <div class="nav-section-label">Nghiệp vụ ca làm &amp; F/B</div>
             <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
             <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
-            <a class="sidebar-link @Active("Menu")" href="#"><i class="bi bi-cup-straw"></i> Thực đơn</a>
+            <a class="sidebar-link @Active("Order", "Counter")" asp-controller="Order" asp-action="Counter"><i class="bi bi-cart3"></i> Gọi món tại quầy</a>
+            <a class="sidebar-link @Active("Order", "Manage")" asp-controller="Order" asp-action="Manage"><i class="bi bi-bell"></i> Duyệt đơn bàn</a>
         }
     </div>
     <div class="sidebar-footer">

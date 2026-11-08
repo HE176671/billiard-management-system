@@ -31,18 +31,6 @@ public class RewardItemController : Controller
             ViewBag.EditItem = items.FirstOrDefault(r => r.Id == editId.Value);
         }
 
-        // Đồng bộ với Gửi ưu đãi: số chương trình & số voucher đã phát qua chương trình cho từng phần quà
-        ViewBag.CampaignUsage = await _db.Campaigns.AsNoTracking()
-            .Where(c => c.RewardItemId != null)
-            .GroupBy(c => c.RewardItemId!.Value)
-            .Select(g => new { Id = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.Id, x => x.Count);
-        ViewBag.CampaignIssued = await _db.CustomerVouchers.AsNoTracking()
-            .Where(v => v.CampaignId != null && v.RewardItemId != null)
-            .GroupBy(v => v.RewardItemId!.Value)
-            .Select(g => new { Id = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.Id, x => x.Count);
-
         return View(items);
     }
 

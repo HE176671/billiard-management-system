@@ -335,7 +335,8 @@ public class CustomerManagementController : Controller
             .ToListAsync();
 
         var vouchers = await _context.CustomerVouchers.AsNoTracking()
-            .Where(v => v.CustomerId == id)
+            .Include(v => v.RewardItem)
+            .Where(v => v.CustomerId == id && v.RewardItemId != null)
             .OrderByDescending(v => v.IssuedAtUtc)
             .ToListAsync();
 

@@ -100,9 +100,6 @@
                         <span class="badge-count">@pendingAdjustCount</span>
                     }
                 </a>
-                <a class="sidebar-link @Active("Campaign")" asp-controller="Campaign" asp-action="Index">
-                    <i class="bi bi-megaphone"></i> Gửi ưu đãi
-                </a>
                 <a class="sidebar-link @Active("TierConfig")" asp-controller="TierConfig" asp-action="Index">
                     <i class="bi bi-award"></i> Hạng thành viên
                 </a>
@@ -127,10 +124,11 @@
                     <i class="bi bi-receipt-cutoff"></i> Tính tiền &amp; Tích điểm
                 </a>
 
-                <div class="nav-section-label">Nghiệp vụ ca làm</div>
+                <div class="nav-section-label">Nghiệp vụ ca làm &amp; F&amp;B</div>
                 <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
                 <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
-                <a class="sidebar-link @Active("Menu")" href="#"><i class="bi bi-cup-straw"></i> Thực đơn</a>
+                <a class="sidebar-link @Active("Order", "Counter")" asp-controller="Order" asp-action="Counter"><i class="bi bi-cart3"></i> Gọi món tại quầy</a>
+                <a class="sidebar-link @Active("Order", "Manage")" asp-controller="Order" asp-action="Manage"><i class="bi bi-bell"></i> Duyệt đơn F&amp;B</a>
             }
         </div>
         <div class="sidebar-footer">

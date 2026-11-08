@@ -18,11 +18,6 @@
     <div class="text-muted" style="font-size:0.85rem">
         Số liệu tổng hợp trong 12 tháng gần nhất theo lịch sử giao dịch hội viên
     </div>
-    <div class="d-flex gap-2">
-        <a asp-controller="Campaign" asp-action="Index" asp-route-segment="AtRisk" class="btn-primary-bms">
-            <i class="bi bi-megaphone"></i> Gửi ưu đãi khách vắng mặt
-        </a>
-    </div>
 </div>
 
 <!-- ═══════════ 4 CHỈ SỐ TỔNG QUAN ═══════════ -->
@@ -170,9 +165,6 @@
         <div class="data-card d-flex flex-column h-100">
             <div class="data-card-header">
                 <span class="data-card-title"><i class="bi bi-clock-history text-danger me-2"></i>Khách quen vắng mặt trên 30 ngày (@Model.AtRiskTotalCount)</span>
-                <a asp-controller="Campaign" asp-action="Index" asp-route-segment="AtRisk" class="btn-primary-bms py-1 px-2" style="font-size:0.75rem">
-                    <i class="bi bi-send"></i> Gửi ưu đãi
-                </a>
             </div>
             @if (!Model.HighValueAtRisk.Any())
             {
