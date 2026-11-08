@@ -1,0 +1,185 @@
+@model List<Bms.Web.Models.ProductViewModel>
+@{
+    ViewData["Title"] = "Quản lý Thực đơn & Món";
+    Layout = "_AdminLayout";
+    var categories = ViewBag.Categories as List<Bms.Web.Models.ProductCategoryViewModel> ?? new();
+    string? search = ViewBag.Search as string;
+    int? selectedCategory = ViewBag.CategoryId as int?;
+    bool? activeOnly = ViewBag.ActiveOnly as bool?;
+    bool isManager = User.IsInRole("Manager") || User.IsInRole("Admin");
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-cup-straw text-danger me-2"></i>Quản lý Thực đơn &amp; Món</h4>
+        <span class="text-muted small">Cấu hình danh mục, đơn giá bán, kiểm soát biến động giá (BR-15) và trạng thái phục vụ</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="PriceHistory" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-clock-history me-1"></i>Lịch sử đổi giá
+        </a>
+        @if (isManager)
+        {
+            <a asp-action="Categories" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-folder me-1"></i>Danh mục món
+            </a>
+            <a asp-action="Create" class="btn btn-primary-bms btn-sm">
+                <i class="bi bi-plus-lg me-1"></i>+ Thêm món mới
+            </a>
+        }
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="data-card p-3 mb-4">
+    <form method="get" class="row g-2 align-items-center">
+        <div class="col-md-5">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" name="search" class="form-control" placeholder="Tìm kiếm theo tên món..." value="@search" />
+            </div>
+        </div>
+        <div class="col-md-4">
+            <select name="categoryId" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">-- Tất cả danh mục --</option>
+                @foreach (var c in categories)
+                {
+                    <option value="@c.Id" selected="@(selectedCategory == c.Id)">@c.Name (@c.ProductCount món)</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <div class="form-check form-check-inline small">
+                <input class="form-check-input" type="checkbox" name="activeOnly" value="true" id="chkActiveOnly"
+                       checked="@(activeOnly == true)" onchange="this.form.submit()" />
+                <label class="form-check-label" for="chkActiveOnly">Đang bán</label>
+            </div>
+        </div>
+        <div class="col-md-1 text-end">
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm w-100" title="Đặt lại">
+                <i class="bi bi-arrow-counterclockwise"></i>
+            </a>
+        </div>
+    </form>
+</div>
+
+<div class="data-card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 50px;" class="text-center">#</th>
+                    <th>Tên món / Sản phẩm</th>
+                    <th>Danh mục</th>
+                    <th class="text-end">Giá bán hiện tại</th>
+                    <th class="text-center">Tồn kho</th>
+                    <th class="text-center">Lịch sử giá (BR-15)</th>
+                    <th class="text-center">Trạng thái</th>
+                    @if (isManager)
+                    {
+                        <th class="text-center" style="width: 140px;">Thao tác</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                            Không tìm thấy món nào phù hợp với bộ lọc.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    int idx = 1;
+                    foreach (var p in Model)
+                    {
+                        <tr>
+                            <td class="text-center text-muted small">@idx</td>
+                            <td>
+                                <span class="fw-semibold text-dark">@p.Name</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-secondary border">@p.CategoryName</span>
+                            </td>
+                            <td class="text-end fw-bold text-danger">
+                                @p.Price.ToString("N0") ₫
+                            </td>
+                            <td class="text-center">
+                                @if (p.StockQuantity <= 0)
+                                {
+                                    <span class="badge bg-danger">Hết hàng (0)</span>
+                                }
+                                else if (p.StockQuantity <= 5)
+                                {
+                                    <span class="badge bg-warning text-dark">Sắp hết (@p.StockQuantity)</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">Còn @p.StockQuantity</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (p.PriceChangeCount > 0)
+                                {
+                                    <a asp-action="PriceHistory" asp-route-productId="@p.Id" class="badge bg-info text-dark text-decoration-none" title="Xem lịch sử đổi giá">
+                                        <i class="bi bi-clock-history me-1"></i>@p.PriceChangeCount lần đổi
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Chưa đổi</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (p.IsActive)
+                                {
+                                    <span class="badge-active">Đang bán</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-inactive">Ngừng bán</span>
+                                }
+                            </td>
+                            @if (isManager)
+                            {
+                                <td class="text-center">
+                                    <div class="d-inline-flex gap-1">
+                                        <a asp-action="Edit" asp-route-id="@p.Id" class="btn btn-outline-secondary btn-sm-icon" title="Chỉnh sửa thông tin & đổi giá">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form asp-action="ToggleActive" asp-route-id="@p.Id" method="post" class="d-inline"
+                                              onsubmit="return confirm('Bạn có chắc muốn chuyển trạng thái món @p.Name?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn @(p.IsActive ? "btn-outline-danger" : "btn-outline-success") btn-sm-icon"
+                                                    title="@(p.IsActive ? "Ngừng bán" : "Mở bán lại")">
+                                                <i class="bi @(p.IsActive ? "bi-eye-slash" : "bi-eye")"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            }
+                        </tr>
+                        idx++;
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

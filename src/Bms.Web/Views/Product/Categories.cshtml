@@ -1,0 +1,134 @@
+@model List<Bms.Web.Models.ProductCategoryViewModel>
+@{
+    ViewData["Title"] = "Quản lý Danh mục món";
+    Layout = "_AdminLayout";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-folder text-danger me-2"></i>Danh mục Thực đơn</h4>
+        <span class="text-muted small">Phân loại sản phẩm (Đồ uống, Đồ ăn nhanh, Phụ kiện / Gậy cho thuê...)</span>
+    </div>
+    <div>
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Về danh sách món
+        </a>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-md-5">
+        <div class="data-card p-4">
+            <h5 class="fw-bold mb-3"><i class="bi bi-plus-circle text-danger me-2"></i>Thêm danh mục mới</h5>
+            <form asp-action="SaveCategory" method="post">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Tên danh mục <span class="text-danger">*</span></label>
+                    <input type="text" name="name" class="form-control" placeholder="Ví dụ: Đồ ăn vặt, Bia & Rượu..." required />
+                </div>
+                <button type="submit" class="btn btn-primary-bms w-100">
+                    <i class="bi bi-check-lg me-1"></i>Lưu danh mục
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="data-card">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px;" class="text-center">#</th>
+                            <th>Tên danh mục</th>
+                            <th class="text-center">Số lượng món</th>
+                            <th class="text-center" style="width: 100px;">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">Chưa có danh mục nào.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            int idx = 1;
+                            foreach (var c in Model)
+                            {
+                                <tr>
+                                    <td class="text-center text-muted small">@idx</td>
+                                    <td>
+                                        <span class="fw-semibold text-dark">@c.Name</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <a asp-action="Index" asp-route-categoryId="@c.Id" class="badge bg-light text-primary border text-decoration-none">
+                                            @c.ProductCount món
+                                        </a>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm-icon" title="Đổi tên"
+                                                onclick="editCategory(@c.Id, '@Html.Raw(c.Name)')">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                idx++;
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa Danh mục -->
+<div class="modal fade" id="editCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="SaveCategory" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" id="editCategoryId" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Chỉnh sửa tên danh mục</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên danh mục <span class="text-danger">*</span></label>
+                        <input type="text" name="name" id="editCategoryName" class="form-control" required />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary-bms">Lưu thay đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function editCategory(id, name) {
+        document.getElementById('editCategoryId').value = id;
+        document.getElementById('editCategoryName').value = name;
+        new bootstrap.Modal(document.getElementById('editCategoryModal')).show();
+    }
+</script>

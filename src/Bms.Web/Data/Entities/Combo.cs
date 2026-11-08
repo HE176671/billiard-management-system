@@ -18,6 +18,11 @@ public class Combo
     [Column(TypeName = "decimal(5,2)")]
     public decimal PlaytimeHours { get; set; }
 
+    public int? TableTypeId { get; set; }
+
+    [ForeignKey(nameof(TableTypeId))]
+    public TableType? TableType { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     [InverseProperty(nameof(ComboItem.Combo))]

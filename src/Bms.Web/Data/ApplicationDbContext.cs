@@ -33,9 +33,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Campaign>                Campaigns                => Set<Campaign>();
     public DbSet<CustomerAuditLog>        CustomerAuditLogs        => Set<CustomerAuditLog>();
 
-    // Service catalog & Combos (Manager pricing & promotion configuration + Doan session combos)
+    // Service catalog, Combos & WF2 - F&B & Inventory (Tung)
     public DbSet<ProductCategory>         ProductCategories        => Set<ProductCategory>();
     public DbSet<Product>                 Products                 => Set<Product>();
+    public DbSet<ProductPriceHistory>     ProductPriceHistories    => Set<ProductPriceHistory>();
+    public DbSet<StockReceipt>            StockReceipts            => Set<StockReceipt>();
+    public DbSet<StockReceiptDetail>      StockReceiptDetails      => Set<StockReceiptDetail>();
+    public DbSet<StockMovement>           StockMovements           => Set<StockMovement>();
+    public DbSet<Order>                   Orders                   => Set<Order>();
+    public DbSet<OrderDetail>             OrderDetails             => Set<OrderDetail>();
     public DbSet<Combo>                   Combos                   => Set<Combo>();
     public DbSet<ComboItem>               ComboItems               => Set<ComboItem>();
 
@@ -315,6 +321,71 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         });
 
         builder.Entity<SessionComboItem>().HasKey(x => new { x.SessionComboId, x.ProductId });
+
+        // WF2: Orders & OrderDetails (Tung)
+        builder.Entity<Order>(e =>
+        {
+            e.ToTable("Orders");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.OrderSource).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.OrderTimeUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<OrderDetail>(e =>
+        {
+            e.ToTable("OrderDetails");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UnitPrice).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.CancelledAtUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.Order).WithMany(o => o.OrderDetails).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CancelledBy).WithMany().HasForeignKey(x => x.CancelledById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // WF2: Stock Receipts, Stock Movements & Price History (Tung)
+        builder.Entity<StockReceipt>(e =>
+        {
+            e.ToTable("StockReceipts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.ReceiptDateUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<StockReceiptDetail>(e =>
+        {
+            e.ToTable("StockReceiptDetails");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CostPrice).HasColumnType("decimal(18,2)");
+            e.HasOne(x => x.Receipt).WithMany(r => r.Details).HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<StockMovement>(e =>
+        {
+            e.ToTable("StockMovements");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.MovementType).HasMaxLength(30).IsUnicode(false);
+            e.Property(x => x.ReferenceType).HasMaxLength(30).IsUnicode(false);
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProductPriceHistory>(e =>
+        {
+            e.ToTable("ProductPriceHistory");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.OldPrice).HasColumnType("decimal(18,2)");
+            e.Property(x => x.NewPrice).HasColumnType("decimal(18,2)");
+            e.Property(x => x.EffectiveDateUtc).HasColumnType("datetime2(0)");
+            e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ChangedBy).WithMany().HasForeignKey(x => x.ChangedById).OnDelete(DeleteBehavior.Restrict);
+        });
 
         // BilliardTables (Hung & Doan)
         builder.Entity<BilliardTable>(e =>

@@ -1,0 +1,270 @@
+@model List<Bms.Web.Models.ProductViewModel>
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Quản lý tồn kho F&B";
+    var categories = ViewBag.Categories as List<Bms.Web.Models.ProductCategoryViewModel> ?? new();
+    string? search = ViewBag.Search as string;
+    int? categoryId = ViewBag.CategoryId as int?;
+    bool isManager = User.IsInRole("Manager") || User.IsInRole("Admin");
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h1 class="h4 mb-1 fw-bold text-dark">
+                <i class="bi bi-boxes text-danger me-2"></i>Quản lý tồn kho hàng hóa
+            </h1>
+            <p class="text-muted small mb-0">Theo dõi số lượng hàng hóa F&B, cảnh báo hết hàng và kiểm kê kho định kỳ (UC-13)</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="Receipts" class="btn btn-outline-secondary">
+                <i class="bi bi-journal-text me-1"></i>Phiếu nhập kho
+            </a>
+            @if (isManager)
+            {
+                <a asp-action="CreateReceipt" class="btn btn-primary-bms">
+                    <i class="bi bi-plus-circle me-1"></i>Lập phiếu nhập
+                </a>
+            }
+            <a asp-action="Ledger" class="btn btn-outline-bms">
+                <i class="bi bi-clock-history me-1"></i>Sổ cái Thẻ kho
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards (Chuẩn giao diện BMS) -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon blue"><i class="bi bi-box-seam"></i></div>
+                <div>
+                    <div class="stat-label">Tổng mặt hàng</div>
+                    <div class="stat-value text-primary">@ViewBag.TotalItems</div>
+                    <small class="text-muted">Mặt hàng F&amp;B</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon green"><i class="bi bi-stack"></i></div>
+                <div>
+                    <div class="stat-label">Tổng tồn thực tế</div>
+                    <div class="stat-value text-success">@ViewBag.TotalQuantityInStock</div>
+                    <small class="text-muted">Đơn vị trong kho</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon amber"><i class="bi bi-exclamation-triangle"></i></div>
+                <div>
+                    <div class="stat-label">Sắp hết hàng (≤ 5)</div>
+                    <div class="stat-value text-warning">@ViewBag.LowStockCount</div>
+                    <small class="text-muted">Cần nhập bổ sung</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon red"><i class="bi bi-x-octagon"></i></div>
+                <div>
+                    <div class="stat-label">Hết hàng (Tồn = 0)</div>
+                    <div class="stat-value text-danger">@ViewBag.OutOfStockCount</div>
+                    <small class="text-muted">Tự ẩn khỏi menu QR</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter & Search Card -->
+    <div class="data-card p-3 mb-3">
+        <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" name="search" class="form-control border-start-0" 
+                           placeholder="Tìm theo tên món hoặc mã..." value="@search" />
+                </div>
+            </div>
+            <div class="col-md-4">
+                <select name="categoryId" class="form-select">
+                    <option value="">-- Tất cả danh mục --</option>
+                    @foreach (var c in categories)
+                    {
+                        <option value="@c.Id" selected="@(categoryId == c.Id)">@c.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary-bms flex-grow-1">
+                    <i class="bi bi-funnel me-1"></i>Lọc dữ liệu
+                </button>
+                <a asp-action="Index" class="btn btn-outline-secondary" title="Xóa bộ lọc">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Inventory Table -->
+    <div class="data-card p-0 overflow-hidden shadow-sm">
+        <div class="data-card-header">
+            <div class="data-card-title text-dark">
+                <i class="bi bi-table me-2 text-danger"></i>Danh sách tồn kho hàng hóa
+            </div>
+            <span class="badge bg-light text-secondary border">Hiển thị @(Model?.Count ?? 0) mặt hàng</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th class="ps-3" style="width: 80px;">MÃ</th>
+                        <th>TÊN MÓN / SẢN PHẨM</th>
+                        <th>DANH MỤC</th>
+                        <th class="text-end">GIÁ BÁN HIỆN TẠI</th>
+                        <th class="text-center" style="width: 160px;">TỒN KHO HIỆN TẠI</th>
+                        <th>TRẠNG THÁI</th>
+                        <th class="text-end pe-3" style="width: 170px;">THAO TÁC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-2 text-black-50"></i>
+                                Không tìm thấy mặt hàng nào phù hợp với điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td class="ps-3 text-muted fw-semibold">#@item.Id</td>
+                                <td>
+                                    <span class="fw-bold text-dark fs-6">@item.Name</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">@item.CategoryName</span>
+                                </td>
+                                <td class="text-end fw-bold text-primary">
+                                    @item.Price.ToString("N0") đ
+                                </td>
+                                <td class="text-center">
+                                    @if (item.StockQuantity <= 0)
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6 fw-bold">
+                                            <i class="bi bi-x-circle me-1"></i>0 (Hết hàng)
+                                        </span>
+                                    }
+                                    else if (item.StockQuantity <= 5)
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 fs-6 fw-bold">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>@item.StockQuantity (Sắp hết)
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6 fw-bold">
+                                            <i class="bi bi-check-circle me-1"></i>@item.StockQuantity
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.IsActive)
+                                    {
+                                        <span class="badge-active">Đang kinh doanh</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge-inactive">Tạm ngưng</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-3">
+                                    @if (isManager)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-warning text-dark me-1" 
+                                                onclick="openAdjustModal(@item.Id, '@item.Name', @item.StockQuantity)"
+                                                title="Kiểm kê điều chỉnh số lượng tồn">
+                                            <i class="bi bi-pencil-square me-1"></i>Kiểm kê
+                                        </button>
+                                    }
+                                    <a asp-action="Ledger" asp-route-productId="@item.Id" class="btn btn-sm btn-outline-secondary" title="Xem thẻ kho">
+                                        <i class="bi bi-clock-history"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Kiểm kê / Điều chỉnh tồn (UC-13) Chuẩn giao diện sáng BMS -->
+<div class="modal fade" id="adjustModal" tabindex="-1" aria-labelledby="adjustModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form asp-action="Adjust" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="adjustProductId" name="productId" value="" />
+                <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                
+                <div class="modal-header border-bottom">
+                    <h5 class="modal-title fw-bold text-dark" id="adjustModalLabel">
+                        <i class="bi bi-pencil-square text-warning me-2"></i>Điều chỉnh kiểm kê tồn kho (UC-13)
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase fw-semibold">Sản phẩm kiểm kê:</label>
+                        <div id="adjustProductName" class="fw-bold text-primary fs-5 bg-light p-2 rounded border"></div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label text-muted small text-uppercase fw-semibold">Tồn kho hiện tại:</label>
+                            <input type="text" id="adjustCurrentStock" class="form-control bg-light fw-bold" readonly />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-muted small text-uppercase fw-semibold">Số lượng thực tế mới: <span class="text-danger">*</span></label>
+                            <input type="number" id="adjustNewQuantity" name="newQuantity" class="form-control border-warning fw-bold fs-6" min="0" required />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase fw-semibold">Lý do điều chỉnh (UC-13): <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" rows="2" 
+                                  placeholder="Ví dụ: Kiểm kê định kỳ phát hiện thừa/thiếu, hao hụt hư hỏng..." required></textarea>
+                    </div>
+                    <div class="alert alert-warning py-2 small mb-0 d-flex align-items-center">
+                        <i class="bi bi-info-circle-fill fs-5 me-2 text-warning"></i>
+                        <div>Mọi thay đổi tồn kho đều được ghi vào Sổ cái Thẻ kho (StockMovements) với loại <code>AuditAdjust</code>. Tồn kho không thể âm.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-warning text-dark fw-bold">
+                        <i class="bi bi-check-circle me-1"></i>Xác nhận điều chỉnh
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function openAdjustModal(productId, productName, currentStock) {
+            document.getElementById('adjustProductId').value = productId;
+            document.getElementById('adjustProductName').innerText = productName;
+            document.getElementById('adjustCurrentStock').value = currentStock;
+            document.getElementById('adjustNewQuantity').value = currentStock;
+            var modal = new bootstrap.Modal(document.getElementById('adjustModal'));
+            modal.show();
+        }
+    </script>
+}
