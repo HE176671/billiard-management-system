@@ -139,6 +139,16 @@
                 </div>
             </div>
 
+            <!-- Nhóm (c2): Gậy đang thuê theo lượt (hiện khi phiên có thuê gậy) -->
+            <div class="panel-card-box d-none" id="detail-cues-box">
+                <div class="panel-group-title d-flex justify-content-between align-items-baseline mb-2">
+                    <span>Gậy đang thuê</span>
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" id="detail-cues-badge">0 cây</span>
+                </div>
+                <div class="detail-cues-list" id="detail-cues-list">
+                </div>
+            </div>
+
             <!-- Nhóm (d): Chi phí -->
             <div class="panel-card-box d-none" id="detail-pricing-box">
                 <div class="panel-group-title">Chi phí tiền bàn</div>
@@ -153,6 +163,14 @@
                 <div class="detail-data-row" id="detail-playtime-row">
                     <span class="detail-key" id="detail-playtime-label">Tổng tạm tính:</span>
                     <span class="detail-val" id="detail-playtime-amount">--</span>
+                </div>
+                <div class="detail-data-row d-none" id="detail-cue-amount-row">
+                    <span class="detail-key">Tiền thuê gậy:</span>
+                    <span class="detail-val text-info-emphasis" id="detail-cue-amount">--</span>
+                </div>
+                <div class="detail-data-row d-none" id="detail-grand-total-row">
+                    <span class="detail-key fw-bold">Tổng cộng (bàn + gậy):</span>
+                    <span class="detail-val fw-bold text-success" id="detail-grand-total">--</span>
                 </div>
             </div>
 
@@ -237,6 +255,17 @@
                     </div>
                 </div>
 
+                <!-- Thuê gậy theo lượt (tuỳ chọn) ngay lúc mở bàn -->
+                <div class="border-top pt-2 mt-2" id="open-cue-section">
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <div>
+                            <div class="fw-bold small text-dark"><i class="bi bi-vector-pen me-1"></i>Thuê gậy (tuỳ chọn)</div>
+                            <div class="text-muted" style="font-size:0.75rem" id="open-cue-summary">Chưa chọn gậy thuê.</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-wireframe" id="btn-open-cue-picker">Chọn gậy</button>
+                    </div>
+                </div>
+
                 <div class="action-btn-row mt-2">
                     <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-confirm-open">
                         Xác nhận mở bàn
@@ -293,6 +322,14 @@
                     <div class="summary-data-row summary-amount-row py-1">
                         <span class="summary-key fw-bold">Tổng tiền bàn:</span>
                         <span class="summary-val fw-bold text-success fs-6" id="close-summary-amount">--</span>
+                    </div>
+                    <div class="summary-data-row d-none" id="close-summary-cue-row">
+                        <span class="summary-key">Tiền thuê gậy:</span>
+                        <span class="summary-val fw-semibold text-info-emphasis" id="close-summary-cue-amount">--</span>
+                    </div>
+                    <div class="summary-data-row summary-amount-row py-1 d-none" id="close-summary-grand-row">
+                        <span class="summary-key fw-bold">Tổng cộng (bàn + gậy):</span>
+                        <span class="summary-val fw-bold text-success fs-6" id="close-summary-grand">--</span>
                     </div>
                     <div class="small text-muted text-end mb-1" id="close-summary-timestamp">
                         Tạm tính lúc --:--:--
@@ -356,6 +393,9 @@
                     <button type="button" class="btn btn-danger-bms btn-action-main" id="btn-close-table" disabled>
                         CLOSE TABLE
                     </button>
+                    <button type="button" class="btn btn-outline-primary w-100 btn-wireframe h-100" id="btn-rent-cue" style="grid-column: span 2;" disabled>
+                        THUÊ THÊM GẬY
+                    </button>
                     <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe h-100" id="btn-transfer" style="grid-column: span 2;" disabled>
                         CHUYỂN BÀN
                     </button>
@@ -363,6 +403,56 @@
             </div>
         </div>
     </aside>
+</div>
+
+<!-- ===================================================================== -->
+<!-- POP-UP CHỌN GẬY THUÊ THEO LƯỢT (dùng chung cho lúc mở bàn & thuê thêm) -->
+<!-- ===================================================================== -->
+<div class="modal fade" id="cue-picker-modal" tabindex="-1" aria-labelledby="cue-picker-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cue-picker-title">Thuê gậy theo lượt</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-2" id="cue-picker-subtitle">Chọn loại gậy và số lượng. Giá tính cố định theo lượt, tiền gậy cộng vào hóa đơn khi đóng bàn.</div>
+
+                <div id="cue-picker-loading" class="text-muted small py-2 d-none">
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    Đang tải danh sách gậy...
+                </div>
+                <div id="cue-picker-error" class="alert alert-danger p-2 small mb-2 d-none"></div>
+                <div id="cue-picker-empty" class="alert alert-warning p-2 small mb-2 d-none">
+                    Hiện chưa có loại gậy nào đang mở cho thuê. Vui lòng thiết lập tại trang Bảng giá.
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0" id="cue-picker-table">
+                        <thead>
+                            <tr>
+                                <th>Loại gậy</th>
+                                <th class="text-end">Giá/lượt</th>
+                                <th class="text-center">Còn</th>
+                                <th class="text-center" style="width:130px">Số lượng</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cue-picker-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <div class="small">
+                    <span class="text-muted">Đã chọn: </span><strong id="cue-picker-total-qty">0</strong> cây
+                    <span class="text-muted ms-2">Tạm tính: </span><strong class="text-success" id="cue-picker-total-amount">0 VND</strong>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-wireframe" data-bs-dismiss="modal" id="btn-cue-picker-cancel">Hủy</button>
+                    <button type="button" class="btn btn-primary-bms" id="btn-cue-picker-confirm" disabled>Xác nhận</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {

@@ -67,6 +67,14 @@ public class TableController : Controller
         return Json(TableOperationResult.Ok(combos));
     }
 
+    // GET: /Table/GetRentalCues
+    [HttpGet]
+    public async Task<IActionResult> GetRentalCues()
+    {
+        var cues = await _tableSessionService.GetRentalCuesAsync();
+        return Json(TableOperationResult.Ok(cues));
+    }
+
     // GET: /Table/SearchCustomers?keyword=090
     [HttpGet]
     public async Task<IActionResult> SearchCustomers([FromQuery] string? keyword)
@@ -121,7 +129,7 @@ public class TableController : Controller
 
         int? selectedComboId = isComboMode ? request.ComboId : null;
 
-        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, null, selectedComboId);
+        var result = await _tableSessionService.OpenSessionAsync(request.TableId, staffId, null, selectedComboId, request.CueRentals);
         return Json(result);
     }
 
@@ -157,6 +165,21 @@ public class TableController : Controller
         }
 
         var result = await _tableSessionService.TransferSessionAsync(request.SessionId, request.NewTableId, staffId);
+        return Json(result);
+    }
+
+    // POST: /Table/AddCueRental — thuê thêm gậy khi phiên đang chơi
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddCueRental([FromForm] AddCueRentalRequest request)
+    {
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(staffId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _tableSessionService.AddCueRentalAsync(request.SessionId, request.CueRentals, staffId);
         return Json(result);
     }
 

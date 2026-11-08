@@ -51,6 +51,8 @@ public class TableDetailViewModel
     public string? CustomerPhone { get; set; }
     public List<SessionSegmentViewModel> Segments { get; set; } = new();
     public List<SessionComboPurchaseViewModel> Combos { get; set; } = new();
+    public List<SessionCueRentalViewModel> CueRentals { get; set; } = new();
+    public decimal CueRentalAmount { get; set; }
     public DateTime ServerTimeUtc { get; set; }
 }
 
@@ -83,6 +85,25 @@ public class SessionComboItemViewModel
     public string ProductName { get; set; } = string.Empty;
     public int QuantityPerCombo { get; set; }
     public int TotalQuantity { get; set; }
+}
+
+public class SessionCueRentalViewModel
+{
+    public int Id { get; set; }
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal Subtotal => Quantity * UnitPrice;
+    public DateTime RentedAtUtc { get; set; }
+}
+
+public class RentalCueOptionViewModel
+{
+    public int ProductId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int StockQuantity { get; set; }
 }
 
 public class ActiveComboOptionViewModel
@@ -122,6 +143,23 @@ public class OpenSessionRequest
     /// </summary>
     public string BillingMode { get; set; } = "hourly";
     public int? ComboId { get; set; }
+
+    /// <summary>
+    /// Danh sách gậy thuê theo lượt chọn ngay lúc mở bàn (tuỳ chọn, có thể rỗng).
+    /// </summary>
+    public List<CueRentalLineRequest> CueRentals { get; set; } = new();
+}
+
+public class CueRentalLineRequest
+{
+    public int ProductId { get; set; }
+    public int Quantity { get; set; }
+}
+
+public class AddCueRentalRequest
+{
+    public int SessionId { get; set; }
+    public List<CueRentalLineRequest> CueRentals { get; set; } = new();
 }
 
 public class CloseSessionRequest
@@ -185,4 +223,6 @@ public class CloseSummaryViewModel
     public decimal ComboAmount { get; set; }
     public decimal OvertimeAmount { get; set; }
     public decimal? EstimatedAmount { get; set; }
+    public decimal CueRentalAmount { get; set; }
+    public List<SessionCueRentalViewModel> CueRentals { get; set; } = new();
 }

@@ -27,6 +27,8 @@
         cardComboMinutes: '',
         segments: [],
         combos: [],
+        cueRentals: [],
+        cueRentalAmount: 0,
         hourlyRate: 0
     };
 
@@ -48,6 +50,16 @@
     let isComboFormVisible = false;
     let isComboListLoading = false;
     let activeCombosCatalog = [];
+
+    // Thuê gậy theo lượt (pop-up dùng chung cho lúc mở bàn & thuê thêm khi đang chơi)
+    let cueCatalog = [];
+    let pendingOpenCues = [];
+    let cuePickerMode = 'open';
+    let cuePickerSessionId = null;
+    let cuePickerTableId = null;
+    let isCuePickerVisible = false;
+    let isCueSubmitting = false;
+    let cueCatalogRequestId = 0;
 
     let customerSearchTimeoutId = null;
     let customerSearchRequestId = 0;
@@ -283,12 +295,14 @@
         const btnClose = document.getElementById('btn-close-table');
         const btnTransfer = document.getElementById('btn-transfer');
         const btnCombo = document.getElementById('btn-select-combo');
+        const btnRentCue = document.getElementById('btn-rent-cue');
 
         if (isOpenFormVisible || isCloseFormVisible || isTransferFormVisible || isComboFormVisible || isProcessing || isDetailLoading) {
             if (btnOpen) btnOpen.disabled = true;
             if (btnClose) btnClose.disabled = true;
             if (btnTransfer) btnTransfer.disabled = true;
             if (btnCombo) btnCombo.disabled = true;
+            if (btnRentCue) btnRentCue.disabled = true;
             return;
         }
 
@@ -305,6 +319,9 @@
         }
         if (btnCombo) {
             btnCombo.disabled = !(status === 'InUse' && sessionId);
+        }
+        if (btnRentCue) {
+            btnRentCue.disabled = !(status === 'InUse' && sessionId);
         }
     }
 
@@ -559,6 +576,21 @@
             }
         }
 
+        const cueAmount = Number(detail.cueRentalAmount ?? detail.CueRentalAmount ?? 0);
+        const rowCueAmt = document.getElementById('detail-cue-amount-row');
+        const elCueAmt = document.getElementById('detail-cue-amount');
+        const rowGrand = document.getElementById('detail-grand-total-row');
+        const elGrand = document.getElementById('detail-grand-total');
+        if (cueAmount > 0) {
+            if (elCueAmt) elCueAmt.textContent = formatVnCurrency(cueAmount);
+            if (rowCueAmt) rowCueAmt.classList.remove('d-none');
+            if (elGrand) elGrand.textContent = formatVnCurrency(Number(estimatedAmount ?? 0) + cueAmount);
+            if (rowGrand) rowGrand.classList.remove('d-none');
+        } else {
+            if (rowCueAmt) rowCueAmt.classList.add('d-none');
+            if (rowGrand) rowGrand.classList.add('d-none');
+        }
+
         if (boxPricing) boxPricing.classList.remove('d-none');
     }
 
@@ -587,7 +619,11 @@
             currentSelectedTable.comboAmount = Number(detail.comboAmount ?? detail.ComboAmount ?? 0);
             currentSelectedTable.overtimeAmount = Number(detail.overtimeAmount ?? detail.OvertimeAmount ?? 0);
 
+            currentSelectedTable.cueRentals = detail.cueRentals ?? detail.CueRentals ?? [];
+            currentSelectedTable.cueRentalAmount = Number(detail.cueRentalAmount ?? detail.CueRentalAmount ?? 0);
+
             updatePricingBoxDisplay(detail);
+            renderSessionCues(currentSelectedTable.cueRentals);
         } catch {
         } finally {
             if (requestId === estimatedAmountRequestId) {
@@ -614,6 +650,8 @@
             : Number(detail.hourlyRate ?? detail.HourlyRate ?? 0);
         currentSelectedTable.segments = detail.segments ?? detail.Segments ?? [];
         currentSelectedTable.combos = detail.combos ?? detail.Combos ?? [];
+        currentSelectedTable.cueRentals = detail.cueRentals ?? detail.CueRentals ?? [];
+        currentSelectedTable.cueRentalAmount = Number(detail.cueRentalAmount ?? detail.CueRentalAmount ?? 0);
 
         const card = document.querySelector(`.table-card[data-table-id="${currentSelectedTable.id}"]`);
         if (card) {
@@ -651,6 +689,7 @@
 
         updatePricingBoxDisplay(detail);
         renderSessionCombos(currentSelectedTable.combos, currentSelectedTable.totalComboMinutes);
+        renderSessionCues(currentSelectedTable.cueRentals);
         renderTableSegments(currentSelectedTable.segments);
         updateClocks();
 
@@ -721,6 +760,52 @@
         });
     }
 
+    function renderSessionCues(cues) {
+        const boxEl = document.getElementById('detail-cues-box');
+        const listEl = document.getElementById('detail-cues-list');
+        const badgeEl = document.getElementById('detail-cues-badge');
+        if (!boxEl || !listEl) return;
+
+        listEl.replaceChildren();
+        if (!cues || cues.length === 0) {
+            boxEl.classList.add('d-none');
+            return;
+        }
+
+        boxEl.classList.remove('d-none');
+        const totalQty = cues.reduce((sum, c) => sum + Number(c.quantity ?? c.Quantity ?? 0), 0);
+        if (badgeEl) badgeEl.textContent = `${totalQty} cây`;
+
+        cues.forEach(c => {
+            const qty = Number(c.quantity ?? c.Quantity ?? 0);
+            const unitPrice = Number(c.unitPrice ?? c.UnitPrice ?? 0);
+            const subtotal = Number(c.subtotal ?? c.Subtotal ?? qty * unitPrice);
+            const rentedAt = c.rentedAtUtc ?? c.RentedAtUtc;
+
+            const card = document.createElement('div');
+            card.className = 'combo-purchase-card';
+
+            const header = document.createElement('div');
+            header.className = 'combo-purchase-header';
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'combo-purchase-name';
+            nameSpan.textContent = `${c.productName ?? c.ProductName ?? 'Gậy'} ×${qty}`;
+            const priceSpan = document.createElement('span');
+            priceSpan.className = 'combo-purchase-price';
+            priceSpan.textContent = formatVnCurrency(subtotal);
+            header.appendChild(nameSpan);
+            header.appendChild(priceSpan);
+            card.appendChild(header);
+
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'combo-purchase-meta';
+            metaDiv.textContent = `${formatVnCurrency(unitPrice)}/lượt · Thuê lúc ${rentedAt ? formatVnTimeOnly(rentedAt) : '--:--'}`;
+            card.appendChild(metaDiv);
+
+            listEl.appendChild(card);
+        });
+    }
+
     function renderTableSegments(segments) {
         const boxEl = document.getElementById('detail-segments-box');
         const listEl = document.getElementById('detail-segments-list');
@@ -778,12 +863,13 @@
             const el = document.getElementById(id);
             if (el) el.textContent = '--';
         });
-        const hideIds = ['detail-end-time-row', 'detail-combo-remaining-row', 'detail-pricing-box', 'detail-combos-box'];
+        const hideIds = ['detail-end-time-row', 'detail-combo-remaining-row', 'detail-pricing-box', 'detail-combos-box', 'detail-cues-box', 'detail-cue-amount-row', 'detail-grand-total-row'];
         hideIds.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('d-none');
         });
         renderSessionCombos([], 0);
+        renderSessionCues([]);
         renderTableSegments([]);
     }
 
@@ -1099,6 +1185,8 @@
         if (isComboFormVisible) hideComboForm(false);
 
         isOpenFormVisible = true;
+        pendingOpenCues = [];
+        updateOpenCueSummary();
         const formEl = document.getElementById('open-session-form');
         const actionsBox = document.getElementById('action-buttons-box');
         if (formEl) formEl.classList.remove('d-none');
@@ -1114,6 +1202,8 @@
 
     function hideOpenForm(returnFocus = true) {
         isOpenFormVisible = false;
+        pendingOpenCues = [];
+        updateOpenCueSummary();
         const formEl = document.getElementById('open-session-form');
         const actionsBox = document.getElementById('action-buttons-box');
         if (formEl) formEl.classList.add('d-none');
@@ -1155,6 +1245,10 @@
             if (billingMode === 'combo' && comboId > 0) {
                 params.append('ComboId', comboId);
             }
+            pendingOpenCues.forEach((cue, idx) => {
+                params.append(`CueRentals[${idx}].ProductId`, cue.productId);
+                params.append(`CueRentals[${idx}].Quantity`, cue.quantity);
+            });
             params.append('__RequestVerificationToken', token);
 
             const response = await fetch('/Table/OpenSession', {
@@ -1174,6 +1268,8 @@
                 const startUtc = data?.startAtUtc ?? data?.StartAtUtc;
                 const modeLabel = billingMode === 'combo' ? 'theo gói Combo' : 'tính tiền theo giờ';
                 showToast(serverMessage || `Đã mở bàn ${targetTableCode} (${modeLabel}) lúc ${startUtc ? formatVnTimeOnly(startUtc) : '--:--'}.`, 'success');
+                const cueWarning = data?.cueRentalWarning ?? data?.CueRentalWarning;
+                if (cueWarning) showToast(cueWarning, 'warning', 9000);
                 await reloadTableGrid();
                 await handleTableSelect(targetTableId);
             } else {
@@ -1426,6 +1522,21 @@
             }
 
             if (elAmount) elAmount.textContent = formatVnCurrency(estimatedAmount);
+
+            const cueAmount = Number(data.cueRentalAmount ?? data.CueRentalAmount ?? 0);
+            const rowCueAmt = document.getElementById('close-summary-cue-row');
+            const elCueAmt = document.getElementById('close-summary-cue-amount');
+            const rowGrand = document.getElementById('close-summary-grand-row');
+            const elGrand = document.getElementById('close-summary-grand');
+            if (cueAmount > 0) {
+                if (elCueAmt) elCueAmt.textContent = formatVnCurrency(cueAmount);
+                if (rowCueAmt) rowCueAmt.classList.remove('d-none');
+                if (elGrand) elGrand.textContent = formatVnCurrency(Number(estimatedAmount ?? 0) + cueAmount);
+                if (rowGrand) rowGrand.classList.remove('d-none');
+            } else {
+                if (rowCueAmt) rowCueAmt.classList.add('d-none');
+                if (rowGrand) rowGrand.classList.add('d-none');
+            }
             if (elTimestamp) elTimestamp.textContent = serverNowUtc ? `Tạm tính lúc ${formatVnTimeWithSeconds(serverNowUtc)}` : '';
 
             if (elLoading) elLoading.classList.add('d-none');
@@ -1470,7 +1581,11 @@
                 const data = result.data ?? result.Data;
                 const playtimeAmount = data?.playtimeAmount ?? data?.PlaytimeAmount ?? 0;
                 const billedMinutes = data?.billedMinutes ?? data?.BilledMinutes ?? 1;
-                showToast(`Đã đóng bàn ${targetTableCode} (${billedMinutes} phút) — Tiền bàn: ${formatVnCurrency(playtimeAmount)}. Bàn đã về Còn trống, vui lòng thanh toán tại mục Tính tiền & Tích điểm.`, 'success', 6000);
+                const closedCueAmount = Number(data?.cueRentalAmount ?? data?.CueRentalAmount ?? 0);
+                const cueText = closedCueAmount > 0
+                    ? ` + Tiền thuê gậy: ${formatVnCurrency(closedCueAmount)} = Tổng cộng: ${formatVnCurrency(Number(playtimeAmount) + closedCueAmount)}`
+                    : '';
+                showToast(`Đã đóng bàn ${targetTableCode} (${billedMinutes} phút) — Tiền bàn: ${formatVnCurrency(playtimeAmount)}${cueText}. Bàn đã về Còn trống, vui lòng thanh toán tại mục Tính tiền & Tích điểm.`, 'success', 6000);
                 await reloadTableGrid();
                 await handleTableSelect(targetTableId);
             } else {
@@ -1686,6 +1801,322 @@
     // PHẦN 11: GẮN SỰ KIỆN DOM (INITEVENTS) & KHỞI CHẠY KHI TẢI TRANG
     // =========================================================================
 
+    // =========================================================================
+    // PHẦN 10B: POP-UP THUÊ GẬY THEO LƯỢT (LÚC MỞ BÀN HOẶC THUÊ THÊM KHI ĐANG CHƠI)
+    // - Giá cố định lấy từ danh mục "Gậy cho thuê", chỉ hiển thị (không sửa).
+    // - Mỗi loại gậy có ô số lượng (tối đa bằng tồn còn), chọn được nhiều loại trong một lần xác nhận.
+    // =========================================================================
+
+    function getCueModalInstance() {
+        const el = document.getElementById('cue-picker-modal');
+        if (!el || !window.bootstrap || !window.bootstrap.Modal) return null;
+        return window.bootstrap.Modal.getOrCreateInstance(el);
+    }
+
+    function updateOpenCueSummary() {
+        const elSummary = document.getElementById('open-cue-summary');
+        const btnPicker = document.getElementById('btn-open-cue-picker');
+        if (!elSummary) return;
+
+        if (!pendingOpenCues.length) {
+            elSummary.textContent = 'Chưa chọn gậy thuê.';
+            if (btnPicker) btnPicker.textContent = 'Chọn gậy';
+            return;
+        }
+
+        const amount = pendingOpenCues.reduce((sum, c) => sum + c.price * c.quantity, 0);
+        const names = pendingOpenCues.map(c => `${c.name} ×${c.quantity}`).join(', ');
+        elSummary.textContent = `${names} — ${formatVnCurrency(amount)}`;
+        if (btnPicker) btnPicker.textContent = 'Sửa';
+    }
+
+    function getCuePickerSelection() {
+        const selection = [];
+        document.querySelectorAll('#cue-picker-body input[data-cue-product-id]').forEach(input => {
+            const quantity = parseInt(input.value, 10) || 0;
+            if (quantity <= 0) return;
+            const productId = parseInt(input.getAttribute('data-cue-product-id'), 10);
+            const cue = cueCatalog.find(c => c.productId === productId);
+            if (!cue) return;
+            selection.push({ productId, name: cue.name, price: cue.price, quantity });
+        });
+        return selection;
+    }
+
+    function updateCuePickerTotals() {
+        const selection = getCuePickerSelection();
+        const totalQty = selection.reduce((sum, c) => sum + c.quantity, 0);
+        const totalAmount = selection.reduce((sum, c) => sum + c.price * c.quantity, 0);
+
+        const elQty = document.getElementById('cue-picker-total-qty');
+        const elAmount = document.getElementById('cue-picker-total-amount');
+        const btnConfirm = document.getElementById('btn-cue-picker-confirm');
+        if (elQty) elQty.textContent = String(totalQty);
+        if (elAmount) elAmount.textContent = formatVnCurrency(totalAmount);
+        if (btnConfirm) btnConfirm.disabled = totalQty <= 0 || isCueSubmitting;
+    }
+
+    function clampCueQuantityInput(input, max) {
+        let value = parseInt(input.value, 10);
+        if (isNaN(value) || value < 0) value = 0;
+        if (value > max) value = max;
+        input.value = String(value);
+    }
+
+    function renderCuePickerRows(preselected) {
+        const body = document.getElementById('cue-picker-body');
+        const elEmpty = document.getElementById('cue-picker-empty');
+        const table = document.getElementById('cue-picker-table');
+        if (!body) return;
+
+        body.replaceChildren();
+        if (elEmpty) elEmpty.classList.toggle('d-none', cueCatalog.length > 0);
+        if (table) table.classList.toggle('d-none', cueCatalog.length === 0);
+
+        cueCatalog.forEach(cue => {
+            const tr = document.createElement('tr');
+            const outOfStock = cue.stockQuantity <= 0;
+            if (outOfStock) tr.className = 'text-muted';
+
+            const tdName = document.createElement('td');
+            tdName.className = 'fw-semibold';
+            tdName.textContent = cue.name;
+
+            const tdPrice = document.createElement('td');
+            tdPrice.className = 'text-end';
+            tdPrice.textContent = formatVnCurrency(cue.price);
+
+            const tdStock = document.createElement('td');
+            tdStock.className = 'text-center';
+            tdStock.textContent = outOfStock ? 'Hết' : `${cue.stockQuantity} cây`;
+
+            const tdQty = document.createElement('td');
+            const group = document.createElement('div');
+            group.className = 'input-group input-group-sm flex-nowrap';
+
+            const btnMinus = document.createElement('button');
+            btnMinus.type = 'button';
+            btnMinus.className = 'btn btn-outline-secondary';
+            btnMinus.textContent = '−';
+            btnMinus.setAttribute('aria-label', `Giảm số lượng ${cue.name}`);
+
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.className = 'form-control text-center';
+            input.min = '0';
+            input.max = String(cue.stockQuantity);
+            input.step = '1';
+            input.value = '0';
+            input.disabled = outOfStock;
+            input.setAttribute('data-cue-product-id', String(cue.productId));
+            input.setAttribute('aria-label', `Số lượng ${cue.name}`);
+
+            const btnPlus = document.createElement('button');
+            btnPlus.type = 'button';
+            btnPlus.className = 'btn btn-outline-secondary';
+            btnPlus.textContent = '+';
+            btnPlus.setAttribute('aria-label', `Tăng số lượng ${cue.name}`);
+
+            btnMinus.disabled = outOfStock;
+            btnPlus.disabled = outOfStock;
+
+            const preset = (preselected || []).find(c => c.productId === cue.productId);
+            if (preset && !outOfStock) {
+                input.value = String(Math.min(preset.quantity, cue.stockQuantity));
+            }
+
+            btnMinus.addEventListener('click', () => {
+                input.value = String((parseInt(input.value, 10) || 0) - 1);
+                clampCueQuantityInput(input, cue.stockQuantity);
+                updateCuePickerTotals();
+            });
+            btnPlus.addEventListener('click', () => {
+                input.value = String((parseInt(input.value, 10) || 0) + 1);
+                clampCueQuantityInput(input, cue.stockQuantity);
+                updateCuePickerTotals();
+            });
+            input.addEventListener('input', () => {
+                clampCueQuantityInput(input, cue.stockQuantity);
+                updateCuePickerTotals();
+            });
+
+            group.appendChild(btnMinus);
+            group.appendChild(input);
+            group.appendChild(btnPlus);
+            tdQty.appendChild(group);
+
+            tr.appendChild(tdName);
+            tr.appendChild(tdPrice);
+            tr.appendChild(tdStock);
+            tr.appendChild(tdQty);
+            body.appendChild(tr);
+        });
+
+        updateCuePickerTotals();
+    }
+
+    function showCuePickerError(message) {
+        const elError = document.getElementById('cue-picker-error');
+        if (!elError) return;
+        if (message) {
+            elError.textContent = message;
+            elError.classList.remove('d-none');
+        } else {
+            elError.textContent = '';
+            elError.classList.add('d-none');
+        }
+    }
+
+    async function loadCueCatalog() {
+        const requestId = ++cueCatalogRequestId;
+        const elLoading = document.getElementById('cue-picker-loading');
+        const table = document.getElementById('cue-picker-table');
+        const elEmpty = document.getElementById('cue-picker-empty');
+        const btnConfirm = document.getElementById('btn-cue-picker-confirm');
+
+        if (elLoading) elLoading.classList.remove('d-none');
+        if (elEmpty) elEmpty.classList.add('d-none');
+        if (table) table.classList.add('d-none');
+        if (btnConfirm) btnConfirm.disabled = true;
+        showCuePickerError('');
+
+        try {
+            const response = await fetch('/Table/GetRentalCues', {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin'
+            });
+            if (requestId !== cueCatalogRequestId) return false;
+            if (!response.ok) throw new Error('http');
+
+            const result = await response.json();
+            if (requestId !== cueCatalogRequestId) return false;
+            if (!Boolean(result.success ?? result.Success)) throw new Error('fail');
+
+            const rows = result.data ?? result.Data ?? [];
+            cueCatalog = rows.map(r => ({
+                productId: Number(r.productId ?? r.ProductId),
+                name: String(r.name ?? r.Name ?? ''),
+                price: Number(r.price ?? r.Price ?? 0),
+                stockQuantity: Number(r.stockQuantity ?? r.StockQuantity ?? 0)
+            }));
+            return true;
+        } catch {
+            if (requestId !== cueCatalogRequestId) return false;
+            cueCatalog = [];
+            showCuePickerError('Không tải được danh sách gậy cho thuê. Vui lòng đóng pop-up và thử lại.');
+            return false;
+        } finally {
+            if (requestId === cueCatalogRequestId && elLoading) elLoading.classList.add('d-none');
+        }
+    }
+
+    async function openCuePicker(mode) {
+        if (isProcessing || isCueSubmitting) return;
+        if (mode === 'session') {
+            if (currentSelectedTable.status !== 'InUse' || !currentSelectedTable.sessionId) return;
+        } else if (currentSelectedTable.status !== 'Available' || !isOpenFormVisible) {
+            return;
+        }
+
+        cuePickerMode = mode;
+        cuePickerSessionId = mode === 'session' ? currentSelectedTable.sessionId : null;
+        cuePickerTableId = currentSelectedTable.id;
+
+        const elTitle = document.getElementById('cue-picker-title');
+        if (elTitle) {
+            elTitle.textContent = mode === 'session'
+                ? `Thuê thêm gậy — Bàn ${currentSelectedTable.code}`
+                : `Thuê gậy khi mở bàn — Bàn ${currentSelectedTable.code}`;
+        }
+
+        const modal = getCueModalInstance();
+        if (!modal) {
+            showToast('Không mở được pop-up chọn gậy.', 'danger');
+            return;
+        }
+
+        isCuePickerVisible = true;
+        modal.show();
+
+        const ok = await loadCueCatalog();
+        if (ok) {
+            renderCuePickerRows(mode === 'open' ? pendingOpenCues : []);
+        } else {
+            renderCuePickerRows([]);
+        }
+    }
+
+    async function handleConfirmCuePicker() {
+        const selection = getCuePickerSelection();
+        if (selection.length === 0 || isCueSubmitting) return;
+
+        const modal = getCueModalInstance();
+
+        if (cuePickerMode === 'open') {
+            pendingOpenCues = selection;
+            updateOpenCueSummary();
+            if (modal) modal.hide();
+            return;
+        }
+
+        const token = getVerificationToken();
+        if (!token) {
+            showCuePickerError('Thiếu mã xác thực bảo mật.');
+            return;
+        }
+
+        if (!cuePickerSessionId || currentSelectedTable.sessionId !== cuePickerSessionId) {
+            showCuePickerError('Phiên chơi đã thay đổi. Vui lòng đóng pop-up và chọn lại bàn.');
+            return;
+        }
+
+        isCueSubmitting = true;
+        updateCuePickerTotals();
+
+        const targetTableId = cuePickerTableId;
+        try {
+            const params = new URLSearchParams();
+            params.append('SessionId', cuePickerSessionId);
+            selection.forEach((cue, idx) => {
+                params.append(`CueRentals[${idx}].ProductId`, cue.productId);
+                params.append(`CueRentals[${idx}].Quantity`, cue.quantity);
+            });
+            params.append('__RequestVerificationToken', token);
+
+            const response = await fetch('/Table/AddCueRental', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params,
+                credentials: 'same-origin'
+            });
+
+            const result = await response.json();
+            const isSuccess = Boolean(result.success ?? result.Success);
+            const serverMessage = result.message ?? result.Message;
+
+            if (isSuccess) {
+                if (modal) modal.hide();
+                showToast(serverMessage || 'Đã thuê gậy.', 'success');
+                await handleTableSelect(targetTableId);
+            } else {
+                showCuePickerError(serverMessage || 'Không thể thuê gậy.');
+                if (Boolean(result.autoReload ?? result.AutoReload)) {
+                    await reloadTableGrid();
+                } else if (await loadCueCatalog()) {
+                    // Tồn kho có thể đã đổi: tải lại danh sách và giữ nguyên số lượng đang chọn nếu còn đủ.
+                    renderCuePickerRows(selection);
+                    showCuePickerError(serverMessage || 'Không thể thuê gậy.');
+                }
+            }
+        } catch {
+            showCuePickerError('Không kết nối được máy chủ.');
+        } finally {
+            isCueSubmitting = false;
+            updateCuePickerTotals();
+        }
+    }
+
     function initEvents() {
         const gridContainer = document.getElementById('table-grid-container');
         if (gridContainer) {
@@ -1720,6 +2151,7 @@
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                if (isCuePickerVisible) return;
                 if (isOpenFormVisible) { hideOpenForm(true); e.preventDefault(); return; }
                 if (isCloseFormVisible) { hideCloseForm(true); e.preventDefault(); return; }
                 if (isTransferFormVisible) { hideTransferForm(true); e.preventDefault(); return; }
@@ -1773,6 +2205,21 @@
 
         const btnCancelTransfer = document.getElementById('btn-cancel-transfer');
         if (btnCancelTransfer) btnCancelTransfer.addEventListener('click', () => hideTransferForm(true));
+
+        const btnOpenCuePicker = document.getElementById('btn-open-cue-picker');
+        if (btnOpenCuePicker) btnOpenCuePicker.addEventListener('click', () => openCuePicker('open'));
+
+        const btnRentCue = document.getElementById('btn-rent-cue');
+        if (btnRentCue) btnRentCue.addEventListener('click', () => openCuePicker('session'));
+
+        const btnCueConfirm = document.getElementById('btn-cue-picker-confirm');
+        if (btnCueConfirm) btnCueConfirm.addEventListener('click', handleConfirmCuePicker);
+
+        const cueModalEl = document.getElementById('cue-picker-modal');
+        if (cueModalEl) {
+            cueModalEl.addEventListener('shown.bs.modal', () => { isCuePickerVisible = true; });
+            cueModalEl.addEventListener('hidden.bs.modal', () => { isCuePickerVisible = false; });
+        }
 
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && !isPollingStopped) {
