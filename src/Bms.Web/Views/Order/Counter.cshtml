@@ -166,7 +166,7 @@
                         var isCurrent = Model.ActiveSessionId == s.Id;
                         <a asp-action="Counter" asp-route-sessionId="@s.Id" 
                            class="btn @(isCurrent ? "btn-danger fw-bold shadow-sm" : "btn-outline-secondary") btn-sm px-3 py-2 rounded-3">
-                            🎱 Bàn @s.Table.TableCode (@s.Table.TableType.Name)
+                            🎱 Bàn @s.BilliardTable.TableCode (@s.BilliardTable.TableType.Name)
                         </a>
                     }
                 }

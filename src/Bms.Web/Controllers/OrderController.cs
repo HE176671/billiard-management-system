@@ -177,9 +177,9 @@ public class OrderController : Controller
     {
         // Lấy danh sách tất cả các bàn đang có phiên Active
         var activeSessions = await _db.PlaySessions
-            .Include(s => s.Table).ThenInclude(t => t.TableType)
+            .Include(s => s.BilliardTable).ThenInclude(t => t.TableType)
             .Where(s => s.Status == "Active")
-            .OrderBy(s => s.Table.TableCode)
+            .OrderBy(s => s.BilliardTable.TableCode)
             .ToListAsync();
 
         PlaySession? selectedSession = null;
@@ -213,9 +213,9 @@ public class OrderController : Controller
         {
             HasActiveSession = selectedSession != null,
             ActiveSessionId  = selectedSession?.Id,
-            TableCode        = selectedSession?.Table.TableCode,
-            TableTypeName    = selectedSession?.Table.TableType.Name,
-            FloorNumber      = selectedSession?.Table.FloorNumber,
+            TableCode        = selectedSession?.BilliardTable.TableCode,
+            TableTypeName    = selectedSession?.BilliardTable.TableType.Name,
+            FloorNumber      = selectedSession?.BilliardTable.FloorNumber,
             StartAtUtc       = selectedSession?.StartAtUtc,
             Categories       = categories,
             MyOrders         = currentOrders
@@ -232,7 +232,7 @@ public class OrderController : Controller
     public async Task<IActionResult> SubmitStaffOrder(int sessionId, SubmitOrderInputModel input)
     {
         var session = await _db.PlaySessions
-            .Include(s => s.Table)
+            .Include(s => s.BilliardTable)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.Status == "Active");
 
         if (session == null)
@@ -295,7 +295,7 @@ public class OrderController : Controller
             await _db.SaveChangesAsync();
             await tx.CommitAsync();
 
-            TempData["Success"] = "Đã thêm món thành công cho bàn " + session.Table.TableCode;
+            TempData["Success"] = "Đã thêm món thành công cho bàn " + session.BilliardTable.TableCode;
             return RedirectToAction(nameof(Counter), new { sessionId });
         }
         catch (Exception ex)
@@ -409,7 +409,7 @@ public class OrderController : Controller
     public async Task<IActionResult> Manage()
     {
         var pendingOrders = await _db.Orders
-            .Include(o => o.Session).ThenInclude(s => s.Table)
+            .Include(o => o.Session).ThenInclude(s => s.BilliardTable)
             .Include(o => o.OrderDetails).ThenInclude(d => d.Product)
             .Where(o => o.Status == OrderConstants.StatusPending)
             .OrderBy(o => o.OrderTimeUtc)
@@ -504,12 +504,12 @@ public class OrderController : Controller
         {
             var userId = _userManager.GetUserId(User)!;
             var activeSession = await _db.PlaySessions
-                .Include(s => s.Table)
+                .Include(s => s.BilliardTable)
                 .FirstOrDefaultAsync(s => s.CustomerId == userId && s.Status == "Active");
 
             if (activeSession != null)
             {
-                return RedirectToAction(nameof(Table), new { tableCode = activeSession.Table.TableCode });
+                return RedirectToAction(nameof(Table), new { tableCode = activeSession.BilliardTable.TableCode });
             }
         }
 

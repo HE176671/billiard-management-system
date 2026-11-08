@@ -67,7 +67,7 @@
                                 <span class="fw-bold text-dark">#@o.Id</span>
                             </td>
                             <td>
-                                <span class="badge bg-danger fs-6 px-3 py-1">Bàn @o.Session.Table.TableCode</span>
+                                <span class="badge bg-danger fs-6 px-3 py-1">Bàn @o.Session.BilliardTable.TableCode</span>
                             </td>
                             <td>
                                 <div class="fw-semibold">@o.OrderTimeUtc.AddHours(7).ToString("HH:mm:ss")</div>
@@ -97,7 +97,7 @@
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="orderId" value="@o.Id" />
                                         <button type="submit" class="btn btn-sm btn-success px-3 fw-bold shadow-xs" 
-                                                onclick="return confirm('Xác nhận duyệt và phục vụ đơn này cho bàn @o.Session.Table.TableCode?');">
+                                                onclick="return confirm('Xác nhận duyệt và phục vụ đơn này cho bàn @o.Session.BilliardTable.TableCode?');">
                                             <i class="bi bi-check-lg me-1"></i> Duyệt & Phục vụ
                                         </button>
                                     </form>
