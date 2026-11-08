@@ -26,6 +26,7 @@
             var curUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             int pendingAdjustCount = 0;
             int unreadNotiCount = 0;
+            int pendingOrderCount = 0;
             try
             {
                 if (isManager || isAdmin)
@@ -59,6 +60,24 @@
                 </a>
                 <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index">
                     <i class="bi bi-grid-3x3"></i> Quản lý bàn
+                </a>
+
+                <div class="nav-section-label">F&amp;B &amp; Kho hàng (WF2)</div>
+                <a class="sidebar-link @(curController == "Order" && curAction == "Pending" ? "active" : "")" asp-controller="Order" asp-action="Pending">
+                    <i class="bi bi-bell"></i> Đơn QR chờ duyệt
+                    @if (pendingOrderCount > 0)
+                    {
+                        <span class="badge-count global-qr-pending-badge">@pendingOrderCount</span>
+                    }
+                </a>
+                <a class="sidebar-link @Active("Product")" asp-controller="Product" asp-action="Index">
+                    <i class="bi bi-cup-straw"></i> Thực đơn &amp; Món
+                </a>
+                <a class="sidebar-link @Active("Combo")" asp-controller="Combo" asp-action="Index">
+                    <i class="bi bi-box2-heart"></i> Gói Combo
+                </a>
+                <a class="sidebar-link @Active("Inventory")" asp-controller="Inventory" asp-action="Index">
+                    <i class="bi bi-boxes"></i> Quản lý kho hàng
                 </a>
             }
 
@@ -130,7 +149,17 @@
                 <div class="nav-section-label">Nghiệp vụ ca làm</div>
                 <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca của tôi</a>
                 <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
-                <a class="sidebar-link @Active("Menu")" href="#"><i class="bi bi-cup-straw"></i> Thực đơn</a>
+                <div class="nav-section-label">F&amp;B &amp; Kho hàng (WF2)</div>
+                <a class="sidebar-link @(curController == "Order" && curAction == "Pending" ? "active" : "")" asp-controller="Order" asp-action="Pending">
+                    <i class="bi bi-bell"></i> Đơn QR chờ duyệt
+                    @if (pendingOrderCount > 0)
+                    {
+                        <span class="badge-count global-qr-pending-badge">@pendingOrderCount</span>
+                    }
+                </a>
+                <a class="sidebar-link @Active("Product")" asp-controller="Product" asp-action="Index"><i class="bi bi-cup-straw"></i> Thực đơn &amp; Món</a>
+                <a class="sidebar-link @Active("Combo")" asp-controller="Combo" asp-action="Index"><i class="bi bi-box2-heart"></i> Gói Combo</a>
+                <a class="sidebar-link @Active("Inventory")" asp-controller="Inventory" asp-action="Index"><i class="bi bi-boxes"></i> Quản lý kho hàng</a>
             }
         </div>
         <div class="sidebar-footer">
@@ -154,6 +183,13 @@
         <header class="topbar">
             <span class="topbar-title">@ViewData["Title"]</span>
             <div class="topbar-actions">
+                <a asp-controller="Order" asp-action="Pending" class="btn-logout" title="Đơn QR chờ duyệt">
+                    <i class="bi bi-cup-straw text-warning"></i> Đơn QR
+                    @if (pendingOrderCount > 0)
+                    {
+                        <span class="badge rounded-pill bg-warning text-dark global-qr-pending-badge" style="font-size:0.65rem">@pendingOrderCount</span>
+                    }
+                </a>
                 <a asp-controller="Profile" asp-action="Index" class="btn-logout" title="Hồ sơ cá nhân">
                     <i class="bi bi-person-circle"></i> Hồ sơ
                 </a>
@@ -187,5 +223,42 @@
     <script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
     <script src="~/js/bms-number-validator.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        (function() {
+            try {
+                const conn = new signalR.HubConnectionBuilder()
+                    .withUrl("/hubs/order")
+                    .withAutomaticReconnect()
+                    .build();
+
+                conn.on("ReceiveNewOrder", function (data) {
+                    document.querySelectorAll('.global-qr-pending-badge').forEach(el => {
+                        const current = parseInt(el.textContent || '0') || 0;
+                        el.textContent = current + 1;
+                        el.style.display = 'inline-block';
+                    });
+                });
+
+                conn.on("OrderConfirmed", function() {
+                    document.querySelectorAll('.global-qr-pending-badge').forEach(el => {
+                        const current = parseInt(el.textContent || '0') || 0;
+                        if (current > 1) el.textContent = current - 1;
+                        else el.style.display = 'none';
+                    });
+                });
+
+                conn.on("OrderRejected", function() {
+                    document.querySelectorAll('.global-qr-pending-badge').forEach(el => {
+                        const current = parseInt(el.textContent || '0') || 0;
+                        if (current > 1) el.textContent = current - 1;
+                        else el.style.display = 'none';
+                    });
+                });
+
+                conn.start().then(() => conn.invoke("JoinStaffGroup")).catch(() => {});
+            } catch(e) {}
+        })();
+    </script>
 </body>
 </html>
