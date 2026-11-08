@@ -45,6 +45,7 @@ Trong SSMS chọn **File → Open → File** và mở file SQL tải từ repo. 
 | Đã có cả ComboItems, SessionCombos, SessionComboItems | Chỉ `Verify_BilliardDB.sql` | Kiểm tra chỉ đọc; không tạo/seed lại |
 | Có MembershipTiers nhưng thiếu MinPoints | `06_AddMembershipMinPoints.sql` | Thêm ngưỡng điểm mặc định 0, giữ dữ liệu; Admin chỉnh ngưỡng riêng cho từng hạng |
 | Cần dữ liệu để trình bày, đã có schema mở rộng và MinPoints | `07_AddPresentationDemoData.sql` | Thêm hạng/khách/bảng giá/hóa đơn/thanh toán giả lập cho 13/10/2026; giữ dữ liệu cũ, dừng và rollback nếu xung đột |
+| Nâng cấp phân hệ F&B, Kho hàng, Thẻ kho, Đặt món QR (Tùng - WF2) | `11_WF2_FnbInventoryOrdering.sql` | Tạo 4 bảng mới (ProductPriceHistory, StockReceipts, StockReceiptDetails, StockMovements), mở rộng Orders, cập nhật proc usp_AddSessionCombo |
 | Bản 13 bảng cũ hoặc schema không xác định | Dừng và kiểm tra schema, báo người phụ trách database | Chưa có script nâng từ bản 13 lên bản 24; không chạy Full/05 để thay thế |
 
 Nếu một file báo lỗi, dừng và sửa lỗi trước khi chạy file tiếp theo. Không tiếp tục chỉ vì thấy vài thông báo “completed”.
