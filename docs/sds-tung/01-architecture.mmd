@@ -1,0 +1,20 @@
+flowchart TB
+    Actor["Admin / Staff / Customer"] --> Browser["Trình duyệt Web<br/>HTML5, CSS, Bootstrap, JavaScript"]
+    subgraph App["Bms.Web — ASP.NET Core MVC & Web API"]
+        Gate["Routing + Authentication + Authorization<br/>Anti-forgery cho POST Form"]
+        Controllers["Controllers<br/>MenuController, ComboController<br/>OrderController, BillingController, ReportController<br/>FnbCatalogApiController"]
+        Views["Razor Views + ViewModels<br/>Thực đơn, Combo, Order POS, In Bill, Báo cáo"]
+        Services["Tầng Dịc vụ Nghiệp vụ<br/>IMenuService / MenuService<br/>IOrderService / OrderService<br/>IBillingService / BillingService<br/>IReportService / ReportService"]
+        Data["ApplicationDbContext / EF Core 8<br/>SQL có tham số, Transactions, Optimistic Concurrency"]
+        Adapters["Report Adapters<br/>EPPlus (.xlsx) | QuestPDF (.pdf)"]
+
+        Gate --> Controllers
+        Controllers --> Views
+        Controllers --> Services
+        Services --> Data
+        Services --> Adapters
+    end
+    Browser -->|"HTTPS request + Cookie + Form/JSON"| Gate
+    Views -->|"HTML / View / POS Thermal Preview"| Browser
+    Adapters -->|"Stream File Download (.xlsx, .pdf)"| Browser
+    Data -->|"SQL Queries / Stored Procedures / Transactions"| DB[("SQL Server<br/>BilliardDB")]

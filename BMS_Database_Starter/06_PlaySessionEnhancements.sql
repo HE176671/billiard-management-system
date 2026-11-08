@@ -601,7 +601,7 @@ CREATE OR ALTER PROCEDURE dbo.usp_AddSessionCombo
     @StaffId nvarchar(450)
 AS
 BEGIN
-    SET NOCOUNT ON; SET XACT_ABORT ON;
+    SET NOCOUNT ON;
     IF NOT EXISTS (SELECT 1 FROM dbo.AspNetUsers u JOIN dbo.AspNetUserRoles ur ON ur.UserId = u.Id
         JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
         WHERE u.Id = @StaffId AND u.IsActive = 1 AND r.Name IN (N'Staff',N'Manager',N'Admin'))
@@ -610,8 +610,13 @@ BEGIN
     IF @Quantity IS NULL OR @Quantity <> 1
         THROW 51712, N'Each session can only apply 1 Combo package (Quantity = 1).', 1;
 
-    BEGIN TRY
+    DECLARE @TrancountAtStart int = @@TRANCOUNT;
+    IF @TrancountAtStart = 0
         BEGIN TRANSACTION;
+    ELSE
+        SAVE TRANSACTION usp_AddSessionCombo_Savepoint;
+
+    BEGIN TRY
         DECLARE @Now datetime2(0) = SYSUTCDATETIME(),
                 @SessionStatus varchar(20),
                 @ComboName nvarchar(100),
@@ -641,6 +646,16 @@ BEGIN
         IF @ComboName IS NULL OR @ComboActive <> 1
             THROW 51714, N'Selected combo does not exist or is no longer active.', 1;
 
+        -- BR-07a: Kiểm tra tồn kho của tất cả món kèm trong gói Combo
+        IF EXISTS (
+            SELECT 1
+            FROM dbo.ComboItems ci
+            JOIN dbo.Products p WITH (UPDLOCK, ROWLOCK) ON p.Id = ci.ProductId
+            WHERE ci.ComboId = @ComboId
+              AND p.StockQuantity < (ci.Quantity * @Quantity)
+        )
+            THROW 51716, N'Món kèm trong gói Combo đã hết hàng trong kho. Không thể áp dụng Combo này!', 1;
+
         INSERT dbo.SessionCombos (
             SessionId, ComboId, Quantity,
             ComboNameSnapshot, UnitPriceSnapshot, PlaytimeHoursSnapshot,
@@ -662,9 +677,44 @@ BEGIN
           JOIN dbo.Products p ON p.Id = ci.ProductId
          WHERE ci.ComboId = @ComboId;
 
+        -- BR-07a: Trừ kho nguyên tử và ghi nhận thẻ kho StockMovements cho từng món kèm
+        DECLARE @ItemProdId int, @ItemReqQty int, @NewBal int;
+        DECLARE item_cursor CURSOR LOCAL FAST_FORWARD FOR
+            SELECT ci.ProductId, ci.Quantity * @Quantity
+            FROM dbo.ComboItems ci
+            WHERE ci.ComboId = @ComboId;
+
+        OPEN item_cursor;
+        FETCH NEXT FROM item_cursor INTO @ItemProdId, @ItemReqQty;
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            UPDATE dbo.Products
+            SET StockQuantity = StockQuantity - @ItemReqQty
+            WHERE Id = @ItemProdId;
+
+            SELECT @NewBal = StockQuantity FROM dbo.Products WHERE Id = @ItemProdId;
+
+            INSERT INTO dbo.StockMovements (
+                ProductId, QuantityChange, BalanceAfter, MovementType,
+                ReferenceType, ReferenceId, Note, CreatedAtUtc, CreatedById
+            )
+            VALUES (
+                @ItemProdId, -@ItemReqQty, @NewBal, 'ComboDeduct',
+                'SessionCombo', @SessionComboId,
+                N'Trừ kho món kèm theo gói Combo ' + @ComboName,
+                @Now, @StaffId
+            );
+
+            FETCH NEXT FROM item_cursor INTO @ItemProdId, @ItemReqQty;
+        END;
+        CLOSE item_cursor;
+        DEALLOCATE item_cursor;
+
         SET @EstimatedAmount = dbo.fn_CalcPlaytimeAmount(@SessionId, @Now);
 
-        COMMIT;
+        IF @TrancountAtStart = 0
+            COMMIT;
+
         SELECT @SessionComboId AS SessionComboId,
                @SessionId AS SessionId,
                @ComboId AS ComboId,
@@ -676,7 +726,15 @@ BEGIN
                @EstimatedAmount AS EstimatedAmount;
     END TRY
     BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK;
+        IF @TrancountAtStart = 0
+        BEGIN
+            IF @@TRANCOUNT > 0 ROLLBACK;
+        END;
+        ELSE
+        BEGIN
+            IF XACT_STATE() <> -1
+                ROLLBACK TRANSACTION usp_AddSessionCombo_Savepoint;
+        END;
         THROW;
     END CATCH
 END;

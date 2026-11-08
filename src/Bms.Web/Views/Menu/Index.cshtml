@@ -1,0 +1,609 @@
+@model Bms.Web.Models.QrMenuViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Thực đơn gọi món - Bàn @Model.TableCode</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <style>
+        :root {
+            --primary-bms: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary-bms: #0f172a;
+            --accent-green: #10b981;
+            --bg-light: #f1f5f9;
+        }
+        body {
+            background-color: var(--bg-light);
+            color: #1e293b;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding-bottom: 80px;
+        }
+        .header-bar {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #fff;
+            padding: 1.25rem 1rem 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        .table-pill {
+            background: #2563eb;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.9rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            letter-spacing: 0.5px;
+        }
+        .bill-preview-card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+            margin-bottom: 1.25rem;
+        }
+        .bill-preview-header {
+            background: #f8fafc;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #475569;
+        }
+        .category-nav {
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+            padding: 0.5rem 0;
+            scrollbar-width: none;
+        }
+        .category-nav::-webkit-scrollbar { display: none; }
+        .cat-pill {
+            white-space: nowrap;
+            background: #fff;
+            border: 1px solid #cbd5e1;
+            color: #475569;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 0.35rem 0.85rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .cat-pill.active {
+            background: var(--primary-bms);
+            color: #fff;
+            border-color: var(--primary-bms);
+        }
+        .product-card {
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            padding: 0.85rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .product-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.2rem;
+            color: #0f172a;
+        }
+        .product-price {
+            font-weight: 700;
+            color: var(--primary-bms);
+            font-size: 0.9rem;
+        }
+        .stock-badge {
+            font-size: 0.75rem;
+            color: #059669;
+            background: #ecfdf5;
+            padding: 2px 6px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        .qty-control {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .btn-qty {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            padding: 0;
+            transition: background 0.15s;
+        }
+        .btn-qty:active { background: #e2e8f0; }
+        .btn-qty.plus {
+            background: var(--primary-bms);
+            color: #fff;
+            border-color: var(--primary-bms);
+        }
+        .qty-val {
+            min-width: 24px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+        .bottom-cart-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border-top: 1px solid #e2e8f0;
+            padding: 0.75rem 1rem;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.08);
+            z-index: 1030;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .cart-info-total {
+            font-weight: 800;
+            color: var(--primary-bms);
+            font-size: 1.1rem;
+        }
+        .badge-status {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        .badge-status.Pending { background: #fef3c7; color: #b45309; }
+        .badge-status.Completed { background: #dcfce7; color: #15803d; }
+        .badge-status.Rejected { background: #fee2e2; color: #b91c1c; }
+    </style>
+</head>
+<body>
+
+    <!-- Header Bar -->
+    <header class="header-bar">
+        <div class="container px-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-circle-fill text-success me-2" style="font-size: 0.65rem;"></i>Billiards Club</h5>
+                    <span class="small text-white-50">Loại: @Model.TableTypeName</span>
+                </div>
+                <div>
+                    <span class="table-pill">BÀN @Model.TableCode</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container px-2 pt-3">
+
+        @if (!Model.HasActiveSession)
+        {
+            <!-- Trạng thái bàn chưa mở phiên -->
+            <div class="alert alert-warning border-0 shadow-sm rounded-4 text-center py-4 my-3">
+                <i class="bi bi-hourglass-split display-4 text-warning mb-2 d-block"></i>
+                <h5 class="fw-bold mb-1">Bàn chưa mở phiên chơi</h5>
+                <p class="small text-muted mb-0">
+                    Bàn <strong>@Model.TableCode</strong> hiện đang trống. Quý khách vui lòng liên hệ nhân viên phục vụ tại quầy để mở bàn và trải nghiệm dịch vụ!
+                </p>
+            </div>
+        }
+        else
+        {
+            <!-- Nhúng phần tạm tính của WF3: Giờ chơi + F&B -->
+            <div class="bill-preview-card">
+                <div class="bill-preview-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-receipt-cutoff text-primary me-1"></i>Tạm tính phiên chơi</span>
+                    <button class="btn btn-sm text-primary p-0 text-decoration-none fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#orderHistoryCollapse">
+                        Lịch sử món <i class="bi bi-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="p-3">
+                    <div class="d-flex justify-content-between text-muted small mb-1">
+                        <span>Giờ bắt đầu:</span>
+                        <strong class="text-dark">@Model.StartAtVnDisplay</strong>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.ComboName))
+                    {
+                        <div class="d-flex justify-content-between text-muted small mb-1">
+                            <span>Gói Combo:</span>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">@Model.ComboName</span>
+                        </div>
+                    }
+                    <div class="d-flex justify-content-between text-muted small mb-1">
+                        <span>Tiền giờ chơi / gói:</span>
+                        <strong class="text-dark" id="display-playtime">@Model.PlaytimeAmount.ToString("N0") đ</strong>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted small mb-2">
+                        <span>Tiền món F&B đã gọi:</span>
+                        <strong class="text-success" id="display-fnb">@Model.FandBAmount.ToString("N0") đ</strong>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                        <span class="fw-bold text-dark">Tổng tạm tính hiện tại:</span>
+                        <span class="fw-bold text-primary fs-5" id="display-grandtotal">@Model.GrandTotal.ToString("N0") đ</span>
+                    </div>
+
+                    <!-- Lịch sử món đã gọi -->
+                    <div class="collapse pt-3 mt-2 border-top" id="orderHistoryCollapse">
+                        <div class="fw-bold small text-secondary mb-2">Các món đã gửi quầy:</div>
+                        @if (Model.SessionOrders != null && Model.SessionOrders.Count > 0)
+                        {
+                            <div class="list-group list-group-flush small" id="session-orders-list">
+                                @foreach (var ord in Model.SessionOrders)
+                                {
+                                    <div class="list-group-item px-0 py-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span>
+                                                <strong>Đơn #@ord.Id</strong>
+                                                <span class="text-muted" style="font-size: 0.75rem;">(@ord.OrderTimeUtc.AddHours(7).ToString("HH:mm"))</span>
+                                            </span>
+                                            <span class="badge-status @ord.Status">
+                                                @(ord.Status == "Completed" ? "Đã phục vụ" : (ord.Status == "Rejected" ? "Từ chối" : "Chờ duyệt"))
+                                            </span>
+                                        </div>
+                                        @foreach (var d in ord.Details)
+                                        {
+                                            <div class="d-flex justify-content-between text-muted ms-2" style="font-size: 0.8rem;">
+                                                <span>• @d.Quantity x @d.ProductName</span>
+                                                <span>@d.Subtotal.ToString("N0") đ</span>
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(ord.RejectReason))
+                                        {
+                                            <div class="text-danger ms-2 small fst-italic">Lý do từ chối: @ord.RejectReason</div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-muted small py-2 text-center" id="empty-order-history">Chưa có món nào được gọi trong phiên này.</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Thanh phân loại danh mục -->
+        <div class="mb-3">
+            <div class="category-nav">
+                <button class="cat-pill active" onclick="filterCategory(0)">Tất cả</button>
+                @foreach (var cat in Model.Categories)
+                {
+                    <button class="cat-pill" onclick="filterCategory(@cat.Id)">@cat.Name</button>
+                }
+            </div>
+        </div>
+
+        <!-- Danh sách món F&B -->
+        <div class="menu-list mb-4">
+            @if (Model.Categories == null || Model.Categories.Count == 0 || Model.Categories.All(c => c.Products.Count == 0))
+            {
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-cup-hot display-4 text-muted mb-2 d-block"></i>
+                    Hiện chưa có món nào sẵn sàng phục vụ.
+                </div>
+            }
+            else
+            {
+                @foreach (var cat in Model.Categories)
+                {
+                    <div class="category-section" data-cat-id="@cat.Id">
+                        <div class="fw-bold text-dark small text-uppercase mb-2 text-muted" style="letter-spacing: 0.5px;">
+                            @cat.Name
+                        </div>
+                        @foreach (var p in cat.Products)
+                        {
+                            <div class="product-card" id="prod-card-@p.Id">
+                                <div class="pe-2">
+                                    <div class="product-name">@p.Name</div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="product-price">@p.Price.ToString("N0") đ</span>
+                                        <span class="stock-badge"><i class="bi bi-box-seam me-1"></i>Còn @p.StockQuantity</span>
+                                    </div>
+                                </div>
+                                <div class="qty-control">
+                                    <button type="button" class="btn-qty" onclick="changeQty(@p.Id, -1, @p.Price, '@Html.Raw(p.Name.Replace("'", "\\'"))', @p.StockQuantity)">-</button>
+                                    <span class="qty-val" id="qty-val-@p.Id">0</span>
+                                    <button type="button" class="btn-qty plus" onclick="changeQty(@p.Id, 1, @p.Price, '@Html.Raw(p.Name.Replace("'", "\\'"))', @p.StockQuantity)">+</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+
+    </main>
+
+    @if (Model.HasActiveSession)
+    {
+        <!-- Floating Cart Bar -->
+        <div class="bottom-cart-bar" id="bottomCartBar">
+            <div>
+                <div class="small text-muted">Giỏ hàng: <span id="cartCountBadge" class="fw-bold text-dark">0 món</span></div>
+                <div class="cart-info-total" id="cartTotalText">0 đ</div>
+            </div>
+            <button class="btn btn-primary px-3 py-2 fw-bold rounded-3 shadow-sm" id="btnOpenCart" onclick="openCartModal()" disabled>
+                <i class="bi bi-cart3 me-1"></i>Xem giỏ &amp; Đặt
+            </button>
+        </div>
+
+        <!-- Modal Giỏ hàng & Xác nhận đặt món -->
+        <div class="modal fade" id="cartModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content rounded-4 border-0">
+                    <div class="modal-header bg-light">
+                        <h6 class="modal-title fw-bold">
+                            <i class="bi bi-bag-check text-primary me-2"></i>Xác nhận đặt món - Bàn @Model.TableCode
+                        </h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-3">
+                        <input type="hidden" id="clientSessionId" value="@Model.SessionId" />
+                        <input type="hidden" id="tableCode" value="@Model.TableCode" />
+                        <input type="hidden" id="tableId" value="@Model.TableId" />
+
+                        <div id="cartItemsList" class="mb-3">
+                            <!-- JS render các món đã chọn -->
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted mb-1">Ghi chú cho nhân viên quầy:</label>
+                            <input type="text" class="form-control" id="orderNote" placeholder="Ví dụ: Ít đá, mang thêm ly, không đường..." maxlength="200" />
+                        </div>
+
+                        <div class="p-2 bg-light rounded border d-flex justify-content-between align-items-center">
+                            <span class="fw-bold">Tổng tiền món đặt:</span>
+                            <span class="fw-bold text-primary fs-5" id="modalCartTotal">0 đ</span>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chọn thêm</button>
+                        <button type="button" class="btn btn-primary fw-bold px-4" id="btnSubmitOrder" onclick="submitQrOrder()">
+                            <i class="bi bi-send-fill me-1"></i>Gửi yêu cầu gọi món
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Toast Thông báo -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1060; margin-bottom: 70px;">
+        <div id="qrToast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body fw-bold" id="qrToastBody">
+                    Thông báo
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const cart = {};
+        const tableCode = "@Model.TableCode";
+        const sessionId = @(Model.SessionId ?? 0);
+
+        function showToast(message, isSuccess = true) {
+            const toastEl = document.getElementById('qrToast');
+            const toastBody = document.getElementById('qrToastBody');
+            toastBody.textContent = message;
+            toastEl.className = 'toast align-items-center text-white border-0 ' + (isSuccess ? 'bg-success' : 'bg-danger');
+            const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+            toast.show();
+        }
+
+        function filterCategory(catId) {
+            document.querySelectorAll('.cat-pill').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const sections = document.querySelectorAll('.category-section');
+            sections.forEach(sec => {
+                if (catId === 0 || sec.getAttribute('data-cat-id') == catId) {
+                    sec.style.display = 'block';
+                } else {
+                    sec.style.display = 'none';
+                }
+            });
+        }
+
+        function changeQty(prodId, delta, price, name, stock) {
+            if (!cart[prodId]) {
+                cart[prodId] = { id: prodId, name: name, price: price, qty: 0, stock: stock };
+            }
+
+            const newQty = cart[prodId].qty + delta;
+            if (newQty < 0) return;
+            if (newQty > stock) {
+                showToast(`Chỉ còn ${stock} món trong kho!`, false);
+                return;
+            }
+
+            cart[prodId].qty = newQty;
+            if (cart[prodId].qty === 0) {
+                delete cart[prodId];
+            }
+
+            const valEl = document.getElementById(`qty-val-${prodId}`);
+            if (valEl) valEl.textContent = cart[prodId] ? cart[prodId].qty : 0;
+
+            updateCartBar();
+        }
+
+        function updateCartBar() {
+            let totalQty = 0;
+            let totalPrice = 0;
+
+            for (const id in cart) {
+                totalQty += cart[id].qty;
+                totalPrice += cart[id].qty * cart[id].price;
+            }
+
+            const cartCountBadge = document.getElementById('cartCountBadge');
+            const cartTotalText = document.getElementById('cartTotalText');
+            const btnOpenCart = document.getElementById('btnOpenCart');
+
+            if (cartCountBadge) cartCountBadge.textContent = `${totalQty} món`;
+            if (cartTotalText) cartTotalText.textContent = `${totalPrice.toLocaleString('vi-VN')} đ`;
+            if (btnOpenCart) btnOpenCart.disabled = totalQty === 0;
+        }
+
+        function openCartModal() {
+            const listEl = document.getElementById('cartItemsList');
+            if (!listEl) return;
+
+            let html = '';
+            let total = 0;
+
+            for (const id in cart) {
+                const item = cart[id];
+                const sub = item.qty * item.price;
+                total += sub;
+                html += `
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <div>
+                            <div class="fw-bold small text-dark">${item.name}</div>
+                            <div class="text-muted" style="font-size:0.75rem">${item.price.toLocaleString('vi-VN')} đ x ${item.qty}</div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fw-bold text-primary small">${sub.toLocaleString('vi-VN')} đ</span>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeItemFromCart(${item.id})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            listEl.innerHTML = html;
+            document.getElementById('modalCartTotal').textContent = `${total.toLocaleString('vi-VN')} đ`;
+
+            const modal = new bootstrap.Modal(document.getElementById('cartModal'));
+            modal.show();
+        }
+
+        function removeItemFromCart(prodId) {
+            if (cart[prodId]) {
+                delete cart[prodId];
+                const valEl = document.getElementById(`qty-val-${prodId}`);
+                if (valEl) valEl.textContent = 0;
+                updateCartBar();
+                openCartModal(); // re-render modal
+            }
+        }
+
+        async function submitQrOrder() {
+            const btnSubmit = document.getElementById('btnSubmitOrder');
+            const items = [];
+            for (const id in cart) {
+                if (cart[id].qty > 0) {
+                    items.push({
+                        productId: parseInt(id),
+                        quantity: cart[id].qty
+                    });
+                }
+            }
+
+            if (items.length === 0) {
+                showToast("Vui lòng chọn ít nhất 1 món để đặt", false);
+                return;
+            }
+
+            const clientSessionId = parseInt(document.getElementById('clientSessionId')?.value || '0');
+            const tableCodeVal = document.getElementById('tableCode')?.value || tableCode;
+            const noteVal = document.getElementById('orderNote')?.value || '';
+
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Đang gửi...`;
+
+            try {
+                const res = await fetch('/Menu/PlaceOrder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tableCode: tableCodeVal,
+                        clientSessionId: clientSessionId,
+                        items: items,
+                        note: noteVal
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    showToast(data.message || "Đã gửi yêu cầu gọi món thành công!", true);
+                    // Reset giỏ hàng
+                    for (const id in cart) {
+                        const valEl = document.getElementById(`qty-val-${id}`);
+                        if (valEl) valEl.textContent = 0;
+                        delete cart[id];
+                    }
+                    updateCartBar();
+
+                    // Đóng modal
+                    const modalEl = document.getElementById('cartModal');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+
+                    // Tải lại status
+                    setTimeout(() => refreshStatus(), 1000);
+                } else {
+                    showToast(data.message || "Không thể đặt món", false);
+                    alert("LỖI GỌI MÓN:\n" + data.message);
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Lỗi kết nối máy chủ khi gửi đơn", false);
+            } finally {
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = `<i class="bi bi-send-fill me-1"></i>Gửi yêu cầu gọi món`;
+            }
+        }
+
+        // Định kỳ 15s polling trạng thái phiên & đơn hàng
+        async function refreshStatus() {
+            if (!sessionId || sessionId <= 0) return;
+            try {
+                const res = await fetch(`/Menu/Status?tableCode=${encodeURIComponent(tableCode)}&sessionId=${sessionId}`);
+                const data = await res.json();
+                if (data.active) {
+                    const elPlaytime = document.getElementById('display-playtime');
+                    const elFnb = document.getElementById('display-fnb');
+                    const elGrand = document.getElementById('display-grandtotal');
+
+                    if (elPlaytime) elPlaytime.textContent = `${Math.round(data.playtimeAmount).toLocaleString('vi-VN')} đ`;
+                    if (elFnb) elFnb.textContent = `${Math.round(data.fnbAmount).toLocaleString('vi-VN')} đ`;
+                    if (elGrand) elGrand.textContent = `${Math.round(data.grandTotal).toLocaleString('vi-VN')} đ`;
+                }
+            } catch (e) {
+                console.warn("Poll status error", e);
+            }
+        }
+
+        if (sessionId > 0) {
+            setInterval(refreshStatus, 15000);
+        }
+    </script>
+</body>
+</html>

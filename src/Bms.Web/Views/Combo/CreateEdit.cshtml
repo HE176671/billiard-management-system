@@ -1,0 +1,196 @@
+@model Bms.Web.Models.ComboInputModel
+@{
+    bool isEdit = Model.Id > 0;
+    ViewData["Title"] = isEdit ? $"Chỉnh sửa Combo: {Model.Name}" : "Tạo gói Combo mới";
+    Layout = "_AdminLayout";
+    var tableTypes = ViewBag.TableTypes as List<Bms.Web.Data.Entities.TableType> ?? new();
+    var products = ViewBag.Products as List<Bms.Web.Models.ProductViewModel> ?? new();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="d-flex align-items-center mb-3">
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-3">
+                <i class="bi bi-arrow-left me-1"></i>Quay lại
+            </a>
+            <h4 class="fw-bold mb-0">@(isEdit ? "Chỉnh sửa gói Combo" : "Tạo gói Combo mới (UC-06)")</h4>
+        </div>
+
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
+        <div class="data-card p-4">
+            <form asp-action="@(isEdit ? "Edit" : "Create")" method="post" id="comboForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Id" />
+
+                <h5 class="fw-bold text-danger border-bottom pb-2 mb-3">
+                    <i class="bi bi-info-circle me-2"></i>Thông tin chung gói Combo
+                </h5>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label asp-for="Name" class="form-label fw-semibold">Tên gói Combo <span class="text-danger">*</span></label>
+                        <input asp-for="Name" class="form-control" placeholder="Ví dụ: Combo 2 Giờ + 2 Nước ngọt" required />
+                        <span asp-validation-for="Name" class="field-error"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="Price" class="form-label fw-semibold">Giá trọn gói Combo (VNĐ) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input asp-for="Price" type="number" step="1000" min="0" class="form-control text-end fw-bold text-danger" required />
+                            <span class="input-group-text">₫</span>
+                        </div>
+                        <span asp-validation-for="Price" class="field-error"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="PlaytimeHours" class="form-label fw-semibold">Số giờ chơi bao gồm <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input asp-for="PlaytimeHours" type="number" step="0.5" min="0" max="24" class="form-control text-end" required />
+                            <span class="input-group-text">Giờ</span>
+                        </div>
+                        <span asp-validation-for="PlaytimeHours" class="field-error"></span>
+                        <div class="form-text">Cung cấp số giờ cho WF1 tính toán thời gian chơi & tiền vượt giờ.</div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="TableTypeId" class="form-label fw-semibold">Loại bàn áp dụng</label>
+                        <select asp-for="TableTypeId" class="form-select">
+                            <option value="">-- Tất cả các loại bàn --</option>
+                            @foreach (var tt in tableTypes)
+                            {
+                                <option value="@tt.Id">@tt.Name (@tt.HourlyRate.ToString("N0") ₫/giờ)</option>
+                            }
+                        </select>
+                        <div class="form-text">Để trống nếu áp dụng cho mọi loại bàn trong quán.</div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check form-switch fs-6">
+                            <input asp-for="IsActive" class="form-check-input" type="checkbox" id="flexSwitchActive">
+                            <label class="form-check-label fw-semibold" for="flexSwitchActive">Đang mở bán</label>
+                        </div>
+                    </div>
+                </div>
+
+                <h5 class="fw-bold text-danger border-bottom pb-2 mb-3 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-cup-straw me-2"></i>Món ăn / Nước uống đi kèm</span>
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="addItemRow()">
+                        <i class="bi bi-plus-lg me-1"></i>+ Thêm món kèm
+                    </button>
+                </h5>
+
+                <div class="table-responsive mb-4">
+                    <table class="table table-bordered align-middle" id="comboItemsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Chọn Món ăn / Đồ uống</th>
+                                <th style="width: 150px;" class="text-center">Số lượng</th>
+                                <th style="width: 80px;" class="text-center">Xóa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comboItemsBody">
+                            @if (Model.Items != null && Model.Items.Count > 0)
+                            {
+                                for (int i = 0; i < Model.Items.Count; i++)
+                                {
+                                    <tr>
+                                        <td>
+                                            <select name="Items[@i].ProductId" class="form-select product-select" required>
+                                                <option value="">-- Chọn món --</option>
+                                                @foreach (var p in products)
+                                                {
+                                                    <option value="@p.Id" selected="@(Model.Items[i].ProductId == p.Id)">
+                                                        @p.Name (Giá lẻ: @p.Price.ToString("N0")₫ - Kho: @p.StockQuantity)
+                                                    </option>
+                                                }
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="number" name="Items[@i].Quantity" value="@Model.Items[i].Quantity" min="1" max="99" class="form-control text-center" required />
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-outline-danger btn-sm-icon" onclick="removeRow(this)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="alert alert-info py-2 small">
+                    <i class="bi bi-shield-check me-2"></i><strong>Quy tắc BR-07a:</strong> Khi nhân viên mở bàn chọn gói Combo này, hệ thống sẽ tự động trừ kho các món kèm trên. Nếu một trong các món kèm có tồn kho không đủ, hệ thống sẽ từ chối mở combo để bảo vệ tính chính xác của kho.
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a asp-action="Index" class="btn btn-outline-secondary">Hủy bỏ</a>
+                    <button type="submit" class="btn btn-primary-bms px-4">
+                        <i class="bi bi-check-lg me-1"></i>@(isEdit ? "Lưu thay đổi Combo" : "Tạo gói Combo")
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<template id="itemRowTemplate">
+    <tr>
+        <td>
+            <select name="Items[INDEX].ProductId" class="form-select product-select" required>
+                <option value="">-- Chọn món --</option>
+                @foreach (var p in products)
+                {
+                    <option value="@p.Id">@p.Name (Giá lẻ: @p.Price.ToString("N0")₫ - Kho: @p.StockQuantity)</option>
+                }
+            </select>
+        </td>
+        <td>
+            <input type="number" name="Items[INDEX].Quantity" value="1" min="1" max="99" class="form-control text-center" required />
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-outline-danger btn-sm-icon" onclick="removeRow(this)">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    </tr>
+</template>
+
+<script>
+    function addItemRow() {
+        const tbody = document.getElementById('comboItemsBody');
+        const template = document.getElementById('itemRowTemplate');
+        const index = tbody.querySelectorAll('tr').length;
+        let html = template.innerHTML.replaceAll('INDEX', index);
+        tbody.insertAdjacentHTML('beforeend', html);
+    }
+
+    function removeRow(btn) {
+        const row = btn.closest('tr');
+        row.remove();
+        reindexRows();
+    }
+
+    function reindexRows() {
+        const rows = document.querySelectorAll('#comboItemsBody tr');
+        rows.forEach((row, idx) => {
+            row.querySelectorAll('select, input').forEach(input => {
+                input.name = input.name.replace(/\[\d+\]/, `[${idx}]`);
+            });
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (document.querySelectorAll('#comboItemsBody tr').length === 0) {
+            addItemRow();
+        }
+    });
+</script>

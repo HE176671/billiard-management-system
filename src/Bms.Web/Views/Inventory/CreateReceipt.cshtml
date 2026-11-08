@@ -1,0 +1,196 @@
+@model Bms.Web.Models.StockReceiptInputModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Lập phiếu nhập kho";
+    var products = ViewBag.Products as List<Bms.Web.Models.ProductViewModel> ?? new();
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h4 mb-1 fw-bold text-dark">
+                <i class="bi bi-box-arrow-in-down text-danger me-2"></i>Lập phiếu nhập kho hàng F&B
+            </h1>
+            <p class="text-muted small mb-0">Nhập hàng F&B, lưu giá vốn (Cost Price) và tự động ghi sổ cái Thẻ kho (UC-11)</p>
+        </div>
+        <a asp-action="Receipts" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Quay lại danh sách phiếu
+        </a>
+    </div>
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <div asp-validation-summary="All" class="d-inline"></div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <form asp-action="CreateReceipt" method="post" id="receiptForm">
+        @Html.AntiForgeryToken()
+
+        <div class="row g-4 mb-4">
+            <!-- Thông tin phiếu -->
+            <div class="col-lg-4">
+                <div class="data-card p-4 h-100 shadow-sm">
+                    <h5 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                        <i class="bi bi-card-text text-danger me-2"></i>Thông tin chứng từ
+                    </h5>
+
+                    <div class="mb-3">
+                        <label asp-for="ReceiptCode" class="form-label text-muted small text-uppercase fw-semibold">Mã phiếu / Số HĐ: <span class="text-danger">*</span></label>
+                        <input asp-for="ReceiptCode" class="form-control" placeholder="Ví dụ: PN-20261108-001" required />
+                        <span asp-validation-for="ReceiptCode" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="SupplierName" class="form-label text-muted small text-uppercase fw-semibold">Nhà cung cấp: <span class="text-danger">*</span></label>
+                        <input asp-for="SupplierName" class="form-control" placeholder="Ví dụ: Đại lý nước ngọt & bia ABC..." required />
+                        <span asp-validation-for="SupplierName" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Note" class="form-label text-muted small text-uppercase fw-semibold">Ghi chú phiếu nhập:</label>
+                        <textarea asp-for="Note" class="form-control" rows="3" placeholder="Nhập ghi chú giao hàng, số lô hoặc tình trạng hàng..."></textarea>
+                    </div>
+
+                    <div class="p-3 bg-light rounded border mt-auto">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-muted small">Tổng số mặt hàng:</span>
+                            <span id="displayTotalItems" class="fw-bold text-dark fs-6">0</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted small">Tổng tiền nhập hàng:</span>
+                            <span id="displayTotalAmount" class="fw-bold text-success fs-5">0 đ</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Danh sách mặt hàng nhập -->
+            <div class="col-lg-8">
+                <div class="data-card p-4 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                        <h5 class="fw-bold text-dark mb-0">
+                            <i class="bi bi-list-check text-danger me-2"></i>Chi tiết mặt hàng nhập kho
+                        </h5>
+                        <button type="button" class="btn btn-sm btn-primary-bms" id="btnAddRow">
+                            <i class="bi bi-plus-lg me-1"></i>Thêm dòng món
+                        </button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-3" id="itemsTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 45%;">MÓN / HÀNG HÓA <span class="text-danger">*</span></th>
+                                    <th style="width: 20%;" class="text-center">SỐ LƯỢNG <span class="text-danger">*</span></th>
+                                    <th style="width: 25%;" class="text-end">GIÁ VỐN NHẬP (Đ) <span class="text-danger">*</span></th>
+                                    <th style="width: 10%;" class="text-center">XÓA</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                <!-- Dynamic rows inserted by script -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                        <a asp-action="Receipts" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary-bms px-4">
+                            <i class="bi bi-check-circle me-1"></i>Lưu &amp; Nhập kho hàng
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        const productsCatalog = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(products.Select(p => new { p.Id, p.Name, p.Price, p.StockQuantity })));
+        let rowIndex = 0;
+
+        function addRow(productId = '', quantity = 1, costPrice = 0) {
+            const tbody = document.getElementById('itemsBody');
+            const tr = document.createElement('tr');
+            tr.id = `row_${rowIndex}`;
+
+            let optionsHtml = '<option value="">-- Chọn mặt hàng --</option>';
+            productsCatalog.forEach(p => {
+                const selected = p.Id === productId ? 'selected' : '';
+                optionsHtml += `<option value="${p.Id}" data-price="${p.Price}" ${selected}>${p.Name} (Tồn hiện tại: ${p.StockQuantity})</option>`;
+            });
+
+            tr.innerHTML = `
+                <td>
+                    <select name="Items[${rowIndex}].ProductId" class="form-select product-select" required onchange="onProductChange(this, ${rowIndex})">
+                        ${optionsHtml}
+                    </select>
+                </td>
+                <td>
+                    <input type="number" name="Items[${rowIndex}].Quantity" class="form-control text-center qty-input" 
+                           value="${quantity}" min="1" required oninput="calculateTotals()" />
+                </td>
+                <td>
+                    <input type="number" name="Items[${rowIndex}].CostPrice" class="form-control text-end cost-input" 
+                           value="${costPrice}" min="0" step="500" required oninput="calculateTotals()" />
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn-sm-icon danger" onclick="removeRow(${rowIndex})" title="Xóa dòng">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+
+            tbody.appendChild(tr);
+            rowIndex++;
+            calculateTotals();
+        }
+
+        function removeRow(idx) {
+            const row = document.getElementById(`row_${idx}`);
+            if (row) {
+                row.remove();
+                calculateTotals();
+            }
+        }
+
+        function onProductChange(selectElem, idx) {
+            calculateTotals();
+        }
+
+        function calculateTotals() {
+            let totalItems = 0;
+            let totalAmount = 0;
+
+            const rows = document.querySelectorAll('#itemsBody tr');
+            rows.forEach(r => {
+                const pSelect = r.querySelector('.product-select');
+                const qtyInput = r.querySelector('.qty-input');
+                const costInput = r.querySelector('.cost-input');
+
+                if (pSelect && pSelect.value) {
+                    totalItems++;
+                    const qty = parseFloat(qtyInput?.value) || 0;
+                    const cost = parseFloat(costInput?.value) || 0;
+                    totalAmount += (qty * cost);
+                }
+            });
+
+            document.getElementById('displayTotalItems').innerText = totalItems;
+            document.getElementById('displayTotalAmount').innerText = totalAmount.toLocaleString('vi-VN') + ' đ';
+        }
+
+        document.getElementById('btnAddRow').addEventListener('click', () => {
+            addRow();
+        });
+
+        // Tự động khởi tạo sẵn 1 dòng ban đầu
+        addRow();
+    </script>
+}

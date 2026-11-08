@@ -3,6 +3,7 @@ using Bms.Web.Data;
 using Bms.Web.Models;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace Bms.Web.Services;
@@ -205,6 +206,52 @@ public class TableSessionService : ITableSessionService
             combos = await LoadSessionCombosAsync(sid);
         }
 
+        List<OrderViewModel> orders = new();
+        decimal fandBAmount = 0m;
+        if (sessionId.HasValue)
+        {
+            var sid = sessionId.Value;
+            var orderEntities = await _context.Orders.AsNoTracking()
+                .Include(o => o.CreatedBy)
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(d => d.Product)
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(d => d.CancelledBy)
+                .Where(o => o.SessionId == sid)
+                .OrderByDescending(o => o.OrderTimeUtc)
+                .ToListAsync();
+
+            orders = orderEntities.Select(o => new OrderViewModel
+            {
+                Id = o.Id,
+                SessionId = o.SessionId,
+                TableCode = raw.TableCode,
+                OrderTimeUtc = o.OrderTimeUtc,
+                Status = o.Status,
+                OrderSource = o.OrderSource,
+                ClientSessionId = o.ClientSessionId,
+                RejectReason = o.RejectReason,
+                Note = o.Note,
+                CreatedByName = o.CreatedBy != null ? o.CreatedBy.FullName : (o.OrderSource == "QR" ? "Khách quét QR" : "Nhân viên"),
+                Details = o.OrderDetails.Select(d => new OrderDetailViewModel
+                {
+                    Id = d.Id,
+                    OrderId = d.OrderId,
+                    ProductId = d.ProductId,
+                    ProductName = d.Product != null ? d.Product.Name : "Món #" + d.ProductId,
+                    Quantity = d.Quantity,
+                    UnitPrice = d.UnitPrice,
+                    Status = d.Status,
+                    CancelledQuantity = d.CancelledQuantity,
+                    CancelledAtUtc = d.CancelledAtUtc,
+                    CancelledByName = d.CancelledBy != null ? d.CancelledBy.FullName : null,
+                    CancelReason = d.CancelReason
+                }).ToList()
+            }).ToList();
+
+            fandBAmount = orders.Where(o => o.Status == "Completed").Sum(o => o.TotalAmount);
+        }
+
         decimal comboAmount = combos.Sum(c => c.Subtotal);
         int totalComboMinutes = combos.Sum(c => c.TotalMinutes);
         bool hasCombo = combos.Count > 0;
@@ -237,6 +284,8 @@ public class TableSessionService : ITableSessionService
             CustomerId = customerId,
             CustomerFullName = customerFullName,
             CustomerPhone = customerPhone,
+            FandBAmount = fandBAmount,
+            Orders = orders,
             Segments = segments,
             Combos = combos,
             ServerTimeUtc = serverTimeUtc
@@ -443,6 +492,10 @@ public class TableSessionService : ITableSessionService
 
             using (var cmd = conn.CreateCommand())
             {
+                if (_context.Database.CurrentTransaction != null)
+                {
+                    cmd.Transaction = (SqlTransaction)_context.Database.CurrentTransaction.GetDbTransaction();
+                }
                 cmd.CommandText = "dbo.usp_OpenSession";
                 cmd.CommandType = CommandType.StoredProcedure;
 
@@ -502,7 +555,7 @@ public class TableSessionService : ITableSessionService
         }
         finally
         {
-            if (openedHere && conn.State == ConnectionState.Open)
+            if (openedHere && _context.Database.CurrentTransaction == null && conn.State == ConnectionState.Open)
             {
                 await conn.CloseAsync();
             }
@@ -534,6 +587,10 @@ public class TableSessionService : ITableSessionService
             }
 
             using var cmd = conn.CreateCommand();
+            if (_context.Database.CurrentTransaction != null)
+            {
+                cmd.Transaction = (SqlTransaction)_context.Database.CurrentTransaction.GetDbTransaction();
+            }
             cmd.CommandText = "dbo.usp_CloseSession";
             cmd.CommandType = CommandType.StoredProcedure;
 
@@ -580,7 +637,7 @@ public class TableSessionService : ITableSessionService
         }
         finally
         {
-            if (openedHere && conn.State == ConnectionState.Open)
+            if (openedHere && _context.Database.CurrentTransaction == null && conn.State == ConnectionState.Open)
             {
                 await conn.CloseAsync();
             }
@@ -605,6 +662,10 @@ public class TableSessionService : ITableSessionService
             }
 
             using var cmd = conn.CreateCommand();
+            if (_context.Database.CurrentTransaction != null)
+            {
+                cmd.Transaction = (SqlTransaction)_context.Database.CurrentTransaction.GetDbTransaction();
+            }
             cmd.CommandText = @"
 SELECT 
     s.Id AS SessionId,
@@ -675,7 +736,7 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         }
         finally
         {
-            if (openedHere && conn.State == ConnectionState.Open)
+            if (openedHere && _context.Database.CurrentTransaction == null && conn.State == ConnectionState.Open)
             {
                 await conn.CloseAsync();
             }
@@ -710,6 +771,10 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
             }
 
             using var cmd = conn.CreateCommand();
+            if (_context.Database.CurrentTransaction != null)
+            {
+                cmd.Transaction = (SqlTransaction)_context.Database.CurrentTransaction.GetDbTransaction();
+            }
             cmd.CommandText = "dbo.usp_TransferSession";
             cmd.CommandType = CommandType.StoredProcedure;
 
@@ -758,7 +823,7 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         }
         finally
         {
-            if (openedHere && conn.State == ConnectionState.Open)
+            if (openedHere && _context.Database.CurrentTransaction == null && conn.State == ConnectionState.Open)
             {
                 await conn.CloseAsync();
             }
@@ -805,6 +870,10 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
             }
 
             using var cmd = conn.CreateCommand();
+            if (_context.Database.CurrentTransaction != null)
+            {
+                cmd.Transaction = (SqlTransaction)_context.Database.CurrentTransaction.GetDbTransaction();
+            }
             cmd.CommandText = "dbo.usp_AddSessionCombo";
             cmd.CommandType = CommandType.StoredProcedure;
 
@@ -855,7 +924,7 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         }
         finally
         {
-            if (openedHere && conn.State == ConnectionState.Open)
+            if (openedHere && _context.Database.CurrentTransaction == null && conn.State == ConnectionState.Open)
             {
                 await conn.CloseAsync();
             }
@@ -895,13 +964,13 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
 
     private static bool IsKnownDomainError(int errorNumber) => errorNumber switch
     {
-        51401 or 51402 or 51403 or 51408 or 51501 or 51502 or 51611 or 51612 or 51613 or 51614 or 51616 or 51699 or 51711 or 51712 or 51713 or 51714 or 51715 => true,
+        51401 or 51402 or 51403 or 51408 or 51501 or 51502 or 51611 or 51612 or 51613 or 51614 or 51616 or 51699 or 51711 or 51712 or 51713 or 51714 or 51715 or 51716 => true,
         _ => false
     };
 
     private static bool IsAutoReloadError(int errorNumber) => errorNumber switch
     {
-        51402 or 51403 or 51502 or 51612 or 51613 or 51699 or 51713 or 51714 or 51715 => true,
+        51402 or 51403 or 51502 or 51612 or 51613 or 51699 or 51713 or 51714 or 51715 or 51716 => true,
         _ => false
     };
 
@@ -924,6 +993,7 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
         51713 => "Chỉ được chọn Combo cho phiên đang hoạt động (phiên có thể đã kết thúc).",
         51714 => "Gói Combo đã chọn không tồn tại hoặc đã ngừng bán.",
         51715 => "Phiên chơi chỉ được áp dụng 1 gói Combo duy nhất.",
+        51716 => "Món kèm trong gói Combo đã hết hàng trong kho. Không thể áp dụng Combo này!",
         _ => "Đã xảy ra lỗi khi kết nối hoặc xử lý cơ sở dữ liệu. Vui lòng thử lại sau."
     };
 }
