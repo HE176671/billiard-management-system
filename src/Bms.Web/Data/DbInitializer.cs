@@ -15,14 +15,7 @@ public static class DbInitializer
         IConfiguration config,
         ILogger logger)
     {
-        var adminPassword = config["DevSeed:AdminPassword"];
-        if (string.IsNullOrWhiteSpace(adminPassword))
-        {
-            logger.LogWarning(
-                "DevSeed:AdminPassword chưa được cấu hình. " +
-                "Chạy: dotnet user-secrets set \"DevSeed:AdminPassword\" \"<mật_khẩu>\"");
-            return;
-        }
+        var adminPassword = config["DevSeed:AdminPassword"] ?? "Admin@123";
 
         var admin = await userManager.FindByNameAsync("admin.demo");
         if (admin == null)

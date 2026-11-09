@@ -369,7 +369,7 @@ public partial class CheckoutService : ICheckoutService
                                               * s.HourlyRateSnapshot, -3) AS decimal(18,2)) END AS PlaytimeAmount,
                     ISNULL((SELECT SUM(od.Subtotal) FROM dbo.Orders o
                             INNER JOIN dbo.OrderDetails od ON od.OrderId = o.Id
-                            WHERE o.SessionId = s.Id AND o.Status = 'Served'), 0) AS FandBAmount
+                            WHERE o.SessionId = s.Id AND o.Status IN ('Served', 'Completed')), 0) AS FandBAmount
                 FROM dbo.PlaySessions s
                 WHERE s.Id = {sessionId};
                 """).ToListAsync(ct);

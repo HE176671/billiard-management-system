@@ -1,0 +1,31 @@
+sequenceDiagram
+    actor Cashier as Thu ngân (Cashier)
+    participant UI as Giao diện Tính tiền
+    participant Ctrl as BillingController
+    participant Svc as BillingService
+    participant DB as SQL Server (BilliardDB)
+
+    Cashier->>UI: Yêu cầu tính tiền bàn chơi (SessionId)
+    UI->>Ctrl: GET /sessions/{id}/checkout-preview
+    Ctrl->>Svc: GetCheckoutPreviewAsync(sessionId)
+    Svc->>DB: Truy vấn PlaySessions, Orders(Served), SessionCombos
+    DB-->>Svc: Trả về số liệu tiền giờ tạm tính, tiền F&B, combo
+    Svc-->>Ctrl: CheckoutPreviewDto
+    Ctrl-->>UI: Hiển thị bảng kê chi tiết
+
+    Cashier->>UI: Bấm "Thanh toán" (Chọn tiền mặt / QR Transfer, Giảm giá)
+    UI->>Ctrl: POST /invoices/process-payment (payload)
+    Ctrl->>Svc: ProcessPaymentAsync(dto)
+    activate Svc
+    Svc->>DB: EXEC dbo.usp_CloseSession @SessionId, @StaffId
+    Note over DB: Chốt PlaytimeAmount, Status='Closed', Table='AwaitingPayment'
+    Svc->>DB: BEGIN TRANSACTION
+    Svc->>DB: INSERT/UPDATE Invoices SET Status='Paid', TotalPlaytime, TotalFandB, DiscountAmount
+    Svc->>DB: INSERT INTO PaymentTransactions (InvoiceId, PaymentMethod, AmountPaid)
+    Svc->>DB: UPDATE BilliardTables SET Status='Available' WHERE Id = @tableId
+    Svc->>DB: COMMIT TRANSACTION
+    Note over Svc,DB: Khóa bất biến: Invoice chuyển sang Read-Only vĩnh viễn
+    Svc-->>Ctrl: ServiceResult.Success(InvoicePaidDto)
+    Ctrl-->>UI: 200 OK: Thanh toán hoàn tất, bàn đã chuyển sang Trống
+    UI-->>Cashier: Mở hộp thoại In phiếu thu (POS Receipt 80mm)
+    deactivate Svc

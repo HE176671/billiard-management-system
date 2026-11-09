@@ -1,0 +1,317 @@
+@model List<Bms.Web.Models.OrderViewModel>
+@{
+    ViewData["Title"] = "Duyệt đơn gọi món QR Realtime";
+    Layout = "_AdminLayout";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1"><i class="bi bi-bell-fill text-warning me-2"></i>Đơn gọi món QR chờ duyệt (UC-24)</h4>
+        <div class="text-muted small">Nhận thông báo realtime từ khách quét mã QR tại bàn và xác nhận trừ kho</div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill" id="realtimeStatusBadge">
+            <i class="bi bi-broadcast me-1"></i>Realtime: Đang kết nối...
+        </span>
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Làm mới
+        </button>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #fef3c7; color: #b45309;">
+                <i class="bi bi-clock-history"></i>
+            </div>
+            <div>
+                <div class="stat-val" id="pendingCountDisplay">@Model.Count</div>
+                <div class="stat-lbl">Đơn đang chờ nhân viên duyệt</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #e0f2fe; color: #0284c7;">
+                <i class="bi bi-cup-straw"></i>
+            </div>
+            <div>
+                <div class="stat-val">@Model.Sum(o => o.Details.Sum(d => d.Quantity))</div>
+                <div class="stat-lbl">Tổng số món khách đang gọi</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #dcfce7; color: #16a34a;">
+                <i class="bi bi-currency-dollar"></i>
+            </div>
+            <div>
+                <div class="stat-val">@Model.Sum(o => o.TotalAmount).ToString("N0") đ</div>
+                <div class="stat-lbl">Tổng giá trị đơn chờ duyệt</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="data-card">
+    <div class="card-header-flex">
+        <div class="fw-bold fs-6">Danh sách đơn hàng QR chờ xác nhận</div>
+        <span class="text-muted small">Cập nhật tự động qua SignalR Hub</span>
+    </div>
+
+    @if (Model == null || Model.Count == 0)
+    {
+        <div class="text-center py-5 text-muted" id="emptyStateBox">
+            <i class="bi bi-check2-circle display-4 text-success mb-2 d-block"></i>
+            <div class="fw-bold">Hiện không có đơn QR nào đang chờ duyệt</div>
+            <div class="small">Khi khách quét mã tại bàn và đặt món, chuông báo và đơn mới sẽ hiển thị tại đây ngay lập tức.</div>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="data-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">Mã đơn</th>
+                        <th style="width: 120px;">Bàn chơi</th>
+                        <th style="width: 110px;">Thời gian</th>
+                        <th>Chi tiết món gọi &amp; Tồn kho</th>
+                        <th style="width: 130px;">Tổng tiền</th>
+                        <th style="width: 160px;">Ghi chú khách</th>
+                        <th style="width: 200px;" class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="pendingOrdersTbody">
+                    @foreach (var order in Model)
+                    {
+                        var isAwaitingPayment = order.TableStatus == "AwaitingPayment";
+                        <tr id="order-row-@order.Id">
+                            <td>
+                                <strong class="text-primary">#@order.Id</strong>
+                            </td>
+                            <td>
+                                <span class="badge bg-primary px-2 py-1 fs-6">@order.TableCode</span>
+                                @if (isAwaitingPayment)
+                                {
+                                    <div class="mt-1">
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.7rem;">
+                                            Chờ thanh toán
+                                        </span>
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@order.OrderTimeUtc.AddHours(7).ToString("HH:mm:ss")</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">@order.OrderTimeUtc.AddHours(7).ToString("dd/MM/yyyy")</div>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-column gap-1">
+                                    @foreach (var detail in order.Details)
+                                    {
+                                        <div class="d-flex align-items-center gap-2 small">
+                                            <span class="fw-bold text-dark">• @detail.Quantity x @detail.ProductName</span>
+                                            <span class="text-muted">(@detail.UnitPrice.ToString("N0") đ)</span>
+                                            <span class="badge @(detail.CurrentStock >= detail.Quantity ? "bg-success-subtle text-success border border-success-subtle" : "bg-danger text-white")" style="font-size: 0.7rem;">
+                                                Kho còn: @detail.CurrentStock
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                            <td>
+                                <strong class="text-success fs-6">@order.TotalAmount.ToString("N0") đ</strong>
+                            </td>
+                            <td>
+                                <span class="small text-muted fst-italic">@(string.IsNullOrEmpty(order.Note) ? "—" : order.Note)</span>
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end gap-1">
+                                    @if (isAwaitingPayment)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-secondary disabled" title="Bàn đã Chờ thanh toán thì không xác nhận được đơn">
+                                            <i class="bi bi-slash-circle me-1"></i>Bàn chờ trả
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <form asp-action="ConfirmQr" method="post" class="d-inline" onsubmit="return confirm('Xác nhận duyệt đơn #@order.Id và trừ kho?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="orderId" value="@order.Id" />
+                                            <button type="submit" class="btn btn-sm btn-success fw-bold">
+                                                <i class="bi bi-check-lg me-1"></i>Xác nhận
+                                            </button>
+                                        </form>
+                                    }
+
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="openRejectModal(@order.Id, '@order.TableCode')">
+                                        <i class="bi bi-x-lg me-1"></i>Từ chối
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<!-- Modal Từ chối đơn hàng -->
+<div class="modal fade" id="rejectOrderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0">
+            <form asp-action="RejectQr" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="rejectOrderId" name="orderId" value="" />
+                <div class="modal-header bg-light">
+                    <h6 class="modal-title fw-bold text-danger">
+                        <i class="bi bi-x-circle-fill me-2"></i>Từ chối đơn gọi món QR
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <p class="small text-muted mb-3" id="rejectModalDesc">
+                        Vui lòng nhập lý do từ chối để hệ thống gửi thông báo phản hồi cho khách tại bàn.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Lý do từ chối <span class="text-danger">*</span>:</label>
+                        <select class="form-select mb-2" id="quickReasonSelect" onchange="applyQuickReason()">
+                            <option value="">-- Chọn lý do nhanh hoặc tự nhập --</option>
+                            <option value="Tạm hết món trong kho">Tạm hết món trong kho</option>
+                            <option value="Bàn đang tiến hành thanh toán">Bàn đang tiến hành thanh toán</option>
+                            <option value="Khách yêu cầu hủy qua nhân viên">Khách yêu cầu hủy qua nhân viên</option>
+                            <option value="Nhập sai thông tin món">Nhập sai thông tin món</option>
+                        </select>
+                        <textarea class="form-control" name="reason" id="rejectReasonText" rows="3" placeholder="Nhập lý do chi tiết..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold">
+                        <i class="bi bi-x-octagon me-1"></i>Xác nhận từ chối
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        function playOrderChime() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+                osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+            } catch (e) {
+                console.warn("Audio chime error:", e);
+            }
+        }
+
+        function openRejectModal(orderId, tableCode) {
+            document.getElementById('rejectOrderId').value = orderId;
+            document.getElementById('rejectModalDesc').textContent = `Từ chối đơn hàng #${orderId} của Bàn ${tableCode}. Kho sẽ không bị trừ.`;
+            document.getElementById('rejectReasonText').value = '';
+            document.getElementById('quickReasonSelect').value = '';
+            const modal = new bootstrap.Modal(document.getElementById('rejectOrderModal'));
+            modal.show();
+        }
+
+        function applyQuickReason() {
+            const val = document.getElementById('quickReasonSelect').value;
+            if (val) {
+                document.getElementById('rejectReasonText').value = val;
+            }
+        }
+
+        // Khởi tạo SignalR kết nối OrderHub
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/hubs/order")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("ReceiveNewOrder", function (data) {
+            console.log("New QR order received realtime:", data);
+            playOrderChime();
+
+            // Hiển thị toast thông báo
+            const notiTitle = `Khách Bàn ${data.tableCode} vừa gọi món!`;
+            const notiBody = `Đơn #${data.orderId} (${data.itemCount} món). Lúc ${data.orderTime}`;
+            
+            if (Notification.permission === "granted") {
+                new Notification(notiTitle, { body: notiBody, icon: "/favicon.ico" });
+            }
+
+            // Tự động tải lại trang sau 800ms để hiển thị đơn mới nhất
+            setTimeout(() => {
+                window.location.reload();
+            }, 800);
+        });
+
+        connection.on("OrderConfirmed", function (data) {
+            const row = document.getElementById(`order-row-${data.orderId}`);
+            if (row) {
+                row.remove();
+            }
+        });
+
+        connection.on("OrderRejected", function (data) {
+            const row = document.getElementById(`order-row-${data.orderId}`);
+            if (row) {
+                row.remove();
+            }
+        });
+
+        connection.start()
+            .then(function () {
+                console.log("Connected to OrderHub!");
+                const badge = document.getElementById('realtimeStatusBadge');
+                if (badge) {
+                    badge.innerHTML = `<i class="bi bi-broadcast me-1"></i>Realtime: Đang hoạt động`;
+                    badge.className = "badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill";
+                }
+                return connection.invoke("JoinStaffGroup");
+            })
+            .catch(function (err) {
+                console.error("SignalR Connection Error: ", err);
+                const badge = document.getElementById('realtimeStatusBadge');
+                if (badge) {
+                    badge.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i>Realtime: Mất kết nối`;
+                    badge.className = "badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill";
+                }
+            });
+
+        // Yêu cầu quyền Browser Notification nếu chưa bật
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+    </script>
+}

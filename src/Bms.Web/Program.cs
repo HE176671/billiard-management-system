@@ -1,4 +1,5 @@
 using Bms.Web.Data;
+using Bms.Web.Hubs;
 using Bms.Web.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -75,6 +76,13 @@ builder.Services.ConfigureApplicationCookie(options =>
 // TV5: dich vu ca lam dung chung (TV3 goi khi ghi nhan tien mat)
 builder.Services.AddScoped<IShiftService, ShiftService>();
 
+// WF2: Goi mon & Kho (Tung)
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<IComboService, ComboService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+
 #endregion
 
 #region Thu tu middleware va dinh tuyen MVC
@@ -113,6 +121,8 @@ app.MapControllerRoute(
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.MapHub<OrderHub>("/hubs/order");
 
 #endregion
 

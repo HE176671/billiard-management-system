@@ -1,0 +1,80 @@
+classDiagram
+    class MenuController {
+        -IMenuService _menuService
+        +Index(search, categoryId, status, page) Task~IActionResult~
+        +CreateCategory(model) Task~IActionResult~
+        +EditCategory(model) Task~IActionResult~
+        +Create() Task~IActionResult~
+        +Create(model) Task~IActionResult~
+        +Edit(id) Task~IActionResult~
+        +Edit(id, model) Task~IActionResult~
+    }
+
+    class ComboController {
+        -IMenuService _menuService
+        +Index(search, status) Task~IActionResult~
+        +Create() Task~IActionResult~
+        +Create(model) Task~IActionResult~
+        +Edit(id) Task~IActionResult~
+        +Edit(id, model) Task~IActionResult~
+        +ToggleStatus(id) Task~IActionResult~
+    }
+
+    class IMenuService {
+        <<interface>>
+        +GetCategoriesAsync() Task~List~ProductCategory~~
+        +CreateCategoryAsync(name) Task~ServiceResult~ProductCategory~~
+        +UpdateCategoryAsync(id, name) Task~ServiceResult~ProductCategory~~
+        +GetProductsPagedAsync(search, categoryId, status, page, pageSize) Task~Tuple~
+        +CreateProductAsync(categoryId, name, price, stockQuantity) Task~ServiceResult~Product~~
+        +UpdateProductAsync(id, categoryId, name, price, rowVersionBase64) Task~ServiceResult~Product~~
+        +AdjustStockAsync(productId, quantityDelta, reason, rowVersionBase64) Task~ServiceResult~Product~~
+        +ToggleProductStatusAsync(id, rowVersionBase64) Task~ServiceResult~Product~~
+        +GetCombosAsync(search, statusFilter) Task~List~Combo~~
+        +CreateComboAsync(name, price, playtimeHours, items) Task~ServiceResult~Combo~~
+        +UpdateComboAsync(id, name, price, playtimeHours, items) Task~ServiceResult~Combo~~
+        +ToggleComboStatusAsync(id) Task~ServiceResult~Combo~~
+    }
+
+    class MenuService {
+        -ApplicationDbContext _context
+    }
+
+    class ProductCategory {
+        +int Id
+        +string Name
+        +ICollection~Product~ Products
+    }
+
+    class Product {
+        +int Id
+        +int CategoryId
+        +string Name
+        +decimal Price
+        +int StockQuantity
+        +bool IsActive
+        +byte[] RowVersion
+    }
+
+    class Combo {
+        +int Id
+        +string Name
+        +decimal Price
+        +decimal PlaytimeHours
+        +bool IsActive
+        +ICollection~ComboItem~ ComboItems
+    }
+
+    class ComboItem {
+        +int ComboId
+        +int ProductId
+        +int Quantity
+    }
+
+    MenuController --> IMenuService
+    ComboController --> IMenuService
+    MenuService ..|> IMenuService
+    MenuService --> ProductCategory
+    MenuService --> Product
+    MenuService --> Combo
+    MenuService --> ComboItem

@@ -1,0 +1,92 @@
+erDiagram
+    ProductCategories ||--o{ Products : "1 - N (FK_Product_Category)"
+    Combos ||--|{ ComboItems : "1 - N (FK_ComboItems_Combo)"
+    Products ||--o{ ComboItems : "1 - N (FK_ComboItems_Product)"
+
+    PlaySessions ||--o{ SessionCombos : "1 - N (FK_SessionCombos_Session)"
+    Combos ||--o{ SessionCombos : "1 - N (FK_SessionCombos_Combo)"
+    SessionCombos ||--|{ SessionComboItems : "1 - N (FK_SessionComboItems_Purchase)"
+    Products ||--o{ SessionComboItems : "1 - N (FK_SessionComboItems_Product)"
+
+    PlaySessions ||--o{ Orders : "1 - N (FK_Order_Session)"
+    Orders ||--|{ OrderDetails : "1 - N (FK_OrderDetail_Order)"
+    Products ||--o{ OrderDetails : "1 - N (FK_OrderDetail_Product)"
+
+    PlaySessions ||--|| Invoices : "1 - 1 (UQ_Invoice_Session)"
+    Invoices ||--o{ PaymentTransactions : "1 - N (FK_Payment_Invoice)"
+
+    ProductCategories {
+        int Id PK
+        nvarchar_60 Name UK
+    }
+    Products {
+        int Id PK
+        int CategoryId FK
+        nvarchar_100 Name UK
+        decimal_18_2 Price
+        int StockQuantity
+        bit IsActive
+        rowversion RowVersion
+    }
+    Combos {
+        int Id PK
+        nvarchar_100 Name UK
+        decimal_18_2 Price
+        decimal_5_2 PlaytimeHours
+        bit IsActive
+    }
+    ComboItems {
+        int ComboId PK,FK
+        int ProductId PK,FK
+        int Quantity
+    }
+    SessionCombos {
+        int Id PK
+        int SessionId FK
+        int ComboId FK
+        int Quantity
+        nvarchar_100 ComboNameSnapshot
+        decimal_18_2 UnitPriceSnapshot
+        decimal_5_2 PlaytimeHoursSnapshot
+        datetime2 PurchasedAtUtc
+        nvarchar_450 CreatedById FK
+    }
+    SessionComboItems {
+        int SessionComboId PK,FK
+        int ProductId PK,FK
+        nvarchar_100 ProductNameSnapshot
+        int QuantityPerCombo
+    }
+    Orders {
+        int Id PK
+        int SessionId FK
+        datetime2 OrderTimeUtc
+        varchar_20 Status
+    }
+    OrderDetails {
+        int Id PK
+        int OrderId FK
+        int ProductId FK
+        int Quantity
+        decimal_18_2 UnitPrice
+        decimal_18_2 Subtotal
+    }
+    Invoices {
+        int Id PK
+        int SessionId UK,FK
+        nvarchar_450 CustomerId FK
+        decimal_18_2 TotalPlaytime
+        decimal_18_2 TotalFandB
+        decimal_18_2 DiscountAmount
+        decimal_18_2 FinalAmount
+        varchar_20 Status
+        datetime2 CreatedAtUtc
+    }
+    PaymentTransactions {
+        int Id PK
+        int InvoiceId FK
+        varchar_20 PaymentMethod
+        decimal_18_2 AmountPaid
+        nvarchar_100 GatewayRefCode
+        datetime2 TransactionTimeUtc
+    }

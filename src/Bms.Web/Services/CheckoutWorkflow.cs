@@ -42,8 +42,30 @@ public partial class CheckoutService
         {
             await LockCheckoutAsync("REF", command.ReferenceCode, ct);
             var draft = await _db.CheckoutDrafts.SingleOrDefaultAsync(d => d.ReferenceCode == command.ReferenceCode, ct);
-            if (draft == null) return new(false, false, false, "Phiếu thanh toán không tồn tại. Hãy mở giao dịch mới.");
-            await _db.Entry(draft).ReloadAsync(ct);
+            if (draft == null)
+            {
+                draft = new CheckoutDraft
+                {
+                    ReferenceCode = command.ReferenceCode,
+                    CreatedById = command.CashierId,
+                    CustomerId = command.CustomerId,
+                    SessionId = command.SessionId,
+                    IsManualEntry = command.SessionId == null,
+                    PlaytimeAmount = command.SubmittedPlaytimeAmount,
+                    FandBAmount = command.SubmittedFandBAmount,
+                    PointsToRedeem = command.PointsToRedeem,
+                    VoucherCode = command.VoucherCode,
+                    PaymentMethod = paymentMethod,
+                    CashReceived = command.CashReceived,
+                    Status = CheckoutDraft.Draft
+                };
+                _db.CheckoutDrafts.Add(draft);
+                await _db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                await _db.Entry(draft).ReloadAsync(ct);
+            }
             if (draft.Status != CheckoutDraft.Draft)
                 return new(draft.Status == CheckoutDraft.Paid, true, draft.Status == CheckoutDraft.Pending,
                     draft.Status == CheckoutDraft.Paid ? "Giao dịch đã được thanh toán." : "Phiếu đã được chốt. Hãy kiểm tra trạng thái hoặc chọn Sửa thanh toán.",

@@ -562,6 +562,65 @@
         if (boxPricing) boxPricing.classList.remove('d-none');
     }
 
+    function updateFandBBoxDisplay(detail) {
+        const boxFnb = document.getElementById('detail-fnb-box');
+        const listContainer = document.getElementById('detail-fnb-orders-list');
+        const elFnbTotal = document.getElementById('detail-fnb-total');
+        const elGrandTotal = document.getElementById('detail-grand-total');
+
+        const status = detail.status ?? detail.Status ?? currentSelectedTable.status;
+        const orders = detail.orders ?? detail.Orders ?? [];
+        const fnbAmount = Number(detail.fandBAmount ?? detail.FandBAmount ?? 0);
+        const estimatedAmount = Number(detail.estimatedAmount ?? detail.EstimatedAmount ?? 0);
+
+        if (status !== 'InUse') {
+            if (boxFnb) boxFnb.classList.add('d-none');
+            return;
+        }
+
+        if (boxFnb) boxFnb.classList.remove('d-none');
+
+        if (elFnbTotal) elFnbTotal.textContent = formatVnCurrency(fnbAmount);
+        if (elGrandTotal) elGrandTotal.textContent = formatVnCurrency(estimatedAmount + fnbAmount);
+
+        if (!listContainer) return;
+
+        if (orders.length === 0) {
+            listContainer.innerHTML = '<div class="text-muted small py-1 fst-italic">Chưa gọi món nào.</div>';
+            return;
+        }
+
+        let html = '<div class="fnb-items-scroll small" style="max-height:160px; overflow-y:auto;">';
+        orders.forEach(order => {
+            const isCompleted = order.status === 'Completed';
+            const details = order.details ?? order.Details ?? [];
+            details.forEach(item => {
+                const activeQty = item.quantity - item.cancelledQuantity;
+                const isCancelled = item.cancelledQuantity >= item.quantity;
+                html += `
+                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom ${isCancelled ? 'text-decoration-line-through text-muted' : ''}">
+                        <div>
+                            <strong>${escapeHtml(item.productName)}</strong>
+                            <span class="text-muted">x${item.quantity}</span>
+                            ${item.cancelledQuantity > 0 ? `<span class="badge bg-danger-subtle text-danger ms-1">Đã hủy ${item.cancelledQuantity}</span>` : ''}
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="fw-semibold ${isCancelled ? 'text-muted' : 'text-success'}">${formatVnCurrency(item.subtotal)}</span>
+                            ${isCompleted && activeQty > 0 ? `
+                                <button type="button" class="btn btn-outline-danger btn-xs py-0 px-1" title="Hủy món" 
+                                        onclick="window.openCancelItemModal(${item.id}, '${escapeHtml(item.productName)}', ${activeQty})">
+                                    <i class="bi bi-x-circle" style="font-size:0.75rem;"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        });
+        html += '</div>';
+        listContainer.innerHTML = html;
+    }
+
     async function refreshEstimatedAmount(tableId) {
         if (!tableId || isEstimatedAmountRefreshing) return;
         const requestId = ++estimatedAmountRequestId;
@@ -650,6 +709,7 @@
         }
 
         updatePricingBoxDisplay(detail);
+        updateFandBBoxDisplay(detail);
         renderSessionCombos(currentSelectedTable.combos, currentSelectedTable.totalComboMinutes);
         renderTableSegments(currentSelectedTable.segments);
         updateClocks();
@@ -778,7 +838,7 @@
             const el = document.getElementById(id);
             if (el) el.textContent = '--';
         });
-        const hideIds = ['detail-end-time-row', 'detail-combo-remaining-row', 'detail-pricing-box', 'detail-combos-box'];
+        const hideIds = ['detail-end-time-row', 'detail-combo-remaining-row', 'detail-pricing-box', 'detail-combos-box', 'detail-fnb-box'];
         hideIds.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('d-none');
@@ -1789,5 +1849,9 @@
         recalculateDeltaOffset();
         startClockTimer();
         startPolling();
+        window.currentSelectedTable = currentSelectedTable;
+        window.handleTableSelect = handleTableSelect;
+        window.showToast = showToast;
+        window.reloadTableGrid = reloadTableGrid;
     });
 })();

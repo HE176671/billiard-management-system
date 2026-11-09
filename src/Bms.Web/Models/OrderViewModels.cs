@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using Bms.Web.Services;
 
 namespace Bms.Web.Models;
@@ -83,10 +83,3 @@ public class SubmitOrderInputModel
     public string? IdempotencyToken { get; set; }
     public List<OrderItemInputModel> Items { get; set; } = new();
 }
-
-public class OrderItemInputModel
-{
-    public int ProductId { get; set; }
-    public int Quantity { get; set; }
-}
-

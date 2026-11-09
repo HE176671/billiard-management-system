@@ -1,0 +1,122 @@
+@model Bms.Web.Models.StockReceiptViewModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = $"Chi tiết phiếu nhập {Model.ReceiptCode}";
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h4 mb-1 fw-bold text-dark">
+                <i class="bi bi-file-earmark-spreadsheet text-danger me-2"></i>Phiếu nhập: @Model.ReceiptCode
+            </h1>
+            <p class="text-muted small mb-0">Chi tiết chứng từ nhập hàng F&B và giá vốn (UC-11)</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="Receipts" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Danh sách phiếu
+            </a>
+            <a asp-action="Ledger" class="btn btn-outline-bms">
+                <i class="bi bi-clock-history me-1"></i>Sổ cái Thẻ kho
+            </a>
+        </div>
+    </div>
+
+    <!-- Receipt Header Info -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-8">
+            <div class="data-card p-4 h-100 shadow-sm">
+                <h5 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                    <i class="bi bi-info-circle text-danger me-2"></i>Thông tin chứng từ nhập kho
+                </h5>
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <div class="text-muted small text-uppercase">Nhà cung cấp:</div>
+                        <div class="text-dark fw-bold fs-5">@Model.SupplierName</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small text-uppercase">Ngày lập phiếu (UTC+7):</div>
+                        <div class="text-dark fw-semibold">
+                            @Model.ReceiptDateUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm:ss")
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small text-uppercase">Người thực hiện:</div>
+                        <div>
+                            <span class="badge bg-light text-primary border fs-6">
+                                <i class="bi bi-person me-1"></i>@Model.CreatedByName
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small text-uppercase">Ghi chú phiếu:</div>
+                        <div class="text-dark">@(string.IsNullOrWhiteSpace(Model.Note) ? "(Không có ghi chú)" : Model.Note)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="data-card p-4 h-100 d-flex flex-column justify-content-center text-center shadow-sm">
+                <div class="text-muted small text-uppercase fw-semibold mb-1">Tổng tiền thanh toán</div>
+                <div class="h2 fw-bold text-success mb-2">@Model.TotalAmount.ToString("N0") đ</div>
+                <div class="badge bg-light text-dark border align-self-center px-3 py-2">
+                    <i class="bi bi-boxes me-1 text-danger"></i>Tổng cộng @Model.Details.Count mặt hàng
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Table -->
+    <div class="data-card p-0 overflow-hidden shadow-sm">
+        <div class="data-card-header">
+            <div class="data-card-title text-dark">
+                <i class="bi bi-list-check me-2 text-danger"></i>Danh sách mặt hàng trong phiếu nhập
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th class="ps-3" style="width: 60px;">STT</th>
+                        <th>TÊN MÓN / SẢN PHẨM</th>
+                        <th class="text-center" style="width: 160px;">SỐ LƯỢNG NHẬP</th>
+                        <th class="text-end" style="width: 180px;">ĐƠN GIÁ VỐN</th>
+                        <th class="text-end" style="width: 200px;">THÀNH TIỀN</th>
+                        <th class="text-end pe-3" style="width: 140px;">THẺ KHO</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int stt = 1; }
+                    @foreach (var d in Model.Details)
+                    {
+                        <tr>
+                            <td class="ps-3 text-muted">@(stt++)</td>
+                            <td class="fw-bold text-dark">
+                                @d.ProductName
+                                <span class="text-muted small ms-1">(Mã: #@d.ProductId)</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6 fw-bold">
+                                    +@d.Quantity
+                                </span>
+                            </td>
+                            <td class="text-end text-muted fw-semibold">
+                                @d.CostPrice.ToString("N0") đ
+                            </td>
+                            <td class="text-end fw-bold text-success fs-6">
+                                @((d.Quantity * d.CostPrice).ToString("N0")) đ
+                            </td>
+                            <td class="text-end pe-3">
+                                <a asp-action="Ledger" asp-route-productId="@d.ProductId" class="btn btn-sm btn-outline-secondary" title="Xem thẻ kho của món này">
+                                    <i class="bi bi-clock-history me-1"></i>Thẻ kho
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

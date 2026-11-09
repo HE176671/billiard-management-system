@@ -1,0 +1,19 @@
+flowchart LR
+    Root["Bms.Web<br/>Program.cs — Composition Root"]
+    C["«namespace» Bms.Web.Controllers<br/>MenuController, ComboController<br/>OrderController, BillingController, ReportController<br/>Api/FnbCatalogApiController"]
+    S["«namespace» Bms.Web.Services<br/>IMenuService / MenuService<br/>IOrderService, IBillingService, IReportService"]
+    M["«namespace» Bms.Web.Models<br/>MenuViewModels, ComboViewModels<br/>OrderViewModels, BillingViewModels, ReportViewModels"]
+    E["«namespace» Bms.Web.Data.Entities<br/>ProductCategory, Product<br/>Combo, ComboItem, SessionCombo, SessionComboItem<br/>Order, OrderDetail, Invoice, PaymentTransaction"]
+    D["«namespace» Bms.Web.Data<br/>ApplicationDbContext"]
+    R["«external libs» Reporting<br/>EPPlus (Excel) | QuestPDF (PDF)"]
+    EF["«framework» EF Core 8<br/>Microsoft.EntityFrameworkCore.SqlServer"]
+
+    Root -.->|"đăng ký DI"| C
+    Root -.->|"đăng ký DI"| S
+    Root -.-> D
+    C -->|"gọi nghiệp vụ"| S
+    C -->|"nhận/trả model"| M
+    S -->|"xử lý entities"| E
+    S -->|"truy vấn DB"| D
+    S -->|"xuất file"| R
+    D --> EF

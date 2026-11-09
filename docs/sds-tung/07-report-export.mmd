@@ -1,0 +1,26 @@
+sequenceDiagram
+    actor Admin as Quản trị viên (Admin)
+    participant UI as Màn hình Báo cáo Doanh thu
+    participant Ctrl as ReportController
+    participant Svc as ReportService
+    participant DB as SQL Server (BilliardDB)
+    participant Lib as Thư viện Xuất File (EPPlus / QuestPDF)
+
+    Admin->>UI: Chọn khoảng ngày: [FromDate, ToDate]
+    UI->>Ctrl: GET /api/v1/reports/revenue-summary?from=..&to=..
+    Ctrl->>Svc: GetRevenueReportAsync(fromUtc, toUtc)
+    activate Svc
+    Svc->>DB: SELECT SUM(FinalAmount), SUM(TotalPlaytime), SUM(TotalFandB) FROM Invoices WHERE Status = 'Paid' AND CreatedAtUtc BETWEEN @from AND @to
+    Svc->>DB: SELECT Top Best-Selling Products từ OrderDetails & Invoices
+    DB-->>Svc: Dữ liệu doanh thu thực tế
+    Svc-->>Ctrl: RevenueReportDto
+    Ctrl-->>UI: Hiển thị bảng chỉ số KPI & Biểu đồ
+
+    Admin->>UI: Nhấn "Xuất Excel" (.xlsx) hoặc "Xuất PDF" (.pdf)
+    UI->>Ctrl: GET /reports/export/excel hoặc /reports/export/pdf
+    Ctrl->>Svc: ExportReportAsync(format, fromUtc, toUtc)
+    Svc->>Lib: Dựng workbook (EPPlus) hoặc document (QuestPDF)
+    Lib-->>Svc: byte[] MemoryStream file nhị phân
+    Svc-->>Ctrl: FileStreamResult
+    Ctrl-->>UI: Tải xuống file BMS_Revenue_Report.xlsx / .pdf
+    deactivate Svc

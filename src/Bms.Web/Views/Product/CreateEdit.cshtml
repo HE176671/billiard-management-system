@@ -1,0 +1,108 @@
+@model Bms.Web.Models.ProductInputModel
+@{
+    bool isEdit = Model.Id > 0;
+    ViewData["Title"] = isEdit ? $"Chỉnh sửa món: {Model.Name}" : "Thêm món mới vào thực đơn";
+    Layout = "_AdminLayout";
+    var categories = ViewBag.Categories as List<Bms.Web.Models.ProductCategoryViewModel> ?? new();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex align-items-center mb-3">
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm me-3">
+                <i class="bi bi-arrow-left me-1"></i>Quay lại
+            </a>
+            <h4 class="fw-bold mb-0">@(isEdit ? "Chỉnh sửa món & Cập nhật giá bán" : "Thêm món mới vào thực đơn")</h4>
+        </div>
+
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
+        <div class="data-card p-4">
+            <form asp-action="@(isEdit ? "Edit" : "Create")" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Id" />
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label asp-for="CategoryId" class="form-label fw-semibold">Danh mục món <span class="text-danger">*</span></label>
+                        <select asp-for="CategoryId" class="form-select">
+                            <option value="">-- Chọn danh mục --</option>
+                            @foreach (var c in categories)
+                            {
+                                <option value="@c.Id">@c.Name</option>
+                            }
+                        </select>
+                        <span asp-validation-for="CategoryId" class="field-error"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="Name" class="form-label fw-semibold">Tên món / Sản phẩm <span class="text-danger">*</span></label>
+                        <input asp-for="Name" class="form-control" placeholder="Ví dụ: Nước ngọt Coca, Trà đào..." />
+                        <span asp-validation-for="Name" class="field-error"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="Price" class="form-label fw-semibold">Giá bán hiện tại (VNĐ) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input asp-for="Price" type="number" step="1000" min="0" class="form-control fw-bold text-danger text-end" />
+                            <span class="input-group-text">₫</span>
+                        </div>
+                        <span asp-validation-for="Price" class="field-error"></span>
+                        @if (isEdit)
+                        {
+                            <div class="form-text text-muted">
+                                <i class="bi bi-info-circle me-1"></i>Quy tắc <strong>BR-15</strong>: Thay đổi giá bán sẽ được ghi tự động vào <strong>Lịch sử giá</strong>; hóa đơn cũ trước đó vẫn giữ nguyên đơn giá cũ.
+                            </div>
+                        }
+                    </div>
+
+                    @if (isEdit)
+                    {
+                        <div class="col-md-6">
+                            <label asp-for="PriceChangeReason" class="form-label fw-semibold">Lý do điều chỉnh giá (nếu có)</label>
+                            <input asp-for="PriceChangeReason" class="form-control" placeholder="Ví dụ: Giá nhập tăng, khuyến mãi mùa hè..." />
+                            <span asp-validation-for="PriceChangeReason" class="field-error"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tồn kho hiện tại</label>
+                            <input value="@Model.StockQuantity" class="form-control bg-light" readonly />
+                            <div class="form-text">Tồn kho chỉ tăng khi lập <strong>Phiếu nhập kho</strong> hoặc điều chỉnh qua chức năng <strong>Kiểm kê</strong>.</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="col-md-6">
+                            <label asp-for="StockQuantity" class="form-label fw-semibold">Tồn kho khởi tạo ban đầu</label>
+                            <input asp-for="StockQuantity" type="number" min="0" class="form-control text-end" />
+                            <span asp-validation-for="StockQuantity" class="field-error"></span>
+                            <div class="form-text">Số lượng nhập ban đầu sẽ được ghi 1 dòng thẻ kho khởi tạo.</div>
+                        </div>
+                    }
+
+                    <div class="col-md-6 d-flex align-items-center mt-4">
+                        <div class="form-check form-switch fs-6">
+                            <input asp-for="IsActive" class="form-check-input" type="checkbox" id="flexSwitchCheckChecked">
+                            <label class="form-check-label fw-semibold" for="flexSwitchCheckChecked">Đang mở bán trong thực đơn</label>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4 text-muted opacity-25" />
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a asp-action="Index" class="btn btn-outline-secondary">Hủy bỏ</a>
+                    <button type="submit" class="btn btn-primary-bms px-4">
+                        <i class="bi bi-check-lg me-1"></i>@(isEdit ? "Lưu thay đổi" : "Tạo món mới")
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

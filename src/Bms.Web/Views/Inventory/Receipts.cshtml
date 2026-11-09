@@ -1,0 +1,103 @@
+@model List<Bms.Web.Models.StockReceiptViewModel>
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Danh sách phiếu nhập kho";
+    bool isManager = User.IsInRole("Manager") || User.IsInRole("Admin");
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h1 class="h4 mb-1 fw-bold text-dark">
+                <i class="bi bi-journal-text text-danger me-2"></i>Chứng từ phiếu nhập kho
+            </h1>
+            <p class="text-muted small mb-0">Quản lý các đợt nhập hàng F&B, lưu giá vốn và tự động cập nhật tồn kho (UC-11)</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="bi bi-boxes me-1"></i>Xem tồn kho
+            </a>
+            @if (isManager)
+            {
+                <a asp-action="CreateReceipt" class="btn btn-primary-bms">
+                    <i class="bi bi-plus-circle me-1"></i>Lập phiếu nhập mới
+                </a>
+            }
+        </div>
+    </div>
+
+    <!-- Receipts Table Card -->
+    <div class="data-card p-0 overflow-hidden shadow-sm">
+        <div class="data-card-header">
+            <div class="data-card-title text-dark">
+                <i class="bi bi-card-checklist me-2 text-danger"></i>Lịch sử các phiếu nhập hàng
+            </div>
+            <span class="badge bg-light text-secondary border">Tổng cộng: @(Model?.Count ?? 0) phiếu</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th class="ps-3" style="width: 140px;">MÃ PHIẾU</th>
+                        <th>NHÀ CUNG CẤP</th>
+                        <th class="text-center">SỐ MẶT HÀNG</th>
+                        <th class="text-end">TỔNG TIỀN NHẬP</th>
+                        <th>NGÀY LẬP (UTC+7)</th>
+                        <th>NGƯỜI LẬP</th>
+                        <th>GHI CHÚ</th>
+                        <th class="text-end pe-3" style="width: 120px;">THAO TÁC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-2 text-black-50"></i>
+                                Chưa có phiếu nhập kho nào trong hệ thống.
+                                @if (isManager)
+                                {
+                                    <div class="mt-2">
+                                        <a asp-action="CreateReceipt" class="btn btn-sm btn-primary-bms">Lập phiếu nhập đầu tiên</a>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var r in Model)
+                        {
+                            <tr>
+                                <td class="ps-3 fw-bold text-primary">
+                                    <i class="bi bi-file-earmark-text me-1"></i>@r.ReceiptCode
+                                </td>
+                                <td class="text-dark fw-semibold">@r.SupplierName</td>
+                                <td class="text-center">
+                                    <span class="badge bg-light text-dark border px-2 py-1">@r.ItemCount món</span>
+                                </td>
+                                <td class="text-end fw-bold text-success fs-6">
+                                    @r.TotalAmount.ToString("N0") đ
+                                </td>
+                                <td class="text-muted small">
+                                    @r.ReceiptDateUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm")
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-secondary border">@r.CreatedByName</span>
+                                </td>
+                                <td class="text-muted small text-truncate" style="max-width: 220px;">
+                                    @(string.IsNullOrWhiteSpace(r.Note) ? "-" : r.Note)
+                                </td>
+                                <td class="text-end pe-3">
+                                    <a asp-action="ReceiptDetail" asp-route-id="@r.Id" class="btn btn-sm btn-outline-bms" title="Xem chi tiết phiếu nhập">
+                                        <i class="bi bi-eye me-1"></i>Chi tiết
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

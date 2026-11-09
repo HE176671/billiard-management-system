@@ -49,6 +49,9 @@ public class TableDetailViewModel
     public string? CustomerId { get; set; }
     public string? CustomerFullName { get; set; }
     public string? CustomerPhone { get; set; }
+    public decimal FandBAmount { get; set; }
+    public decimal GrandTotal => (EstimatedAmount ?? 0m) + FandBAmount;
+    public List<OrderViewModel> Orders { get; set; } = new();
     public List<SessionSegmentViewModel> Segments { get; set; } = new();
     public List<SessionComboPurchaseViewModel> Combos { get; set; } = new();
     public DateTime ServerTimeUtc { get; set; }

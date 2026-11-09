@@ -14,10 +14,12 @@ public class TableController : Controller
     // =========================================================================
 
     private readonly ITableSessionService _tableSessionService;
+    private readonly IProductService _productService;
 
-    public TableController(ITableSessionService tableSessionService)
+    public TableController(ITableSessionService tableSessionService, IProductService productService)
     {
         _tableSessionService = tableSessionService;
+        _productService = productService;
     }
 
     // =========================================================================
@@ -30,6 +32,7 @@ public class TableController : Controller
     {
         ViewData["Title"] = "Quản lý bàn & Phiên chơi";
         var tableCards = await _tableSessionService.GetTableCardsAsync();
+        ViewBag.AvailableProducts = await _productService.GetAllProductsAsync(activeOnly: true);
         var model = new TableManagementViewModel
         {
             Tables = tableCards,

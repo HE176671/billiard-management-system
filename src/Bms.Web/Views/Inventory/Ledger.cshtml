@@ -1,0 +1,185 @@
+@model List<Bms.Web.Models.StockMovementViewModel>
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Sổ cái Thẻ kho F&B";
+    var products = ViewBag.Products as List<Bms.Web.Models.ProductViewModel> ?? new();
+    int? selectedProductId = ViewBag.SelectedProductId as int?;
+    var selectedProduct = products.FirstOrDefault(p => p.Id == selectedProductId);
+    bool isManager = User.IsInRole("Manager") || User.IsInRole("Admin");
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h1 class="h4 mb-1 fw-bold text-dark">
+                <i class="bi bi-clock-history text-danger me-2"></i>Sổ cái Thẻ kho F&amp;B
+            </h1>
+            <p class="text-muted small mb-0">
+                Nhật ký kiểm toán ghi nhận 100% mọi biến động xuất nhập tồn kho: Nhập hàng, Gọi món, Hủy món, Combo, Kiểm kê (UC-11, UC-13)
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="bi bi-boxes me-1"></i>Xem tồn kho
+            </a>
+            <a asp-action="Receipts" class="btn btn-outline-secondary">
+                <i class="bi bi-journal-text me-1"></i>Phiếu nhập
+            </a>
+            @if (isManager)
+            {
+                <a asp-action="CreateReceipt" class="btn btn-primary-bms">
+                    <i class="bi bi-plus-circle me-1"></i>Lập phiếu nhập
+                </a>
+            }
+        </div>
+    </div>
+
+    <!-- Product Filter Card -->
+    <div class="data-card p-3 mb-3 shadow-sm">
+        <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-6">
+                <label class="form-label text-muted small text-uppercase fw-semibold mb-1">Tra cứu thẻ kho theo mặt hàng:</label>
+                <select name="productId" class="form-select">
+                    <option value="">-- Tất cả các mặt hàng --</option>
+                    @foreach (var p in products)
+                    {
+                        <option value="@p.Id" selected="@(selectedProductId == p.Id)">
+                            @p.Name (Tồn kho hiện tại: @p.StockQuantity)
+                        </option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end gap-2 pt-md-4">
+                <button type="submit" class="btn btn-primary-bms flex-grow-1">
+                    <i class="bi bi-funnel me-1"></i>Xem thẻ kho
+                </button>
+                <a asp-action="Ledger" class="btn btn-outline-secondary" title="Xem toàn bộ">Tất cả</a>
+            </div>
+            @if (selectedProduct != null)
+            {
+                <div class="col-md-3 text-end pt-md-4">
+                    <span class="text-muted small">Tồn hiện tại của <strong>@selectedProduct.Name</strong>:</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle fs-6 ms-2 px-2 py-1">@selectedProduct.StockQuantity</span>
+                </div>
+            }
+        </form>
+    </div>
+
+    <!-- Movements Table Card -->
+    <div class="data-card p-0 overflow-hidden shadow-sm">
+        <div class="data-card-header">
+            <div class="data-card-title text-dark">
+                <i class="bi bi-journal-code me-2 text-danger"></i>Lịch sử biến động xuất / nhập / hoàn kho
+            </div>
+            <span class="badge bg-light text-secondary border">Hiển thị: @(Model?.Count ?? 0) giao dịch</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th class="ps-3" style="width: 160px;">THỜI GIAN (UTC+7)</th>
+                        <th>TÊN MÓN / SẢN PHẨM</th>
+                        <th>LOẠI BIẾN ĐỘNG</th>
+                        <th class="text-center" style="width: 140px;">BIẾN ĐỘNG</th>
+                        <th class="text-center" style="width: 120px;">TỒN SAU</th>
+                        <th>CHỨNG TỪ / BÀN</th>
+                        <th>GHI CHÚ</th>
+                        <th class="text-end pe-3" style="width: 140px;">NGƯỜI THỰC HIỆN</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-2 text-black-50"></i>
+                                Chưa có ghi nhận biến động kho nào phù hợp.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var m in Model)
+                        {
+                            <tr>
+                                <td class="ps-3 text-muted small">
+                                    @m.CreatedAtUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm:ss")
+                                </td>
+                                <td class="fw-bold text-dark">@m.ProductName</td>
+                                <td>
+                                    @switch (m.MovementType)
+                                    {
+                                        case "Import":
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                                <i class="bi bi-box-arrow-in-down me-1"></i>Nhập kho
+                                            </span>
+                                            break;
+                                        case "OrderDeduct":
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                                <i class="bi bi-cup-straw me-1"></i>Khách gọi món
+                                            </span>
+                                            break;
+                                        case "OrderCancelReturn":
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                                <i class="bi bi-arrow-return-left me-1"></i>Hủy món hoàn kho
+                                            </span>
+                                            break;
+                                        case "ComboDeduct":
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
+                                                <i class="bi bi-box2-heart me-1"></i>Mở combo trừ kho
+                                            </span>
+                                            break;
+                                        case "AuditAdjust":
+                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
+                                                <i class="bi bi-sliders me-1"></i>Kiểm kê điều chỉnh
+                                            </span>
+                                            break;
+                                        default:
+                                            <span class="badge bg-light text-secondary border">@m.MovementType</span>
+                                            break;
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (m.QuantityChange > 0)
+                                    {
+                                        <span class="fw-bold text-success fs-6">+@m.QuantityChange</span>
+                                    }
+                                    else if (m.QuantityChange < 0)
+                                    {
+                                        <span class="fw-bold text-danger fs-6">@m.QuantityChange</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="fw-bold text-muted">0</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-light text-dark border px-2 py-1 fw-bold fs-6">@m.BalanceAfter</span>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(m.ReferenceType))
+                                    {
+                                        <code class="text-primary fw-semibold">@m.ReferenceType @(m.ReferenceId.HasValue ? $"#{m.ReferenceId}" : "")</code>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td class="text-muted small text-truncate" style="max-width: 250px;">
+                                    @(string.IsNullOrWhiteSpace(m.Note) ? "-" : m.Note)
+                                </td>
+                                <td class="text-end pe-3">
+                                    <span class="badge bg-light text-secondary border">
+                                        <i class="bi bi-person me-1"></i>@m.CreatedByName
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
