@@ -50,6 +50,44 @@ public static class DbInitializer
     }
 
     /// <summary>
+    /// TV5: bảo đảm có đủ 3 role nội bộ và tài khoản demo manager.demo (Manager).
+    /// Database tạo từ bản script cũ không có Manager nên không demo được phần vận hành.
+    /// </summary>
+    public static async Task EnsureInternalRolesAndDemoManagerAsync(
+        UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, ILogger logger)
+    {
+        foreach (var role in new[] { "Admin", "Manager", "Staff" })
+            if (!await roleManager.RoleExistsAsync(role))
+                await roleManager.CreateAsync(new IdentityRole(role));
+
+        var manager = await userManager.FindByNameAsync("manager.demo");
+        if (manager == null)
+        {
+            manager = new ApplicationUser
+            {
+                UserName = "manager.demo",
+                Email = "manager@example.test",
+                FullName = "Quản lý CLB Mẫu",
+                EmployeeCode = await userManager.Users.AnyAsync(u => u.EmployeeCode == "MG001") ? null : "MG001",
+                HireDate = new DateOnly(2026, 1, 1),
+                IsActive = true,
+                EmailConfirmed = true,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            var created = await userManager.CreateAsync(manager);
+            if (!created.Succeeded)
+            {
+                logger.LogWarning("Không tạo được manager.demo: {Errors}",
+                    string.Join("; ", created.Errors.Select(e => e.Description)));
+                return;
+            }
+            logger.LogInformation("Đã tạo tài khoản demo manager.demo.");
+        }
+        if (!await userManager.IsInRoleAsync(manager, "Manager"))
+            await userManager.AddToRoleAsync(manager, "Manager");
+    }
+
+    /// <summary>
     /// Chạy BMS_Database_Starter/09_AddShiftDemoData.sql một lần nếu chưa có ca demo.
     /// Script tự bỏ qua khi đã có dữ liệu, nên chạy lại vẫn an toàn.
     /// </summary>

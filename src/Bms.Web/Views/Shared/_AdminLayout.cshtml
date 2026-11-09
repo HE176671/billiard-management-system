@@ -389,13 +389,16 @@
     <div class="topbar">
         <span class="topbar-title">@ViewData["Title"]</span>
         <div class="topbar-actions">
-            <a asp-controller="Order" asp-action="Pending" class="btn-logout" title="Đơn QR chờ duyệt">
-                <i class="bi bi-cup-straw text-warning"></i> Đơn QR
-                @if (pendingOrderCount > 0)
-                {
-                    <span class="badge rounded-pill bg-warning text-dark global-qr-pending-badge" style="font-size:0.65rem">@pendingOrderCount</span>
-                }
-            </a>
+            @if (isManager || isStaff)
+            {
+                <a asp-controller="Order" asp-action="Pending" class="btn-logout" title="Đơn QR chờ duyệt">
+                    <i class="bi bi-cup-straw text-warning"></i> Đơn QR
+                    @if (pendingOrderCount > 0)
+                    {
+                        <span class="badge rounded-pill bg-warning text-dark global-qr-pending-badge" style="font-size:0.65rem">@pendingOrderCount</span>
+                    }
+                </a>
+            }
             <a asp-controller="Profile" asp-action="Index" class="btn-logout" title="Hồ sơ cá nhân">
                 <i class="bi bi-person-circle"></i> Hồ sơ
             </a>

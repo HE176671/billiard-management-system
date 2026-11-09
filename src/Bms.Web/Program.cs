@@ -144,6 +144,9 @@ if (app.Environment.IsDevelopment())
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    // TV5: database cũ có thể thiếu role/tài khoản demo (Manager) -> tạo bổ sung trước khi đặt mật khẩu demo.
+    await DbInitializer.EnsureInternalRolesAndDemoManagerAsync(
+        userManager, scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>(), logger);
     await DbInitializer.SeedDevelopmentPasswordsAsync(userManager, config, logger);
     try
     {
