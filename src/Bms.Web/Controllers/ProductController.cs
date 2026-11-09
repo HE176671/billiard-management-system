@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Staff,Manager,Admin")]
+[Authorize(Roles = "Staff,Manager")]
 public class ProductController : Controller
 {
     private readonly IProductService _productService;
@@ -34,7 +34,7 @@ public class ProductController : Controller
     }
 
     // GET: /Product/Create
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Create()
     {
         ViewData["Title"] = "Thêm món mới vào thực đơn";
@@ -45,7 +45,7 @@ public class ProductController : Controller
     // POST: /Product/Create
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Create(ProductInputModel model)
     {
         if (!ModelState.IsValid)
@@ -68,7 +68,7 @@ public class ProductController : Controller
     }
 
     // GET: /Product/Edit/5
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Edit(int id)
     {
         var product = await _productService.GetProductByIdAsync(id);
@@ -97,7 +97,7 @@ public class ProductController : Controller
     // POST: /Product/Edit/5
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Edit(ProductInputModel model)
     {
         if (!ModelState.IsValid)
@@ -122,7 +122,7 @@ public class ProductController : Controller
     // POST: /Product/ToggleActive/5
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> ToggleActive(int id)
     {
         var res = await _productService.ToggleProductActiveAsync(id);
@@ -149,7 +149,7 @@ public class ProductController : Controller
     }
 
     // GET: /Product/Categories
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Categories()
     {
         ViewData["Title"] = "Quản lý Danh mục món";
@@ -160,7 +160,7 @@ public class ProductController : Controller
     // POST: /Product/SaveCategory
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> SaveCategory(int? id, string name)
     {
         var res = await _productService.SaveCategoryAsync(id, name);

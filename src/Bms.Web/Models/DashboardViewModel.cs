@@ -28,9 +28,10 @@ public class DashboardViewModel
     public int TotalTables { get; set; }
     public decimal TodayRevenue { get; set; }
     public decimal MonthRevenue { get; set; }
-    public int ActiveShiftCount { get; set; }
-    /// <summary>Ca đã đóng hôm nay có tiền thực tế khác kỳ vọng.</summary>
-    public int TodayShiftsWithDifference { get; set; }
+    /// <summary>Số phiên chơi đang mở (PlaySessions.Status = "Active").</summary>
+    public int ActiveSessionCount { get; set; }
+    /// <summary>Số phiên đã kết thúc trong hôm nay (giờ VN).</summary>
+    public int TodayClosedSessionCount { get; set; }
 }
 
 public class DailyRevenuePoint

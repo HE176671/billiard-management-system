@@ -22,6 +22,9 @@ public class MembershipTier
     /// <summary>Hệ số nhân điểm thưởng.</summary>
     public int PointMultiplier { get; set; } = 1;
 
+    /// <summary>Giá trị voucher sinh nhật (VND).</summary>
+    public decimal BirthdayVoucherValue { get; set; }
+
     /// <summary>Thứ tự sắp xếp hạng tăng dần.</summary>
     public int SortOrder { get; set; }
 

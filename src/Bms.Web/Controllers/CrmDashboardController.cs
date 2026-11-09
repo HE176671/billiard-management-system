@@ -1,4 +1,4 @@
-﻿using Bms.Web.Data;
+using Bms.Web.Data;
 using Bms.Web.Models;
 using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Manager,Admin")]
+[Authorize(Roles = "Manager")]
 public class CrmDashboardController : Controller
 {
     private readonly ApplicationDbContext _db;
@@ -127,20 +127,22 @@ public class CrmDashboardController : Controller
         return View(vm);
     }
 
-    // POST /CrmDashboard/RunDailyJobNow (Nút Admin "Chạy job ngay" để demo không phải chờ 2h sáng)
+    // POST /CrmDashboard/RunDailyJobNow — TV5 BR-17h: Manager chạy chu kỳ cuối ngày ngay (không phải chờ 00:05).
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RunDailyJobNow()
+    public async Task<IActionResult> RunDailyJobNow([FromServices] IDailyCycleService cycle)
     {
-        var summary = await _campaignService.RunAllDailyTasksAsync();
+        var actorId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var result = await cycle.RunAsync(actorId, manual: true);
+        var summary = result.Summary;
         _segmentService.InvalidateCache();
 
         TempData["Success"] =
-            $"Đã chạy LoyaltyDailyJob thành công! " +
-            $"Cảnh báo sắp hết hạn: {summary.ExpiryWarningsSent} · " +
-            $"Hết hạn điểm: {summary.PointsExpiredUsers} khách · " +
+            $"Đã chạy chu kỳ cuối ngày. " +
+            $"Voucher sinh nhật: +{summary.BirthdayVouchersIssued} · " +
             $"Voucher quá hạn: {summary.VouchersExpired} · " +
-            $"Xét hạng (Gia hạn: {summary.TierSummary.RenewedCount}, Ân hạn: {summary.TierSummary.EnteredGraceCount}, Hạ bậc: {summary.TierSummary.DowngradedCount}).";
+            $"Xét hạng (giữ hạng: {summary.TierSummary.RenewedCount}, ân hạn: {summary.TierSummary.EnteredGraceCount}, hạ hạng: {summary.TierSummary.DowngradedCount}) · " +
+            $"Email: gửi {result.EmailsSent}, chế độ demo/bỏ qua {result.EmailsSkipped}, lỗi {result.EmailsFailed}. Đã ghi Nhật ký hệ thống.";
 
         return RedirectToAction(nameof(Index));
     }

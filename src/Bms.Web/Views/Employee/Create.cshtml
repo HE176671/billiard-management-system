@@ -1,12 +1,12 @@
 @model Bms.Web.Models.CreateEmployeeViewModel
 @{
-    ViewData["Title"] = "Thêm nhân viên mới";
+    ViewData["Title"] = "Thêm tài khoản";
     Layout = "_AdminLayout";
 }
 
 <div class="d-flex align-items-center gap-2 mb-4">
     <a asp-action="Index" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
-    <h5 class="mb-0">Thêm nhân viên mới</h5>
+    <h5 class="mb-0">Thêm tài khoản</h5>
 </div>
 
 <div class="form-card">
@@ -22,10 +22,19 @@
         }
 
         <div class="row g-3">
-            <div class="col-12">
+            <div class="col-md-7">
                 <label asp-for="FullName" class="form-label"></label>
                 <input asp-for="FullName" class="form-control" placeholder="Nguyễn Văn A" />
                 <span asp-validation-for="FullName" class="field-error"></span>
+            </div>
+            <div class="col-md-5">
+                <label asp-for="Role" class="form-label">Vai trò</label>
+                <select asp-for="Role" class="form-select">
+                    <option value="Staff">Staff — nhân viên quầy</option>
+                    <option value="Manager">Manager — quản lý vận hành</option>
+                    <option value="Admin">Admin — quản trị tài khoản</option>
+                </select>
+                <div class="form-text">Mã tự cấp theo vai trò: NV / MG / AD.</div>
             </div>
             <div class="col-md-6">
                 <label asp-for="UserName" class="form-label"></label>
@@ -57,7 +66,7 @@
             <div class="col-md-6">
                 <label asp-for="Password" class="form-label"></label>
                 <input asp-for="Password" class="form-control" placeholder="••••••••" />
-                <div class="form-text">Tối thiểu 8 ký tự, gồm chữ hoa, số và ký tự đặc biệt.</div>
+                <div class="form-text">Tối thiểu 6 ký tự.</div>
                 <span asp-validation-for="Password" class="field-error"></span>
             </div>
             <div class="col-md-6">

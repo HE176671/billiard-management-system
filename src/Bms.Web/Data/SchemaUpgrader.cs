@@ -128,7 +128,7 @@ public static class SchemaUpgrader
             );
         END;
 
-        IF COL_LENGTH('dbo.Reviews', 'AdminReply') IS NULL
+        IF OBJECT_ID('dbo.Reviews', 'U') IS NOT NULL AND COL_LENGTH('dbo.Reviews', 'AdminReply') IS NULL
             ALTER TABLE dbo.Reviews ADD AdminReply nvarchar(max) NULL;
         """,
         """
@@ -446,7 +446,10 @@ public static class SchemaUpgrader
         if (missingCrmV2 != 0)
         {
             logger.LogWarning("Database thiếu bảng/cột CRM & Loyalty V2 (script 09). Đang tự nâng cấp schema...");
-            await db.Database.ExecuteSqlRawAsync(CrmLoyaltyV2Batches[0]);
+            // TV5: bắt lỗi riêng để database cũ thiếu bảng phụ vẫn chạy tiếp các bước nâng cấp sau
+            // (trước đây lỗi ở đây làm bỏ qua bước 3-5: tài khoản manager.demo, bảng kho WF2...).
+            try { await db.Database.ExecuteSqlRawAsync(CrmLoyaltyV2Batches[0]); }
+            catch (Exception ex) { logger.LogWarning(ex, "Lỗi khi thêm cột CRM & Loyalty V2 (batch 0)."); }
             try
             {
                 await using var tx = await db.Database.BeginTransactionAsync();
@@ -482,7 +485,7 @@ public static class SchemaUpgrader
                 SET ANSI_NULLS ON;
                 SET QUOTED_IDENTIFIER ON;
 
-                IF COL_LENGTH('dbo.Reviews', 'AdminReply') IS NULL
+                IF OBJECT_ID('dbo.Reviews', 'U') IS NOT NULL AND COL_LENGTH('dbo.Reviews', 'AdminReply') IS NULL
                     ALTER TABLE dbo.Reviews ADD AdminReply nvarchar(max) NULL;
 
                 IF OBJECT_ID('dbo.RewardItems', 'U') IS NOT NULL

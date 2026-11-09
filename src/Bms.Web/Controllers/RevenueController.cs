@@ -2,13 +2,14 @@ using System.Globalization;
 using System.Text;
 using Bms.Web.Data;
 using Bms.Web.Models;
+using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Manager,Admin")]
+[Authorize(Roles = "Manager")]
 public class RevenueController : Controller
 {
     private readonly ApplicationDbContext _context;
@@ -88,6 +89,9 @@ public class RevenueController : Controller
             .SumAsync(w => (decimal?)w.Amount) ?? 0m;
         model.PaymentCount = payments.Count;
         model.InvoiceCount = payments.Select(p => p.InvoiceId).Distinct().Count();
+        model.Methods = payments.GroupBy(p => p.PaymentMethod).OrderBy(g => g.Key)
+            .Select(g => new RevenueMethodRow(g.Key, g.Sum(p => p.AmountPaid), g.Count())).ToList();
+
         var format = model.GroupBy == "month" ? "yyyy-MM" : "yyyy-MM-dd";
         var grouped = payments.GroupBy(p => p.TransactionTimeUtc.AddHours(7).ToString(format));
         var totals = grouped.ToDictionary(g => g.Key, g => new RevenuePeriodRow(g.Key, g.Sum(p => p.AmountPaid), g.Count()));
@@ -98,8 +102,6 @@ public class RevenueController : Controller
             model.Periods.Add(totals.GetValueOrDefault(key, new RevenuePeriodRow(key, 0, 0)));
             date = model.GroupBy == "month" ? date.AddMonths(1) : date.AddDays(1);
         }
-        model.Methods = payments.GroupBy(p => p.PaymentMethod).OrderBy(g => g.Key)
-            .Select(g => new RevenueMethodRow(g.Key, g.Sum(p => p.AmountPaid), g.Count())).ToList();
     }
     #endregion
 }

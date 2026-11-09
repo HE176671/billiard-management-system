@@ -1,0 +1,96 @@
+@model Bms.Web.Models.AuditLogListViewModel
+@{
+    ViewData["Title"] = "Nhật ký hệ thống";
+    Layout = "_AdminLayout";
+    string Money(string? v) => decimal.TryParse(v, out var d) ? d.ToString("N0") : (v ?? "");
+}
+<partial name="_Alerts" />
+<div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-journal-text me-2"></i>Nhật ký thao tác nhạy cảm (@Model.TotalCount)</span>
+        <form method="get" asp-action="Index" class="d-flex gap-2 flex-wrap align-items-center">
+            <input type="date" name="from" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" style="width:150px;font-size:0.8rem" />
+            <input type="date" name="to" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" style="width:150px;font-size:0.8rem" />
+            <select name="actionType" class="form-select" style="width:170px;font-size:0.8rem">
+                <option value="">Mọi thao tác</option>
+                @foreach (var o in Model.ActionOptions)
+                {
+                    <option value="@o.Key" selected="@(o.Key == Model.ActionType)">@o.Value</option>
+                }
+            </select>
+            <select name="actorId" class="form-select" style="width:180px;font-size:0.8rem">
+                <option value="">Mọi người thao tác</option>
+                @foreach (var o in Model.ActorOptions)
+                {
+                    <option value="@o.Id" selected="@(o.Id == Model.ActorId)">@o.Name</option>
+                }
+            </select>
+            <input type="text" name="search" value="@Model.Search" maxlength="100" class="form-control" style="width:180px;font-size:0.8rem" placeholder="Tìm mô tả, lý do, mã..." />
+            <button type="submit" class="btn-primary-bms"><i class="bi bi-search"></i></button>
+        </form>
+    </div>
+
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="p-4 text-center text-muted" style="font-size:0.9rem">Không có nhật ký nào trong khoảng đã chọn.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size:0.85rem">
+                <thead>
+                    <tr>
+                        <th style="width:130px">Thời gian</th>
+                        <th style="width:150px">Thao tác</th>
+                        <th>Mô tả</th>
+                        <th style="width:180px">Trước → Sau</th>
+                        <th style="width:200px">Lý do</th>
+                        <th style="width:150px">Người thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model.Rows)
+                    {
+                        <tr>
+                            <td>@r.CreatedAtUtc.ToVn().ToString("HH:mm:ss dd/MM/yyyy")</td>
+                            <td>
+                                <span class="badge bg-light text-dark border">@r.ActionLabel</span>
+                                @if (!string.IsNullOrEmpty(r.EntityId))
+                                {
+                                    <div class="text-muted" style="font-size:0.75rem">@r.EntityType #@r.EntityId</div>
+                                }
+                            </td>
+                            <td>@r.Description</td>
+                            <td>
+                                @if (r.OldValue != null || r.NewValue != null)
+                                {
+                                    <span>@Money(r.OldValue)</span> <i class="bi bi-arrow-right"></i> <strong>@Money(r.NewValue)</strong>
+                                }
+                            </td>
+                            <td>@r.Reason</td>
+                            <td>@(r.ActorName ?? "Hệ thống")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (Model.TotalPages > 1)
+    {
+        <nav class="p-3"><ul class="pagination pagination-sm mb-0 flex-wrap">
+            @for (var p = 1; p <= Model.TotalPages; p++)
+            {
+                <li class="page-item @(p == Model.Page ? "active" : "")">
+                    <a class="page-link" asp-action="Index" asp-route-page="@p"
+                       asp-route-from="@Model.From.ToString("yyyy-MM-dd")" asp-route-to="@Model.To.ToString("yyyy-MM-dd")"
+                       asp-route-actionType="@Model.ActionType" asp-route-actorId="@Model.ActorId"
+                       asp-route-search="@Model.Search">@p</a>
+                </li>
+            }
+        </ul></nav>
+    }
+</div>
+<p class="mt-3" style="font-size:0.8rem;color:#64748b">Nhật ký chỉ được thêm tự động khi có thao tác nhạy cảm, không sửa hay xóa được.</p>

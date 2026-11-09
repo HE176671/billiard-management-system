@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Staff,Manager,Admin")]
+[Authorize(Roles = "Staff,Manager")]
 public class CustomerManagementController : Controller
 {
     private const int PageSize = 10;
@@ -96,7 +96,7 @@ public class CustomerManagementController : Controller
     // POST /CustomerManagement/QuickEnroll (Đăng ký tài khoản hội viên tại quầy kèm kiểm tra CCCD đủ 18 tuổi + tặng 10 điểm chào mừng — chỉ dành cho Staff)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Staff,Admin")]
+    [Authorize(Roles = "Staff")]
     public async Task<IActionResult> QuickEnroll(QuickEnrollInputModel input)
     {
         if (User.IsInRole("Manager") && !User.IsInRole("Staff"))
@@ -191,7 +191,7 @@ public class CustomerManagementController : Controller
             CreatedAtUtc = now,
             TierId = defaultTier?.Id,
             TierAchievedAtUtc = now,
-            TierReviewAtUtc = now.AddMonths(1),
+            TierReviewAtUtc = now.AddMonths(TierEvaluationService.ReviewCycleMonths),
             RewardPoints = 0,
             TotalSpend = 0
         };
@@ -511,7 +511,7 @@ public class CustomerManagementController : Controller
     // POST /CustomerManagement/CancelVoucher (F4: Manager hủy voucher -> hoàn điểm Reverse)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> CancelVoucher(int voucherId, string customerId, string? reason = null)
     {
         var actorId = CurrentActorId ?? (await _context.Users.Select(u => u.Id).FirstAsync());
@@ -634,7 +634,7 @@ public class CustomerManagementController : Controller
                 CreatedAtUtc = now,
                 TierId = defaultTier?.Id,
                 TierAchievedAtUtc = now,
-                TierReviewAtUtc = now.AddMonths(1),
+                TierReviewAtUtc = now.AddMonths(TierEvaluationService.ReviewCycleMonths),
                 RewardPoints = 0,
                 TotalSpend = 0
             };
@@ -757,7 +757,7 @@ public class CustomerManagementController : Controller
     // POST /CustomerManagement/ToggleLock (BR-F1-2: Chỉ Manager được khóa/mở khóa)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> ToggleLock(string id, string? search, int? tierId, string? status, string? segment, int page = 1, string? returnTo = null)
     {
         var user = await GetCustomerOrNullAsync(id);

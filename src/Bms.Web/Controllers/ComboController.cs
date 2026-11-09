@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Staff,Manager,Admin")]
+[Authorize(Roles = "Staff,Manager")]
 public class ComboController : Controller
 {
     private readonly IComboService _comboService;
@@ -33,7 +33,7 @@ public class ComboController : Controller
     }
 
     // GET: /Combo/Create
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Create()
     {
         ViewData["Title"] = "Tạo gói Combo mới";
@@ -44,7 +44,7 @@ public class ComboController : Controller
     // POST: /Combo/Create
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Create(ComboInputModel model)
     {
         if (!ModelState.IsValid)
@@ -68,7 +68,7 @@ public class ComboController : Controller
     }
 
     // GET: /Combo/Edit/5
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Edit(int id)
     {
         var combo = await _comboService.GetComboByIdAsync(id);
@@ -103,7 +103,7 @@ public class ComboController : Controller
     // POST: /Combo/Edit/5
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Edit(ComboInputModel model)
     {
         if (!ModelState.IsValid)
@@ -129,7 +129,7 @@ public class ComboController : Controller
     // POST: /Combo/ToggleActive/5
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> ToggleActive(int id)
     {
         var res = await _comboService.ToggleComboActiveAsync(id);

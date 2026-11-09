@@ -56,12 +56,13 @@
         <div class="sidebar-nav">
             @if (isAdmin && !isManager)
             {
+                @* TV5: Admin chỉ quản trị tài khoản (ma trận phân quyền SRS I.4.4) *@
                 <div class="nav-section-label">Quản trị hệ thống</div>
-                <a class="sidebar-link @Active("RoleManagement")" asp-controller="RoleManagement" asp-action="Index">
-                    <i class="bi bi-shield-lock"></i> Phân quyền tài khoản
-                </a>
                 <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
-                    <i class="bi bi-people"></i> Nhân viên
+                    <i class="bi bi-people"></i> Tài khoản &amp; phân quyền
+                </a>
+                <a class="sidebar-link @Active("AuditLog")" asp-controller="AuditLog" asp-action="Index">
+                    <i class="bi bi-journal-text"></i> Nhật ký hệ thống
                 </a>
             }
 
@@ -74,11 +75,11 @@
                 <a class="sidebar-link @Active("Revenue")" asp-controller="Revenue" asp-action="Index">
                     <i class="bi bi-graph-up"></i> Báo cáo doanh thu
                 </a>
-                <a class="sidebar-link @Active("Shift", "Manage")" asp-controller="Shift" asp-action="Manage">
-                    <i class="bi bi-clipboard-check"></i> Quản lý ca
+                <a class="sidebar-link @Active("OperationsReport")" asp-controller="OperationsReport" asp-action="Index">
+                    <i class="bi bi-clipboard-data"></i> Báo cáo vận hành
                 </a>
-                <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
-                    <i class="bi bi-people"></i> Quản lý nhân viên
+                <a class="sidebar-link @Active("AuditLog")" asp-controller="AuditLog" asp-action="Index">
+                    <i class="bi bi-journal-text"></i> Nhật ký hệ thống
                 </a>
                 <a class="sidebar-link @Active("Pricing")" asp-controller="Pricing" asp-action="Index">
                     <i class="bi bi-tags"></i> Bảng giá &amp; Combo dịch vụ

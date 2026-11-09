@@ -71,6 +71,7 @@ await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 await SchemaUpgrader.ApplyAsync(db, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+await Wf5SchemaUpgrader.ApplyAsync(db, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
 await using var tx = await db.Database.BeginTransactionAsync();
 var passed = 0;
 void Check(bool condition, string label) {
@@ -106,15 +107,15 @@ try
     // Use a temporary type so existing configs never interfere with the test.
     var testType = new TableType { Name = "Smoke " + key[..8], HourlyRate = 50000 };
     db.TableTypes.Add(testType); await db.SaveChangesAsync();
-    var pricing = Prepare(new PricingController(db));
+    var pricing = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
     Check(await pricing.Create(new() { TableTypeId = testType.Id, StartHour = "08:00", EndHour = "12:00", HourlyRate = 50000 }) is RedirectToActionResult, "Pricing create");
     var config = await db.PricingConfigs.SingleAsync(p => p.TableTypeId == testType.Id);
-    var overlap = Prepare(new PricingController(db));
+    var overlap = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
     Check(await overlap.Create(new() { Id = config.Id, TableTypeId = testType.Id, StartHour = "09:00", EndHour = "10:00", HourlyRate = 50000 }) is ViewResult && !overlap.ModelState.IsValid, "Overlap rejected even with forged create ID");
     Check(await pricing.Create(new() { TableTypeId = testType.Id, StartHour = "12:00", EndHour = "14:00", HourlyRate = 60000 }) is RedirectToActionResult, "Adjacent pricing intervals accepted");
-    var invalid = Prepare(new PricingController(db));
+    var invalid = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
     Check(await invalid.Create(new() { TableTypeId = testType.Id, StartHour = "25:00", EndHour = "26:00", HourlyRate = 50000 }) is ViewResult && !invalid.ModelState.IsValid, "Out-of-day hours rejected");
-    var unknown = Prepare(new PricingController(db));
+    var unknown = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
     Check(await unknown.Create(new() { TableTypeId = int.MaxValue, StartHour = "08:00", EndHour = "10:00", HourlyRate = 50000 }) is ViewResult && !unknown.ModelState.IsValid, "Unknown table type rejected");
     Check(await pricing.Edit(new CreateEditPricingViewModel() { Id = config.Id, TableTypeId = testType.Id, StartHour = "08:00", EndHour = "11:00", HourlyRate = 70000 }) is RedirectToActionResult && config.HourlyRate == 70000, "Pricing update");
     Check(await pricing.Delete(config.Id) is RedirectToActionResult && !await db.PricingConfigs.AnyAsync(p => p.Id == config.Id), "Pricing delete");
@@ -124,7 +125,7 @@ try
     await tierController.DeleteTier(tier.Id);
     Check(await db.MembershipTiers.AnyAsync(t => t.Id == tier.Id), "Referenced tier deletion blocked");
     var employees = Prepare(new EmployeeController(users, db));
-    await employees.ResetPassword(new ResetStaffPasswordViewModel() { UserId = staff.Id, NewPassword = "abcdefgh", ConfirmPassword = "abcdefgh" });
+    await employees.ResetPassword(new ResetStaffPasswordViewModel() { UserId = staff.Id, NewPassword = "12345", ConfirmPassword = "12345" });
     Check(await users.CheckPasswordAsync(staff, "SmokeOriginal!123"), "Rejected reset preserves old password");
     employees = Prepare(new EmployeeController(users, db));
     Check(await employees.ResetPassword(new ResetStaffPasswordViewModel() { UserId = staff.Id, NewPassword = "SmokeReplacement!123", ConfirmPassword = "SmokeReplacement!123" }) is RedirectToActionResult && await users.CheckPasswordAsync(staff, "SmokeReplacement!123"), "Valid reset replaces password");
@@ -166,13 +167,42 @@ try
     var dashboard = Prepare(new DashboardController(db));
     Check(((ViewResult)await dashboard.Index()).Model is DashboardViewModel { TotalTables: > 0 }, "Dashboard live SQL queries");
 
+    // TV5 — Báo cáo vận hành (OperationsReportController)
+    var opsCtrl = Prepare(new OperationsReportController(db));
+    var todayVnOps = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+    Check(OperationsReportController.CalculateOccupancyPercent(480m, 1, 960, 1) == 50.0m
+        && OperationsReportController.CalculateOccupancyPercent(0m, 5, 960, 7) == 0m
+        && OperationsReportController.CalculateOccupancyPercent(2000m, 1, 960, 1) == 100.0m,
+        "OperationsReport occupancy formula (exact %, zero safe, 100% cap)");
+    var opsBadRange = Prepare(new OperationsReportController(db));
+    await opsBadRange.Index(todayVnOps, todayVnOps.AddDays(-2));
+    var opsTooLong = Prepare(new OperationsReportController(db));
+    await opsTooLong.Index(todayVnOps.AddDays(-100), todayVnOps);
+    var opsFuture = Prepare(new OperationsReportController(db));
+    await opsFuture.Index(todayVnOps, todayVnOps.AddDays(2));
+    var opsBadHours = Prepare(new OperationsReportController(db));
+    await opsBadHours.Index(todayVnOps.AddDays(-3), todayVnOps, openHour: 20, closeHour: 10);
+    var opsBadType = Prepare(new OperationsReportController(db));
+    await opsBadType.Index(todayVnOps.AddDays(-3), todayVnOps, 8, 24, tableTypeId: int.MaxValue);
+    Check(!opsBadRange.ModelState.IsValid && !opsTooLong.ModelState.IsValid && !opsFuture.ModelState.IsValid && !opsBadHours.ModelState.IsValid && !opsBadType.ModelState.IsValid,
+        "OperationsReport server-side filter validation (date range, 92-day limit, future date, hours, tableTypeId)");
+    var opsValidRes = (ViewResult)await opsCtrl.Index(todayVnOps.AddDays(-6), todayVnOps, 8, 24, null);
+    var opsVm = (OperationsReportViewModel)opsValidRes.Model!;
+    var opsCsv = await opsCtrl.Export(todayVnOps.AddDays(-6), todayVnOps, 8, 24, null) as FileContentResult;
+    Check(opsCtrl.ModelState.IsValid && opsVm.TotalDays == 7 && opsVm.HeatmapRows.Count == 7 && opsVm.HeatmapHours.Count == 16
+        && opsCsv != null && opsCsv.FileContents.Length > 3 && opsCsv.FileContents[0] == 0xEF && opsCsv.FileContents[1] == 0xBB && opsCsv.FileContents[2] == 0xBF,
+        "OperationsReport populates heatmap, table occupancy metrics and UTF-8 BOM CSV export");
+
     // TV5 ca làm (cần 08_AddWorkShiftReconciliation.sql). Ngoại tx đang mở nên service dùng chung tx.
-    var shiftService = new ShiftService(db);
+    // BR-23: cả quán một ca. Đóng tạm các ca đang mở trong DB thật (transaction sẽ rollback cuối test).
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.WorkShifts SET Status = 'Closed', EndTimeUtc = SYSUTCDATETIME(), EndingCash = StartingCash WHERE Status = 'Active'");
+    var shiftService = new ShiftService(db, new AuditLogService(db, new HttpContextAccessor()));
     var opened = await shiftService.OpenShiftAsync(staff.Id, 500000, "smoke");
     Check(opened.Status == WorkShift.StatusActive && opened.StartingCash == 500000, "Shift open");
     var secondRejected = false;
     try { await shiftService.OpenShiftAsync(staff.Id, 0, null); } catch (ShiftException e) { secondRejected = e.Code == "ALREADY_OPEN"; }
-    Check(secondRejected, "Second active shift for same staff rejected");
+    Check(secondRejected, "Second active shift in store rejected (BR-23)");
     var negativeRejected = false;
     try { await shiftService.OpenShiftAsync(customer.Id, -1, null); } catch (ShiftException) { negativeRejected = true; }
     Check(negativeRejected, "Negative starting cash rejected");
@@ -193,12 +223,25 @@ try
     Check(noteRequired, "Cash difference requires a note");
     var closed = await shiftService.CloseShiftAsync(opened.Id, staff.Id, 600000, "Thiếu tiền lẻ");
     Check(!closed.IsActive && closed.Difference == -20000 && closed.Shift.ExpectedCash == 620000, "Shift close snapshots expected cash and difference");
+    var openedKey = opened.Id.ToString();
+    Check(await db.AuditLogs.AnyAsync(log => log.EntityId == openedKey && log.ActionType == AuditActions.ShiftOpen)
+        && await db.AuditLogs.AnyAsync(log => log.EntityId == openedKey && log.ActionType == AuditActions.ShiftCashDiff && log.Reason == "Thiếu tiền lẻ"),
+        "Shift open and cash difference are audit-logged");
     var closeTwice = false;
     try { await shiftService.CloseShiftAsync(opened.Id, staff.Id, 620000, null); } catch (ShiftException e) { closeTwice = e.Code == "ALREADY_CLOSED"; }
     Check(closeTwice, "Closing twice rejected");
     var noShift = false;
     try { await shiftService.RequireActiveShiftIdForCashAsync(staff.Id); } catch (ShiftException e) { noShift = e.Code == "NO_ACTIVE_SHIFT"; }
     Check(noShift, "Cash payment after close rejected");
+    // Bàn giao két: ca trước đóng với 600.000 -> mở ca mới khác số này phải ghi lý do, khớp thì không cần.
+    var handoverRejected = false;
+    try { await shiftService.OpenShiftAsync(staff.Id, 500000, null); } catch (ShiftException e) { handoverRejected = e.Code == "HANDOVER_NOTE_REQUIRED"; }
+    var fractionRejected = false;
+    try { await shiftService.OpenShiftAsync(staff.Id, 600000.5m, "x"); } catch (ShiftException e) { fractionRejected = e.Code == "INVALID_CASH"; }
+    var handoverOk = await shiftService.OpenShiftAsync(staff.Id, 600000, null);
+    Check(handoverRejected && fractionRejected && handoverOk.Status == WorkShift.StatusActive,
+        "Shift handover: opening cash must match previous counted cash or carry a reason; whole VND only");
+    await shiftService.CloseShiftAsync(handoverOk.Id, staff.Id, 600000, null);
     var dashboardWithShift = (DashboardViewModel)((ViewResult)await Prepare(new DashboardController(db)).Index()).Model!;
     Check(dashboardWithShift.TotalTables == dashboardWithShift.AvailableTables + dashboardWithShift.InUseTables
         + dashboardWithShift.AwaitingPaymentTables + dashboardWithShift.UnavailableTables, "Dashboard table statuses add up");
@@ -333,10 +376,10 @@ try
     var upUserAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == upCustomer.Id);
     var hasUpgradeNotif = await db.Notifications.AnyAsync(n => n.UserId == upCustomer.Id && n.Title.Contains(silverTier.TierName));
     Check(commitT7.Success && commitT7.UpgradedTier && upUserAfter.TierId == silverTier.Id
-        && upUserAfter.TierReviewAtUtc.HasValue && upUserAfter.TierReviewAtUtc.Value > DateTime.UtcNow.AddDays(25)
-        && upUserAfter.TierReviewAtUtc.Value < DateTime.UtcNow.AddDays(35)
+        && upUserAfter.TierReviewAtUtc.HasValue && upUserAfter.TierReviewAtUtc.Value > DateTime.UtcNow.AddDays(360)
+        && upUserAfter.TierReviewAtUtc.Value < DateTime.UtcNow.AddDays(370)
         && hasUpgradeNotif,
-        "T7: Immediate tier upgrade on threshold updates TierId, sets 1-month TierReviewAtUtc (+1M), and creates Notification");
+        "T7: Immediate tier upgrade on threshold updates TierId, sets 12-month TierReviewAtUtc (BR-17d), and creates Notification");
 
     // T8: Hết review, chưa đủ chi tiêu -> Vào ân hạn 30 ngày, chưa hạ
     var graceCustomer = new ApplicationUser
@@ -444,28 +487,27 @@ try
 
     // T16: Staff truy cập /CrmDashboard, /RewardItem, duyệt điều chỉnh -> Bị chặn bởi [Authorize(Roles = "Manager,Admin")]
     var crmAuth = typeof(CrmDashboardController).GetCustomAttribute<AuthorizeAttribute>();
+    var campAuth = typeof(CampaignController).GetCustomAttribute<AuthorizeAttribute>();
     var approveAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Approve))?.GetCustomAttribute<AuthorizeAttribute>();
     var pendingAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Pending))?.GetCustomAttribute<AuthorizeAttribute>();
     var rewardAuth = typeof(RewardItemController).GetCustomAttribute<AuthorizeAttribute>();
-    var roleMgmtAuth = typeof(RoleManagementController).GetCustomAttribute<AuthorizeAttribute>();
-    Check(crmAuth?.Roles == "Manager,Admin"
-        && approveAuth?.Roles == "Manager,Admin"
-        && pendingAuth?.Roles == "Manager,Admin"
-        && rewardAuth?.Roles == "Manager,Admin"
-        && roleMgmtAuth?.Roles == "Admin",
-        "T16: CrmDashboard, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Manager,Admin)] while RoleManagement enforces [Authorize(Roles = Admin)]");
+    Check(crmAuth?.Roles == "Manager"
+        && campAuth?.Roles == "Manager"
+        && approveAuth?.Roles == "Manager"
+        && pendingAuth?.Roles == "Manager"
+        && rewardAuth?.Roles == "Manager"
+        && typeof(EmployeeController).GetCustomAttribute<AuthorizeAttribute>()?.Roles == "Admin",
+        "T16: CRM/Campaign/RewardItem/PointAdjustment are Manager-only; account management (Employee) is Admin-only (SRS I.4.4)");
 
-    // T17: Admin phân quyền tài khoản nội bộ (RoleManagementController: tạo/chuyển quyền Staff <-> Manager)
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-    var roleCtrl = Prepare(new RoleManagementController(users, roleManager, db), checkerPrincipal);
-    var roleIndexRes = (ViewResult)await roleCtrl.Index(null, null);
-    var roleVm = (RoleManagementViewModel)roleIndexRes.Model!;
+    // T17: Admin đổi vai trò tài khoản nội bộ trên màn Tài khoản & phân quyền (EmployeeController)
+    var roleCtrl = Prepare(new EmployeeController(users, db), checkerPrincipal);
+    var roleVm = (EmployeeListViewModel)((ViewResult)await roleCtrl.Index(null, null, null)).Model!;
     await roleCtrl.ChangeRole(staff.Id, "Manager");
     var isStaffNowManager = await users.IsInRoleAsync(staff, "Manager") && !await users.IsInRoleAsync(staff, "Staff");
     await roleCtrl.ChangeRole(staff.Id, "Staff");
     var isBackToStaff = await users.IsInRoleAsync(staff, "Staff") && !await users.IsInRoleAsync(staff, "Manager");
-    Check(roleVm.Users.Count >= 1 && isStaffNowManager && isBackToStaff,
-        "T17: Admin RoleManagementController assigns and switches internal roles (Staff <-> Manager) cleanly");
+    Check(roleVm.TotalCount >= 1 && isStaffNowManager && isBackToStaff,
+        "T17: Admin switches internal roles (Staff <-> Manager) from the single account management screen");
 
     // T18: Luồng Staff lập phiếu điều chỉnh điểm -> Manager vào màn riêng (/PointAdjustment/Pending - View 'Manage') phê duyệt
     var managerUser = new ApplicationUser { UserName = "manager.tv2." + key, Email = "mgr." + key + "@example.invalid", FullName = "TV2 Manager Checker" };
@@ -490,7 +532,7 @@ try
         "T18: Staff creates pending point adjustment (with requester role label) and Manager approves it on dedicated Manage screen");
 
     // T19: Manager cấu hình Giá Bàn chuẩn, Giá Gậy cho thuê theo lượt & Khuyến mãi Combo Giờ chơi tặng nước
-    var mgrPricingCtrl = Prepare(new PricingController(db), managerPrincipal);
+    var mgrPricingCtrl = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())), managerPrincipal);
     await mgrPricingCtrl.UpdateTableBaseRate(testType.Id, 65000m);
     var updatedTableRate = (await db.TableTypes.AsNoTracking().SingleAsync(t => t.Id == testType.Id)).HourlyRate;
     var cueName = "Gậy Carbon Smoke " + key[..6];
@@ -680,10 +722,9 @@ try
         && validDaysT22 == 7
         && dailySummary.VouchersExpired >= 1
         && vT22After.Status == CustomerVoucher.StatusExpired
-        && dailySummary.PointsExpiredUsers >= 1
-        && adultAfterDaily.RewardPoints == 0
-        && hasExpire100Tx,
-        "T22: Redeem issues BMS-XXXX-XXXX voucher with 7-day validity; LoyaltyDailyJob transitions overdue vouchers to Expired and reclaims points for accounts inactive >100 days");
+        && dailySummary.PointsExpiredUsers == 0
+        && !hasExpire100Tx,
+        "T22: Redeem issues BMS-XXXX-XXXX voucher with 7-day validity; daily cycle expires overdue vouchers and does NOT reclaim points (no point expiry in scope v1)");
 
     // T23: Manager tạo thêm bàn & điều chỉnh trạng thái bàn; Staff mở bàn chọn 1 trong 2 chế độ (Combo hoặc Tính giờ, không chạy song song)
     var newTableCode = "VIP-SM-" + key[..4];
@@ -735,9 +776,9 @@ try
         && !string.IsNullOrWhiteSpace(rejectLegacyStatusErr)
         && cardsAfterStd.All(c => allowedDisplayStatuses.Contains(c.DisplayStatus))
         && b01Detail != null && allowedDisplayStatuses.Contains(b01Detail.DisplayStatus)
-        && loyaltyAuth?.Roles == "Staff,Admin"
-        && quickEnrollAuth?.Roles == "Staff,Admin",
-        "T25: Table statuses strictly standardized to 4 states; Staff redirects to Shift; Manager excluded from POS Checkout & QuickEnroll");
+        && loyaltyAuth?.Roles == "Staff"
+        && quickEnrollAuth?.Roles == "Staff",
+        "T25: Table statuses strictly standardized to 4 states; Manager excluded from POS Checkout & QuickEnroll");
 
     // T26: Kiểm tra điểm/tiền từ 0 (chặn số âm), đồng bộ RewardItem -> Voucher và cảnh báo Hạng tối thiểu (MinTier) ở bước Thanh toán
     var rewardCtrl = Prepare(new RewardItemController(db), managerPrincipal);

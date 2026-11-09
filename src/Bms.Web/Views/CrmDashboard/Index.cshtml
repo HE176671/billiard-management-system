@@ -18,6 +18,18 @@
     <div class="text-muted" style="font-size:0.85rem">
         Số liệu tổng hợp trong 12 tháng gần nhất theo lịch sử giao dịch hội viên
     </div>
+    <div class="d-flex gap-2">
+        <form asp-action="RunDailyJobNow" method="post" class="d-inline"
+              onsubmit="return confirm('Chạy chu kỳ cuối ngày ngay: phát voucher sinh nhật, xét giữ hạng / ân hạn / hạ hạng và gửi email?')">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn-outline-bms" title="Job tự chạy lúc 00:05 mỗi ngày">
+                <i class="bi bi-arrow-repeat"></i> Chạy xét hạng ngay
+            </button>
+        </form>
+        <a asp-controller="Campaign" asp-action="Index" asp-route-segment="AtRisk" class="btn-primary-bms">
+            <i class="bi bi-megaphone"></i> Gửi ưu đãi khách vắng mặt
+        </a>
+    </div>
 </div>
 
 <!-- ═══════════ 4 CHỈ SỐ TỔNG QUAN ═══════════ -->
@@ -83,7 +95,7 @@
     <div class="col-lg-6">
         <div class="data-card p-3 h-100">
             <div class="fw-semibold mb-1" style="font-size:0.9rem">Cơ cấu hạng thành viên</div>
-            <div class="text-muted mb-2" style="font-size:0.75rem">Theo tích lũy xét hạng trong 365 ngày</div>
+            <div class="text-muted mb-2" style="font-size:0.75rem">Theo mức chi tiêu tích lũy 12 tháng</div>
             <div style="height:240px"><canvas id="tierBarChart"></canvas></div>
         </div>
     </div>
@@ -94,7 +106,7 @@
     <div class="col-lg-6">
         <div class="data-card d-flex flex-column h-100">
             <div class="data-card-header">
-                <span class="data-card-title"><i class="bi bi-award text-warning me-2"></i>Hội viên tích lũy cao nhất (365 ngày) (@Model.TopSpendersTotalCount)</span>
+                <span class="data-card-title"><i class="bi bi-award text-warning me-2"></i>Hội viên chi tiêu cao nhất (12 tháng) (@Model.TopSpendersTotalCount)</span>
             </div>
             @if (!Model.TopSpenders12M.Any())
             {
@@ -114,7 +126,7 @@
                                 <th>Hạng</th>
                                 <th>Nhóm</th>
                                 <th class="text-end">Số lượt</th>
-                                <th class="text-end">Tích lũy xét hạng 365 ngày</th>
+                                <th class="text-end">Tổng mức chi tiêu</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -165,6 +177,9 @@
         <div class="data-card d-flex flex-column h-100">
             <div class="data-card-header">
                 <span class="data-card-title"><i class="bi bi-clock-history text-danger me-2"></i>Khách quen vắng mặt trên 30 ngày (@Model.AtRiskTotalCount)</span>
+                <a asp-controller="Campaign" asp-action="Index" asp-route-segment="AtRisk" class="btn-primary-bms py-1 px-2" style="font-size:0.75rem">
+                    <i class="bi bi-send"></i> Gửi ưu đãi
+                </a>
             </div>
             @if (!Model.HighValueAtRisk.Any())
             {
@@ -183,7 +198,7 @@
                                 <th>Hội viên</th>
                                 <th>Lần ghé cuối</th>
                                 <th class="text-end">Số lượt</th>
-                                <th class="text-end">Tích lũy xét hạng 365 ngày</th>
+                                <th class="text-end">Tổng mức chi tiêu</th>
                                 <th class="text-end">Hồ sơ</th>
                             </tr>
                         </thead>

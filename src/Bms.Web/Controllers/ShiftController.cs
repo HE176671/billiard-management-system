@@ -8,8 +8,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-/// <summary>TV5 — BMS-017: mở ca, đóng ca, đối soát tiền mặt, lịch sử ca.</summary>
-[Authorize(Roles = "Staff,Manager,Admin")]
+/// <summary>
+/// TV5 — mở ca, đóng ca, đối soát tiền mặt, lịch sử ca.
+/// BR-23: cả quán chỉ có một ca đang mở; nhân viên nào đang trực cũng xem và đóng được ca đó (giao ca).
+/// </summary>
+[Authorize(Roles = "Staff,Manager")]
 public class ShiftController : Controller
 {
     private const int PageSize = 15;
@@ -26,26 +29,42 @@ public class ShiftController : Controller
 
     private string CurrentUserId => _users.GetUserId(User)!;
 
-    #region Ca cua toi: mo ca hoac xem ca dang mo
+    #region Ca cua quan: mo ca hoac xem ca dang mo
 
     // GET /Shift
     public async Task<IActionResult> Index()
     {
-        var vm = new ShiftHomeViewModel();
-        var active = await _shifts.GetActiveShiftAsync(CurrentUserId);
+        var vm = new ShiftHomeViewModel { CanOpen = User.IsInRole("Staff") };
+        var active = await _shifts.GetStoreActiveShiftAsync();
         if (active != null)
         {
             vm.Active = await _shifts.GetSummaryAsync(active.Id);
             vm.Close.ShiftId = active.Id;
+            vm.UnpaidTableCount = await _db.BilliardTables.CountAsync(t => t.Status == "InUse" || t.Status == "AwaitingPayment");
         }
-        vm.Recent = (await LoadRowsAsync(_db.WorkShifts.Where(s => s.StaffId == CurrentUserId)))
-            .Take(5).ToList();
+        else
+        {
+            var previous = await _shifts.GetLastClosedShiftAsync();
+            if (previous != null)
+            {
+                vm.PreviousShiftId = previous.Id;
+                vm.PreviousEndingCash = previous.EndingCash;
+                vm.PreviousClosedByName = previous.ClosedBy?.FullName;
+                vm.PreviousEndTimeUtc = previous.EndTimeUtc;
+            }
+            // Đếm mù: không điền sẵn tiền ca trước để lại, nhân viên phải tự đếm két.
+            vm.Open.Notes = TempData["OpenNotes"] as string;
+        }
+        // 5 ca gần nhất của cả quán (không còn "ca của tôi" vì chỉ có một ca chung).
+        vm.Recent = (await LoadRowsAsync(_db.WorkShifts)).Take(5).ToList();
         return View(vm);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Open([Bind(Prefix = "Open")] OpenShiftViewModel model)
+    [Authorize(Roles = "Staff")] // UC39: chỉ nhân viên trực quầy mở ca
+    public async Task<IActionResult> Open([Bind(Prefix = "Open")] OpenShiftViewModel model, string? cashBreakdown)
     {
+        cashBreakdown = CleanBreakdown(cashBreakdown);
         if (!ModelState.IsValid)
         {
             TempData["Error"] = FirstError() ?? "Dữ liệu mở ca không hợp lệ.";
@@ -56,7 +75,17 @@ public class ShiftController : Controller
             var shift = await _shifts.OpenShiftAsync(CurrentUserId, model.StartingCash!.Value, model.Notes);
             TempData["Success"] = $"Đã mở ca #{shift.Id} với {shift.StartingCash:N0} VND đầu ca.";
         }
-        catch (ShiftException ex) { TempData["Error"] = ex.Message; }
+        catch (ShiftException ex)
+        {
+            TempData["Error"] = ex.Message;
+            TempData["OpenBreakdown"] = cashBreakdown;
+            TempData["OpenNotes"] = model.Notes;
+            if (ex.Code == "HANDOVER_NOTE_REQUIRED")
+            {
+                TempData["OpenNeedReason"] = "1";
+                await LogCountMismatchAsync(null, $"Mở ca: đếm két được {model.StartingCash:N0} VND, khác tiền ca trước để lại.", model.StartingCash, cashBreakdown);
+            }
+        }
         return RedirectToAction(nameof(Index));
     }
 
@@ -65,14 +94,18 @@ public class ShiftController : Controller
     #region Dong ca va doi soat
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Close([Bind(Prefix = "Close")] CloseShiftViewModel model)
+    public async Task<IActionResult> Close([Bind(Prefix = "Close")] CloseShiftViewModel model, string? cashBreakdown)
     {
+        cashBreakdown = CleanBreakdown(cashBreakdown);
         var shift = await _db.WorkShifts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == model.ShiftId);
         if (shift == null) return NotFound();
-        var isOwner = shift.StaffId == CurrentUserId;
-        if (!isOwner && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
+        // BR-23: ca của quán, nhân viên đang trực nào cũng đóng được (giao ca). Ca đã đóng thì service báo lỗi.
+        var isManager = User.IsInRole("Manager") || User.IsInRole("Admin");
+        if (shift.Status != WorkShift.StatusActive && !isManager) return Forbid();
 
-        var back = isOwner ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Details), new { id = shift.Id });
+        var back = isManager && shift.StaffId != CurrentUserId
+            ? RedirectToAction(nameof(Details), new { id = shift.Id })
+            : RedirectToAction(nameof(Index));
         if (!ModelState.IsValid)
         {
             TempData["Error"] = FirstError() ?? "Dữ liệu đóng ca không hợp lệ.";
@@ -90,7 +123,13 @@ public class ShiftController : Controller
         catch (ShiftException ex)
         {
             TempData["Error"] = ex.Message;
-            TempData["CloseEndingCash"] = model.EndingCash?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            TempData["CloseBreakdown"] = cashBreakdown;
+            if (ex.Code == "NOTE_REQUIRED")
+            {
+                TempData["CloseNeedReason"] = "1";
+                // Ghi lại lần đếm lệch (kể cả khi sau đó đếm lại cho khớp) để Manager kiểm tra.
+                await LogCountMismatchAsync(shift.Id, $"Đóng ca #{shift.Id}: lần đếm được {model.EndingCash:N0} VND bị lệch, chưa chốt ca.", model.EndingCash, cashBreakdown);
+            }
             return back;
         }
     }
@@ -99,12 +138,15 @@ public class ShiftController : Controller
 
     #region Chi tiet ca
 
-    // GET /Shift/Details/5 — chủ ca hoặc Admin
+    // GET /Shift/Details/5 — người mở ca, ca đang mở của quán, hoặc Manager/Admin
     public async Task<IActionResult> Details(int id)
     {
         var summary = await _shifts.GetSummaryAsync(id);
         if (summary == null) return NotFound();
-        if (summary.Shift.StaffId != CurrentUserId && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
+        // Đếm mù: nhân viên không xem chi tiết ca đang mở (lộ tổng tiền mặt phải có); xem lại ca của mình sau khi đóng.
+        var isManagerView = User.IsInRole("Manager") || User.IsInRole("Admin");
+        if (!isManagerView && (summary.IsActive || (summary.Shift.StaffId != CurrentUserId && summary.Shift.ClosedById != CurrentUserId)))
+            return Forbid();
 
         var vm = new ShiftDetailsViewModel
         {
@@ -130,7 +172,8 @@ public class ShiftController : Controller
     // GET /Shift/History
     public async Task<IActionResult> History(DateOnly? from, DateOnly? to, int page = 1)
     {
-        var vm = await BuildListAsync(_db.WorkShifts.Where(s => s.StaffId == CurrentUserId),
+        // Ca tôi mở hoặc tôi đóng (giao ca).
+        var vm = await BuildListAsync(_db.WorkShifts.Where(s => s.StaffId == CurrentUserId || s.ClosedById == CurrentUserId),
             from, to, null, null, false, page);
         return View("List", vm);
     }
@@ -140,7 +183,7 @@ public class ShiftController : Controller
     #region Admin: quan ly moi ca
 
     // GET /Shift/Manage
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Manage(DateOnly? from, DateOnly? to, string? staffId, string? status,
         bool onlyDifference = false, int page = 1)
     {
@@ -223,6 +266,19 @@ public class ShiftController : Controller
                 CashCollected = cash, ExpectedCash = s.ExpectedCash ?? s.StartingCash + cash
             };
         }).ToList();
+    }
+
+    /// <summary>Chỉ nhận chuỗi chi tiết đếm dạng "500000:2,100000:3".</summary>
+    private static string? CleanBreakdown(string? s) =>
+        !string.IsNullOrWhiteSpace(s) && s.Length <= 300
+        && System.Text.RegularExpressions.Regex.IsMatch(s, @"^\d{1,6}:\d{1,6}(,\d{1,6}:\d{1,6})*$") ? s : null;
+
+    private async Task LogCountMismatchAsync(int? shiftId, string description, decimal? counted, string? breakdown)
+    {
+        var audit = HttpContext.RequestServices.GetService<IAuditLogService>();
+        if (audit == null) return;
+        await audit.LogAsync(AuditActions.ShiftCountMismatch, "WorkShift", shiftId?.ToString(), description,
+            newValue: counted?.ToString("0"), reason: breakdown == null ? null : "Chi tiết đếm: " + breakdown);
     }
 
     private string? FirstError() =>

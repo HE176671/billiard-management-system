@@ -2,15 +2,22 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Bms.Web.Models;
 
-// ── Dùng cho danh sách nhân viên ──
+// ── Dùng cho danh sách người dùng / nhân viên ──
 public class EmployeeListViewModel
 {
     public List<EmployeeRowViewModel> Employees { get; set; } = new();
     public string? Search { get; set; }
     public string? StatusFilter { get; set; }   // "active" | "inactive" | null = tất cả
+    public string? RoleFilter { get; set; }     // "Admin" | "Manager" | "Staff" | null = tất cả
     public int Page { get; set; } = 1;
     public int TotalPages { get; set; }
     public int TotalCount { get; set; }
+    public int ActiveCount { get; set; }
+    public int AdminCount { get; set; }
+    public int ManagerCount { get; set; }
+    public int StaffCount { get; set; }
+    /// <summary>Id tài khoản đang đăng nhập, để ẩn thao tác tự khóa / tự đổi vai trò / tự xóa.</summary>
+    public string CurrentUserId { get; set; } = string.Empty;
 }
 
 public class EmployeeRowViewModel
@@ -21,12 +28,13 @@ public class EmployeeRowViewModel
     public string? UserName { get; set; }
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
+    public string RoleName { get; set; } = "Staff";
     public DateOnly? HireDate { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 }
 
-// ── Dùng cho form tạo nhân viên ──
+// ── Dùng cho form tạo người dùng / nhân viên ──
 public class CreateEmployeeViewModel
 {
     [Required(ErrorMessage = "Vui lòng nhập họ tên.")]
@@ -34,6 +42,9 @@ public class CreateEmployeeViewModel
     [RegularExpression(ValidationRules.FullName, ErrorMessage = ValidationRules.FullNameMessage)]
     [Display(Name = "Họ và tên")]
     public string FullName { get; set; } = string.Empty;
+
+    [Display(Name = "Vai trò")]
+    public string Role { get; set; } = "Staff";
 
     [Required(ErrorMessage = "Vui lòng nhập tên đăng nhập.")]
     [StringLength(50, MinimumLength = 3, ErrorMessage = "Từ 3–50 ký tự.")]
@@ -61,7 +72,7 @@ public class CreateEmployeeViewModel
     public DateOnly? HireDate { get; set; }
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu.")]
-    [StringLength(100, MinimumLength = 8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự.")]
+    [StringLength(100, MinimumLength = 6, ErrorMessage = "Mật khẩu tối thiểu 6 ký tự.")]
     [RegularExpression(ValidationRules.Password, ErrorMessage = ValidationRules.PasswordMessage)]
     [DataType(DataType.Password)]
     [Display(Name = "Mật khẩu")]

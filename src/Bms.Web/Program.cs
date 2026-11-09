@@ -40,7 +40,12 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     options.Stores.SchemaVersion = IdentitySchemaVersions.Version1;
     options.Stores.MaxLengthForKeys = 128;
     options.User.RequireUniqueEmail = true;
-    options.Password.RequiredLength = 8;
+    // Yêu cầu của nhóm: mật khẩu chỉ cần tối thiểu 6 ký tự (vd: 123456).
+    options.Password.RequiredLength = 6;
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
     // Demo local chưa có email sender
@@ -75,6 +80,12 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 // TV5: dich vu ca lam dung chung (TV3 goi khi ghi nhan tien mat)
 builder.Services.AddScoped<IShiftService, ShiftService>();
+// TV5: nhat ky thao tac nhay cam dung chung
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+// TV5: email SMTP (API-02) và chu kỳ cuối ngày (JOB-01, JOB-02)
+builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<IDailyCycleService, DailyCycleService>();
 
 // WF2: Goi mon & Kho (Tung)
 builder.Services.AddSignalR();
@@ -123,6 +134,7 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.MapHub<OrderHub>("/hubs/order");
+app.MapHub<TableHub>(TableHub.Path); // TV5: sơ đồ bàn realtime
 
 #endregion
 
@@ -140,19 +152,35 @@ using (var upgradeScope = app.Services.CreateScope())
         upgradeLogger.LogError(ex,
             "Không tự nâng cấp được schema. Hãy chạy tay BMS_Database_Starter/08_AddWorkShiftReconciliation.sql và 09_TV2_CrmLoyaltyV2.sql.");
     }
+
+    // TV5: bảng AuditLogs + ràng buộc một ca đang mở (script 18). Tự bắt lỗi bên trong.
+    await Wf5SchemaUpgrader.ApplyAsync(
+        upgradeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), upgradeLogger);
 }
 
 #endregion
 
 #region Mat khau admin demo chi trong Development
-// Đặt mật khẩu admin.demo chỉ trong môi trường Development
+// Development: đặt mật khẩu tài khoản mẫu và nạp dữ liệu ca mẫu
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    // TV5: database cũ có thể thiếu role/tài khoản demo (Manager) -> tạo bổ sung trước khi đặt mật khẩu demo.
+    await DbInitializer.EnsureInternalRolesAndDemoManagerAsync(
+        userManager, scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>(), logger);
     await DbInitializer.SeedDevelopmentPasswordsAsync(userManager, config, logger);
+    try
+    {
+        await DbInitializer.SeedShiftDemoDataAsync(
+            scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), app.Environment.ContentRootPath, logger);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Không nạp được dữ liệu ca mẫu. Có thể chạy tay BMS_Database_Starter/09_AddShiftDemoData.sql.");
+    }
 }
 
 #endregion

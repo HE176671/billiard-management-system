@@ -1,23 +1,166 @@
 @model Bms.Web.Models.RevenueReportViewModel
-@{ ViewData["Title"] = "Báo cáo doanh thu — UC46"; Layout = "~/Views/Shared/_AdminLayout.cshtml"; }
-<p class="text-muted">Doanh thu hóa đơn đã thanh toán theo giờ Việt Nam (UTC+7), bao gồm hóa đơn trả bằng ví. Tiền nạp trước là tiền khách gửi để sử dụng dần, chỉ tính doanh thu khi thanh toán hóa đơn.</p>
-<form method="get" class="row g-3 mb-4">
-    <div class="col-md-3"><label for="from" class="form-label">Từ ngày</label><input id="from" name="from" type="date" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" required /></div>
-    <div class="col-md-3"><label for="to" class="form-label">Đến ngày</label><input id="to" name="to" type="date" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" required /></div>
-    <div class="col-md-3"><label for="groupBy" class="form-label">Nhóm theo</label><select id="groupBy" name="groupBy" class="form-select"><option value="day" selected="@(Model.GroupBy == "day")">Ngày</option><option value="month" selected="@(Model.GroupBy == "month")">Tháng</option></select></div>
-    <div class="col-md-3 d-flex align-items-end gap-2"><button class="btn-primary-bms" type="submit">Xem báo cáo</button><a asp-action="Export" asp-route-from="@Model.From.ToString("yyyy-MM-dd")" asp-route-to="@Model.To.ToString("yyyy-MM-dd")" asp-route-groupBy="@Model.GroupBy" class="btn-outline-bms">Xuất CSV</a></div>
+@{
+    ViewData["Title"] = "Báo cáo doanh thu";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+
+    string FormatMethodLabel(string method) => method switch
+    {
+        "Cash" => "Tiền mặt",
+        "Transfer" => "Chuyển khoản / VietQR",
+        "VietQR" => "Chuyển khoản / VietQR",
+        "VNPay" => "VNPay",
+        _ => method
+    };
+}
+
+<p class="text-muted mb-3">
+    Doanh thu thực thu từ bảng <code>PaymentTransactions</code> theo thời điểm giao dịch (múi giờ Việt Nam UTC+7).
+</p>
+
+<form method="get" class="form-card mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-sm-6 col-md-3">
+            <label for="from" class="form-label">Từ ngày</label>
+            <input id="from" name="from" type="date" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" required />
+        </div>
+        <div class="col-sm-6 col-md-3">
+            <label for="to" class="form-label">Đến ngày</label>
+            <input id="to" name="to" type="date" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" required />
+        </div>
+        <div class="col-sm-6 col-md-3">
+            <label for="groupBy" class="form-label">Nhóm theo</label>
+            <select id="groupBy" name="groupBy" class="form-select">
+                <option value="day" selected="@(Model.GroupBy == "day")">Theo ngày</option>
+                <option value="month" selected="@(Model.GroupBy == "month")">Theo tháng</option>
+            </select>
+        </div>
+        <div class="col-sm-6 col-md-3 d-flex gap-2">
+            <button class="btn-primary-bms" type="submit">
+                <i class="bi bi-funnel"></i> Xem báo cáo
+            </button>
+            <a asp-action="Export"
+               asp-route-from="@Model.From.ToString("yyyy-MM-dd")"
+               asp-route-to="@Model.To.ToString("yyyy-MM-dd")"
+               asp-route-groupBy="@Model.GroupBy"
+               class="btn-outline-bms" title="Xuất file CSV">
+                <i class="bi bi-download"></i> Xuất CSV
+            </a>
+        </div>
+    </div>
 </form>
-<div class="alert alert-info">Tiền nạp nhận trong kỳ: <strong>@Model.TopUpReceipts.ToString("N0")đ</strong> · Hóa đơn trả bằng ví: <strong>@Model.WalletPayments.ToString("N0")đ</strong> · Tiền mới thực nhận (không đếm lại ví): <strong>@Model.NewMoneyReceived.ToString("N0")đ</strong></div>
-<div asp-validation-summary="All" class="text-danger mb-3"></div>
-<div class="row g-3 mb-4">
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.TotalRevenue.ToString("N0") VND</div><div class="stat-label">Tổng doanh thu</div></div></div></div>
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.PaymentCount</div><div class="stat-label">Giao dịch thanh toán</div></div></div></div>
-    <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.InvoiceCount</div><div class="stat-label">Hóa đơn có thanh toán</div></div></div></div>
-</div>
-@if (Model.PaymentCount == 0) { <div class="alert alert-info">Chưa có giao dịch trong khoảng ngày đã chọn.</div> }
-<div class="data-card mb-4"><div class="data-card-header"><span class="data-card-title">Doanh thu theo kỳ</span></div><div class="table-responsive"><table class="table"><thead><tr><th>Kỳ</th><th>Doanh thu</th><th>Giao dịch</th></tr></thead><tbody>
-@foreach (var row in Model.Periods) { <tr><td>@row.Period</td><td>@row.Revenue.ToString("N0") VND</td><td>@row.PaymentCount</td></tr> }
-</tbody></table></div></div>
-<div class="data-card"><div class="data-card-header"><span class="data-card-title">Theo phương thức thanh toán</span></div><table class="table"><thead><tr><th>Phương thức</th><th>Doanh thu</th><th>Giao dịch</th></tr></thead><tbody>
-@foreach (var row in Model.Methods) { <tr><td>@row.Method</td><td>@row.Revenue.ToString("N0") VND</td><td>@row.PaymentCount</td></tr> }
-</tbody></table></div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div asp-validation-summary="All" class="alert alert-danger mb-4"></div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
+                <div>
+                    <div class="stat-value">@Model.TotalRevenue.ToString("N0") VND</div>
+                    <div class="stat-label">Tổng doanh thu thực thu</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-icon blue"><i class="bi bi-credit-card-2-front"></i></div>
+                <div>
+                    <div class="stat-value">@Model.PaymentCount</div>
+                    <div class="stat-label">Giao dịch thanh toán</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-icon amber"><i class="bi bi-receipt"></i></div>
+                <div>
+                    <div class="stat-value">@Model.InvoiceCount</div>
+                    <div class="stat-label">Hóa đơn đã thanh toán</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.PaymentCount == 0)
+    {
+        <div class="alert alert-info mb-4">
+            <i class="bi bi-info-circle me-2"></i>Chưa có giao dịch thanh toán trong khoảng ngày đã chọn.
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="data-card h-100">
+                <div class="data-card-header">
+                    <span class="data-card-title">
+                        <i class="bi bi-calendar3 me-1 text-primary"></i> Doanh thu theo kỳ (@(Model.GroupBy == "month" ? "Tháng" : "Ngày"))
+                    </span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Kỳ</th>
+                                <th class="text-end">Doanh thu</th>
+                                <th class="text-center">Số giao dịch</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in Model.Periods)
+                            {
+                                <tr>
+                                    <td><strong>@row.Period</strong></td>
+                                    <td class="text-end @(row.Revenue > 0 ? "fw-semibold text-success" : "text-muted")">
+                                        @row.Revenue.ToString("N0") VND
+                                    </td>
+                                    <td class="text-center">@row.PaymentCount</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="data-card h-100">
+                <div class="data-card-header">
+                    <span class="data-card-title">
+                        <i class="bi bi-wallet2 me-1 text-danger"></i> Theo phương thức thanh toán
+                    </span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Phương thức</th>
+                                <th class="text-end">Doanh thu</th>
+                                <th class="text-center">Giao dịch</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in Model.Methods)
+                            {
+                                <tr>
+                                    <td><strong>@FormatMethodLabel(row.Method)</strong></td>
+                                    <td class="text-end fw-semibold">@row.Revenue.ToString("N0") VND</td>
+                                    <td class="text-center">@row.PaymentCount</td>
+                                </tr>
+                            }
+                            @if (!Model.Methods.Any())
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-center py-4 text-muted">Chưa có dữ liệu phương thức thanh toán.</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}

@@ -1,69 +1,65 @@
 @model Bms.Web.Models.EmployeeListViewModel
 @{
-    ViewData["Title"] = "Quản lý nhân viên";
+    ViewData["Title"] = "Quản lý người dùng";
     Layout = "_AdminLayout";
+    string RoleLabel(string r) => r switch { "Admin" => "Admin · Quản trị", "Manager" => "Manager · Quản lý", _ => "Staff · Nhân viên" };
+    string RoleStyle(string r) => r switch
+    {
+        "Admin" => "background:#fee2e2;color:#b91c1c",
+        "Manager" => "background:#dbeafe;color:#1d4ed8",
+        _ => "background:#f1f5f9;color:#475569"
+    };
 }
 
-@if (TempData["Success"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
-        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-}
-@if (TempData["Error"] != null)
-{
-    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-}
+<partial name="_Alerts" />
 
-<!-- Stat cards -->
 <div class="row g-3 mb-4">
     <div class="col-sm-6 col-xl-3">
-        <div class="stat-card">
-            <div class="stat-icon red"><i class="bi bi-people-fill"></i></div>
-            <div>
-                <div class="stat-value">@Model.TotalCount</div>
-                <div class="stat-label">Tổng nhân viên</div>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon blue"><i class="bi bi-people-fill"></i></div>
+            <div><div class="stat-value">@(Model.AdminCount + Model.ManagerCount + Model.StaffCount)</div><div class="stat-label">Tài khoản nội bộ · @Model.ActiveCount đang hoạt động</div></div></div>
     </div>
     <div class="col-sm-6 col-xl-3">
-        <div class="stat-card">
-            <div class="stat-icon green"><i class="bi bi-person-check-fill"></i></div>
-            <div>
-                <div class="stat-value">@Model.Employees.Count(e => e.IsActive)</div>
-                <div class="stat-label">Đang hoạt động</div>
-            </div>
-        </div>
+        <div class="stat-card"><div class="stat-icon red"><i class="bi bi-shield-lock"></i></div>
+            <div><div class="stat-value">@Model.AdminCount</div><div class="stat-label">Admin — quản trị tài khoản</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card"><div class="stat-icon amber"><i class="bi bi-briefcase"></i></div>
+            <div><div class="stat-value">@Model.ManagerCount</div><div class="stat-label">Manager — vận hành quán</div></div></div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card"><div class="stat-icon green"><i class="bi bi-person-badge"></i></div>
+            <div><div class="stat-value">@Model.StaffCount</div><div class="stat-label">Staff — làm việc tại quầy</div></div></div>
     </div>
 </div>
 
-<!-- Data table -->
 <div class="data-card">
     <div class="data-card-header">
-        <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách nhân viên</span>
+        <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách tài khoản (@Model.TotalCount)</span>
         <div class="d-flex gap-2 flex-wrap align-items-center">
-            <!-- Search & filter form -->
             <form method="get" class="d-flex gap-2 flex-wrap" id="searchForm">
-                <input type="text" name="search" value="@Model.Search" placeholder="Tìm tên, mã, SĐT..."
-                       class="form-control" style="width:200px;font-size:0.8rem" />
+                <input type="text" name="search" value="@Model.Search" placeholder="Tìm tên, mã, SĐT, tài khoản..."
+                       class="form-control" style="width:220px;font-size:0.8rem" />
+                <select name="role" class="form-select" style="width:150px;font-size:0.8rem"
+                        onchange="document.getElementById('searchForm').submit()">
+                    <option value="" selected="@(Model.RoleFilter == null)">Mọi vai trò</option>
+                    <option value="Admin" selected="@(Model.RoleFilter == "Admin")">Admin</option>
+                    <option value="Manager" selected="@(Model.RoleFilter == "Manager")">Manager</option>
+                    <option value="Staff" selected="@(Model.RoleFilter == "Staff")">Staff</option>
+                </select>
                 <select name="status" class="form-select" style="width:140px;font-size:0.8rem"
                         onchange="document.getElementById('searchForm').submit()">
-                    <option value="" selected="@(Model.StatusFilter == null)">Tất cả</option>
-                    <option value="active"   selected="@(Model.StatusFilter == "active")">Đang làm</option>
+                    <option value="" selected="@(Model.StatusFilter == null)">Mọi trạng thái</option>
+                    <option value="active" selected="@(Model.StatusFilter == "active")">Đang hoạt động</option>
                     <option value="inactive" selected="@(Model.StatusFilter == "inactive")">Đã khóa</option>
                 </select>
                 <button type="submit" class="btn-primary-bms"><i class="bi bi-search"></i></button>
-                @if (!string.IsNullOrEmpty(Model.Search) || Model.StatusFilter != null)
+                @if (!string.IsNullOrEmpty(Model.Search) || Model.StatusFilter != null || Model.RoleFilter != null)
                 {
                     <a asp-action="Index" class="btn-outline-bms"><i class="bi bi-x"></i> Xóa lọc</a>
                 }
             </form>
             <a asp-action="Create" class="btn-primary-bms ms-auto">
-                <i class="bi bi-plus-lg"></i> Thêm nhân viên
+                <i class="bi bi-person-plus"></i> Thêm tài khoản
             </a>
         </div>
     </div>
@@ -72,69 +68,93 @@
     {
         <div class="text-center py-5 text-muted">
             <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-            Không tìm thấy nhân viên nào.
+            Không tìm thấy tài khoản nào.
         </div>
     }
     else
     {
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>Mã NV</th>
+                        <th>Mã</th>
                         <th>Họ và tên</th>
-                        <th>Tài khoản</th>
+                        <th style="width:220px">Vai trò</th>
                         <th>Số điện thoại</th>
                         <th>Ngày vào làm</th>
                         <th>Trạng thái</th>
-                        <th style="width:100px">Thao tác</th>
+                        <th style="width:150px" class="text-end">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var emp in Model.Employees)
                     {
+                        var isSelf = emp.Id == Model.CurrentUserId;
                         <tr>
                             <td><code style="font-size:0.8rem">@(emp.EmployeeCode ?? "—")</code></td>
-                            <td><strong>@emp.FullName</strong></td>
                             <td>
-                                <span style="font-size:0.8rem;color:#64748b">@emp.UserName</span>
+                                <strong>@emp.FullName</strong>
+                                @if (isSelf) { <span class="text-muted" style="font-size:0.75rem">(bạn)</span> }
+                                <div style="font-size:0.75rem;color:#64748b">@emp.UserName · @emp.Email</div>
+                            </td>
+                            <td>
+                                @if (isSelf)
+                                {
+                                    <span class="badge rounded-pill" style="@RoleStyle(emp.RoleName);font-weight:600;font-size:0.72rem">@RoleLabel(emp.RoleName)</span>
+                                }
+                                else
+                                {
+                                    <form asp-action="ChangeRole" method="post" class="d-flex gap-1 align-items-center"
+                                          onsubmit="return confirm('Đổi vai trò của @emp.FullName? Tài khoản sẽ bị đăng xuất để áp dụng quyền mới.')">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@emp.Id" />
+                                        <select name="newRole" class="form-select form-select-sm" style="font-size:0.78rem;@RoleStyle(emp.RoleName)"
+                                                onchange="this.form.querySelector('button').classList.remove('d-none')">
+                                            <option value="Staff" selected="@(emp.RoleName == "Staff")">Staff · Nhân viên</option>
+                                            <option value="Manager" selected="@(emp.RoleName == "Manager")">Manager · Quản lý</option>
+                                            <option value="Admin" selected="@(emp.RoleName == "Admin")">Admin · Quản trị</option>
+                                        </select>
+                                        <button type="submit" class="btn-primary-bms py-1 px-2 d-none" style="font-size:0.75rem">Lưu</button>
+                                    </form>
+                                }
                             </td>
                             <td>@(emp.PhoneNumber ?? "—")</td>
                             <td>@(emp.HireDate?.ToString("dd/MM/yyyy") ?? "—")</td>
                             <td>
                                 @if (emp.IsActive)
-                                { <span class="badge-active">Đang làm</span> }
+                                { <span class="badge-active">Hoạt động</span> }
                                 else
                                 { <span class="badge-inactive">Đã khóa</span> }
                             </td>
                             <td>
-                                <div class="d-flex gap-1">
-                                    <a asp-action="Edit" asp-route-id="@emp.Id"
-                                       class="btn-sm-icon" title="Sửa thông tin">
+                                <div class="d-flex gap-1 justify-content-end">
+                                    <a asp-action="Edit" asp-route-id="@emp.Id" class="btn-sm-icon" title="Sửa thông tin">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    <form asp-action="ToggleLock" asp-route-id="@emp.Id"
-                                          method="post" class="d-inline"
-                                          onsubmit="return confirm('@(emp.IsActive ? "Khóa" : "Mở khóa") tài khoản @emp.FullName?')">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit"
-                                                class="btn-sm-icon @(!emp.IsActive ? "" : "danger")"
-                                                title="@(emp.IsActive ? "Khóa tài khoản" : "Mở khóa")">
-                                            <i class="bi @(emp.IsActive ? "bi-lock" : "bi-unlock")"></i>
-                                        </button>
-                                    </form>
-                                    <a asp-action="ResetPassword" asp-route-id="@emp.Id"
-                                       class="btn-sm-icon" title="Đặt lại mật khẩu">
+                                    <a asp-action="ResetPassword" asp-route-id="@emp.Id" class="btn-sm-icon" title="Đặt lại mật khẩu">
                                         <i class="bi bi-key"></i>
                                     </a>
-                                    <form asp-action="Delete" asp-route-id="@emp.Id"
-                                          method="post" class="d-inline"
-                                          onsubmit="return confirm('Bạn có chắc chắn muốn xóa vĩnh viễn nhân viên @emp.FullName không?\n\nCảnh báo: Hành động này không thể hoàn tác!')">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn-sm-icon text-danger" title="Xóa nhân viên">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
+                                    @if (!isSelf)
+                                    {
+                                        <form asp-action="ToggleLock" asp-route-id="@emp.Id" method="post" class="d-inline"
+                                              onsubmit="return confirm('@(emp.IsActive ? "Khóa" : "Mở khóa") tài khoản @emp.FullName?')">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn-sm-icon @(emp.IsActive ? "danger" : "")"
+                                                    title="@(emp.IsActive ? "Khóa tài khoản" : "Mở khóa")">
+                                                <i class="bi @(emp.IsActive ? "bi-lock" : "bi-unlock")"></i>
+                                            </button>
+                                        </form>
+                                    }
+                                    @if (!isSelf && emp.RoleName != "Admin")
+                                    {
+                                        <form asp-action="Delete" asp-route-id="@emp.Id" method="post" class="d-inline"
+                                              onsubmit="return confirm('Xóa vĩnh viễn tài khoản @emp.FullName?\n\nChỉ xóa được tài khoản tạo nhầm, chưa có ca làm hay giao dịch. Tài khoản đã làm việc thì hãy Khóa.')">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn-sm-icon text-danger" title="Xóa tài khoản tạo nhầm">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    }
                                 </div>
                             </td>
                         </tr>
@@ -143,22 +163,27 @@
             </table>
         </div>
 
-        <!-- Pagination -->
         @if (Model.TotalPages > 1)
         {
-            <div class="d-flex justify-content-center align-items-center gap-2 py-3">
+            <nav class="p-3"><ul class="pagination pagination-sm mb-0 justify-content-center">
                 @for (int i = 1; i <= Model.TotalPages; i++)
                 {
-                    <a asp-action="Index"
-                       asp-route-search="@Model.Search"
-                       asp-route-status="@Model.StatusFilter"
-                       asp-route-page="@i"
-                       class="btn-sm-icon @(i == Model.Page ? "active" : "")"
-                       style="@(i == Model.Page ? "background:#e94560;color:#fff;border-color:#e94560" : "")">
-                        @i
-                    </a>
+                    <li class="page-item @(i == Model.Page ? "active" : "")">
+                        <a class="page-link" asp-action="Index" asp-route-search="@Model.Search" asp-route-status="@Model.StatusFilter"
+                           asp-route-role="@Model.RoleFilter" asp-route-page="@i">@i</a>
+                    </li>
                 }
-            </div>
+            </ul></nav>
         }
     }
+</div>
+
+<div class="form-card mt-4" style="font-size:0.85rem">
+    <h6 style="font-weight:600" class="mb-2"><i class="bi bi-info-circle me-2"></i>Phân quyền theo vai trò</h6>
+    <div class="row g-3">
+        <div class="col-md-4"><strong>Admin</strong> — chỉ quản trị tài khoản: tạo, sửa, khóa, đặt lại mật khẩu, đổi vai trò. Không vận hành quán.</div>
+        <div class="col-md-4"><strong>Manager</strong> — vận hành quán: giá, món, kho, ca, báo cáo, nhật ký, hạng hội viên, quà, email ưu đãi. Không hủy món/hóa đơn.</div>
+        <div class="col-md-4"><strong>Staff</strong> — tại quầy: mở/đóng ca, mở bàn, gọi món, thanh toán, hủy món/hóa đơn có lý do, đăng ký hội viên.</div>
+    </div>
+    <p class="text-muted mb-0 mt-2">Đổi vai trò, khóa hoặc đặt lại mật khẩu sẽ đăng xuất phiên đang mở của tài khoản đó. Mọi thay đổi được ghi vào Nhật ký hệ thống.</p>
 </div>

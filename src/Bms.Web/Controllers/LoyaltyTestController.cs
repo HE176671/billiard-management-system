@@ -1,3 +1,4 @@
+using Bms.Web.Filters;
 using System.Security.Claims;
 using Bms.Web.Data;
 using Bms.Web.Models;
@@ -8,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Staff,Admin")]
+[Authorize(Roles = "Staff")]
 public class LoyaltyTestController : Controller
 {
     private const string PlaceholderEmailDomain = "@noemail.bms.local";
@@ -639,6 +640,110 @@ public class LoyaltyTestController : Controller
         }
     }
 
+    private async Task RecordInvoiceAndPaymentAsync(
+        int? sessionId,
+        string? customerId,
+        decimal totalPlaytime,
+        decimal totalFandB,
+        decimal discountAmount,
+        decimal finalAmount,
+        string dbPaymentMethod)
+    {
+        try
+        {
+            int resolvedSessionId = sessionId ?? 0;
+            var actorId = CurrentActorId;
+            if (string.IsNullOrEmpty(actorId))
+            {
+                actorId = await _context.Users.AsNoTracking().Select(u => u.Id).FirstOrDefaultAsync();
+            }
+            if (string.IsNullOrEmpty(actorId)) return;
+
+            if (resolvedSessionId <= 0)
+            {
+                var tableId = (await _context.Database
+                    .SqlQuery<int>($"SELECT TOP 1 Id AS [Value] FROM dbo.BilliardTables ORDER BY Id")
+                    .ToListAsync()).FirstOrDefault();
+                if (tableId <= 0) return;
+
+                resolvedSessionId = (await _context.Database.SqlQuery<int>($@"
+                    INSERT INTO dbo.PlaySessions (TableId, CustomerId, OpenedById, ClosedById, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status)
+                    OUTPUT INSERTED.Id AS [Value]
+                    VALUES ({tableId}, {customerId}, {actorId}, {actorId}, DATEADD(hour, -1, SYSUTCDATETIME()), SYSUTCDATETIME(), {totalPlaytime}, {totalPlaytime}, 'Closed');
+                ").ToListAsync()).FirstOrDefault();
+            }
+            else
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                    IF OBJECT_ID(N'dbo.PlaySessionTableSegments', N'U') IS NOT NULL
+                    BEGIN
+                        UPDATE dbo.PlaySessionTableSegments
+                        SET EndAtUtc = SYSUTCDATETIME()
+                        WHERE SessionId = {resolvedSessionId} AND EndAtUtc IS NULL;
+                    END;
+
+                    UPDATE dbo.PlaySessions
+                    SET Status = 'Closed',
+                        EndAtUtc = ISNULL(EndAtUtc, SYSUTCDATETIME()),
+                        ClosedById = ISNULL(ClosedById, {actorId}),
+                        CustomerId = ISNULL(CustomerId, {customerId}),
+                        PlaytimeAmount = {totalPlaytime}
+                    WHERE Id = {resolvedSessionId};
+
+                    UPDATE t
+                    SET t.Status = 'Available'
+                    FROM dbo.BilliardTables t
+                    INNER JOIN dbo.PlaySessions s ON s.TableId = t.Id
+                    WHERE s.Id = {resolvedSessionId} AND t.Status = 'InUse';
+                ");
+            }
+
+            if (resolvedSessionId <= 0) return;
+
+            var existingInvoiceId = (await _context.Database
+                .SqlQuery<int>($"SELECT TOP 1 Id AS [Value] FROM dbo.Invoices WHERE SessionId = {resolvedSessionId}")
+                .ToListAsync()).FirstOrDefault();
+
+            int invoiceId = existingInvoiceId;
+            if (invoiceId <= 0)
+            {
+                invoiceId = (await _context.Database.SqlQuery<int>($@"
+                    INSERT INTO dbo.Invoices (SessionId, CustomerId, TotalPlaytime, TotalFandB, DiscountAmount, Status, CreatedAtUtc)
+                    OUTPUT INSERTED.Id AS [Value]
+                    VALUES ({resolvedSessionId}, {customerId}, {totalPlaytime}, {totalFandB}, {discountAmount}, 'Paid', SYSUTCDATETIME());
+                ").ToListAsync()).FirstOrDefault();
+            }
+            else
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                    UPDATE dbo.Invoices
+                    SET CustomerId = {customerId},
+                        TotalPlaytime = {totalPlaytime},
+                        TotalFandB = {totalFandB},
+                        DiscountAmount = {discountAmount},
+                        Status = 'Paid'
+                    WHERE Id = {invoiceId};
+                ");
+            }
+
+            if (invoiceId > 0)
+            {
+                var activeShiftId = await _context.WorkShifts.AsNoTracking()
+                    .Where(s => s.Status == WorkShift.StatusActive) // BR-23: ca chung của quán
+                    .Select(s => (int?)s.Id)
+                    .FirstOrDefaultAsync();
+
+                await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                    INSERT INTO dbo.PaymentTransactions (InvoiceId, PaymentMethod, AmountPaid, WorkShiftId, ReceivedById, TransactionTimeUtc)
+                    VALUES ({invoiceId}, {dbPaymentMethod}, {finalAmount}, {activeShiftId}, {actorId}, SYSUTCDATETIME());
+                ");
+            }
+        }
+        catch
+        {
+            // Không làm gián đoạn luồng tính điểm nếu DB đang chạy trong ngữ cảnh giả lập thiếu bảng phụ
+        }
+    }
     // POST /LoyaltyTest/SimulatePayment (Giữ lại cho tương thích cũ)
     [HttpPost]
     [ValidateAntiForgeryToken]
