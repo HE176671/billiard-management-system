@@ -294,7 +294,7 @@ public partial class CheckoutService : ICheckoutService
             var prepared = new PreparedInvoice(true, intent.InvoiceId, intent.SessionId ?? 0,
                 intent.PlaytimeAmount, intent.FandBAmount, null);
 
-            var settled = await SettleAsync(command, prepared, intent.ExpectedAmount, "Transfer", providerTransactionId, false, ct, confirmedById);
+            var settled = await SettleAsync(command, prepared, intent.ExpectedAmount, "Transfer", providerTransactionId, false, ct, confirmedById, intent.ExpectedAmount);
             if (!settled.Success)
             {
                 await tx.RollbackAsync(ct);
@@ -428,15 +428,16 @@ public partial class CheckoutService : ICheckoutService
         CheckoutCommand command,
         PreparedInvoice prepared,
         CancellationToken ct,
-        bool commitLoyalty = true)
+        bool commitLoyalty = true,
+        decimal? lockedExpectedAmount = null)
     {
         if (string.IsNullOrWhiteSpace(command.CustomerId))
-            return new(true, prepared.PlaytimeAmount + prepared.FandBAmount, null);
+            return new(true, lockedExpectedAmount ?? (prepared.PlaytimeAmount + prepared.FandBAmount), null);
 
         var request = new CheckoutLoyaltyRequest(
             command.CustomerId, NormalizeReference(command.ReferenceCode), prepared.InvoiceId,
             prepared.PlaytimeAmount, prepared.FandBAmount, command.PointsToRedeem,
-            NormalizeOptional(command.VoucherCode), command.CashierId, command.PayWithWallet);
+            NormalizeOptional(command.VoucherCode), command.CashierId, command.PayWithWallet, lockedExpectedAmount);
 
         var preview = await _loyalty.PreviewCheckoutAsync(request, ct);
         if (!preview.IsValid)
@@ -460,12 +461,21 @@ public partial class CheckoutService : ICheckoutService
         string gatewayReference,
         bool receivedAtCounter,
         CancellationToken ct,
-        string? transferConfirmer = null)
+        string? transferConfirmer = null,
+        decimal? lockedExpectedAmount = null)
     {
         await LockCheckoutAsync("INVOICE", prepared.InvoiceId.ToString(), ct);
+        if (!string.IsNullOrWhiteSpace(command.CustomerId))
+        {
+            var lockedUser = await _db.Users
+                .FromSqlInterpolated($"SELECT * FROM dbo.AspNetUsers WITH (UPDLOCK, HOLDLOCK) WHERE Id = {command.CustomerId}")
+                .SingleOrDefaultAsync(ct);
+            if (lockedUser == null || !lockedUser.IsActive)
+                return new(false, false, false, "Hội viên không tồn tại hoặc đang bị khóa.", prepared.InvoiceId, ReferenceCode: command.ReferenceCode);
+        }
         if (await _db.PaymentTransactions.AsNoTracking().AnyAsync(p => p.InvoiceId == prepared.InvoiceId, ct))
             return new(false, true, false, "Hóa đơn đã được thanh toán. Không ghi nhận thêm giao dịch.", prepared.InvoiceId, ReferenceCode: command.ReferenceCode);
-        var calculated = await CalculateFinalAmountAsync(command, prepared, ct);
+        var calculated = await CalculateFinalAmountAsync(command, prepared, ct, commitLoyalty: true, lockedExpectedAmount: lockedExpectedAmount);
         if (!calculated.Success)
             return calculated.Result!;
 

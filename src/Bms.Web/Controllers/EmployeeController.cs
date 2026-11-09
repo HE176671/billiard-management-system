@@ -25,12 +25,22 @@ public class EmployeeController : Controller
     // GET /Employee
     public async Task<IActionResult> Index(string? search, string? status, int page = 1)
     {
-        // Lấy tất cả user có role Staff
-        var staffIds = (await _userManager.GetUsersInRoleAsync("Staff"))
+        bool isAdmin = User.IsInRole("Admin");
+
+        // Lấy tất cả user có role Staff; nếu là Admin thì lấy cả Manager
+        var targetIds = (await _userManager.GetUsersInRoleAsync("Staff"))
                         .Select(u => u.Id).ToHashSet();
+        var managerIds = new HashSet<string>();
+
+        if (isAdmin)
+        {
+            managerIds = (await _userManager.GetUsersInRoleAsync("Manager"))
+                         .Select(u => u.Id).ToHashSet();
+            targetIds.UnionWith(managerIds);
+        }
 
         var query = _userManager.Users
-            .Where(u => staffIds.Contains(u.Id));
+            .Where(u => targetIds.Contains(u.Id));
 
         // Tìm kiếm
         if (!string.IsNullOrWhiteSpace(search))
@@ -51,23 +61,25 @@ public class EmployeeController : Controller
         var totalPages = (int)Math.Ceiling(total / (double)PageSize);
         page = Math.Max(1, Math.Min(page, Math.Max(1, totalPages)));
 
-        var rows = await query
+        var users = await query
             .OrderBy(u => u.FullName)
             .Skip((page - 1) * PageSize)
             .Take(PageSize)
-            .Select(u => new EmployeeRowViewModel
-            {
-                Id           = u.Id,
-                FullName     = u.FullName,
-                EmployeeCode = u.EmployeeCode,
-                UserName     = u.UserName,
-                Email        = u.Email,
-                PhoneNumber  = u.PhoneNumber,
-                HireDate     = u.HireDate,
-                IsActive     = u.IsActive,
-                CreatedAtUtc = u.CreatedAtUtc
-            })
             .ToListAsync();
+
+        var rows = users.Select(u => new EmployeeRowViewModel
+        {
+            Id           = u.Id,
+            FullName     = u.FullName,
+            EmployeeCode = u.EmployeeCode,
+            UserName     = u.UserName,
+            Email        = u.Email,
+            PhoneNumber  = u.PhoneNumber,
+            RoleName     = managerIds.Contains(u.Id) ? "Manager" : "Staff",
+            HireDate     = u.HireDate,
+            IsActive     = u.IsActive,
+            CreatedAtUtc = u.CreatedAtUtc
+        }).ToList();
 
         var vm = new EmployeeListViewModel
         {
@@ -98,8 +110,12 @@ public class EmployeeController : Controller
     {
         if (!ModelState.IsValid) return View(model);
 
+        bool isAdmin = User.IsInRole("Admin");
+        string targetRole = isAdmin && model.Role == "Manager" ? "Manager" : "Staff";
+        string prefix = targetRole == "Manager" ? "MG" : "NV";
+
         // Mã do hệ thống cấp (ô nhập là readonly), không tin giá trị gửi lên từ form.
-        string empCode = await GenerateNextEmployeeCodeAsync();
+        string empCode = await GenerateNextEmployeeCodeAsync(prefix);
 
         await ValidateUniqueAsync(model.PhoneNumber, empCode, excludeUserId: null,
             nameof(model.PhoneNumber), nameof(model.EmployeeCode));
@@ -129,11 +145,11 @@ public class EmployeeController : Controller
                 return View(model);
             }
 
-            var roleResult = await _userManager.AddToRoleAsync(user, "Staff");
+            var roleResult = await _userManager.AddToRoleAsync(user, targetRole);
             if (!roleResult.Succeeded)
             {
                 await tx.RollbackAsync();
-                ModelState.AddModelError(string.Empty, "Gán quyền Staff thất bại. Vui lòng thử lại.");
+                ModelState.AddModelError(string.Empty, $"Gán quyền {targetRole} thất bại. Vui lòng thử lại.");
                 return View(model);
             }
 
@@ -146,7 +162,7 @@ public class EmployeeController : Controller
             return View(model);
         }
 
-        TempData["Success"] = $"Đã tạo tài khoản nhân viên {user.FullName} thành công.";
+        TempData["Success"] = $"Đã tạo tài khoản người dùng {user.FullName} ({targetRole}) thành công.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -181,9 +197,10 @@ public class EmployeeController : Controller
         var user = await GetStaffOrNull(model.Id);
         if (user == null) return NotFound();
 
-        // Mã nhân viên không sửa được trên form; chỉ cấp mới nếu tài khoản cũ còn thiếu.
+        // Mã người dùng không sửa được trên form; chỉ cấp mới nếu tài khoản cũ còn thiếu.
+        string prefix = await _userManager.IsInRoleAsync(user, "Manager") ? "MG" : "NV";
         var newCode = string.IsNullOrWhiteSpace(user.EmployeeCode)
-            ? await GenerateNextEmployeeCodeAsync()
+            ? await GenerateNextEmployeeCodeAsync(prefix)
             : user.EmployeeCode;
         await ValidateUniqueAsync(model.PhoneNumber, newCode, user.Id,
             nameof(model.PhoneNumber), nameof(model.EmployeeCode));
@@ -324,12 +341,14 @@ public class EmployeeController : Controller
 
     // ── Helpers ──
 
-    /// <summary>Lấy user theo ID, chỉ trả về nếu đúng là Staff.</summary>
+    /// <summary>Lấy user theo ID, trả về nếu là Staff (hoặc Manager khi người thao tác là Admin).</summary>
     private async Task<ApplicationUser?> GetStaffOrNull(string id)
     {
         var user = await _userManager.FindByIdAsync(id);
         if (user == null) return null;
-        return await _userManager.IsInRoleAsync(user, "Staff") ? user : null;
+        if (await _userManager.IsInRoleAsync(user, "Staff")) return user;
+        if (User.IsInRole("Admin") && await _userManager.IsInRoleAsync(user, "Manager")) return user;
+        return null;
     }
 
     /// <summary>Dịch lỗi Identity sang tiếng Việt dễ hiểu.</summary>
@@ -358,23 +377,23 @@ public class EmployeeController : Controller
             ModelState.AddModelError(codeField, "Mã nhân viên đã tồn tại.");
     }
 
-    /// <summary>Tự động sinh mã nhân viên tiếp theo (NV001, NV002...)</summary>
-    private async Task<string> GenerateNextEmployeeCodeAsync()
+    /// <summary>Tự động sinh mã người dùng tiếp theo (NV001, MG001...)</summary>
+    private async Task<string> GenerateNextEmployeeCodeAsync(string prefix = "NV")
     {
         var existingCodes = await _userManager.Users
-            .Where(u => u.EmployeeCode != null && u.EmployeeCode.StartsWith("NV"))
+            .Where(u => u.EmployeeCode != null && u.EmployeeCode.StartsWith(prefix))
             .Select(u => u.EmployeeCode)
             .ToListAsync();
 
         int maxNumber = 0;
         foreach (var code in existingCodes)
         {
-            if (code != null && int.TryParse(code.AsSpan(2), out int number))
+            if (code != null && code.Length > prefix.Length && int.TryParse(code.AsSpan(prefix.Length), out int number))
             {
                 if (number > maxNumber) maxNumber = number;
             }
         }
-        return $"NV{(maxNumber + 1).ToString("D3")}";
+        return $"{prefix}{(maxNumber + 1).ToString("D3")}";
     }
     #endregion
 }

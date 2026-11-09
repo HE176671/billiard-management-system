@@ -51,7 +51,7 @@ public partial class CheckoutService
             var command = new CheckoutCommand(intent.CustomerId, reference, intent.SessionId,
                 intent.PlaytimeAmount, intent.FandBAmount, intent.PointsToRedeem, intent.VoucherCode, actorId, cashReceived);
             var prepared = new PreparedInvoice(true, intent.InvoiceId, intent.SessionId ?? 0, intent.PlaytimeAmount, intent.FandBAmount, null);
-            var result = await SettleAsync(command, prepared, intent.ExpectedAmount, "Cash", reference, true, ct);
+            var result = await SettleAsync(command, prepared, intent.ExpectedAmount, "Cash", reference, true, ct, lockedExpectedAmount: intent.ExpectedAmount);
             if (!result.Success)
             {
                 await tx.RollbackAsync(ct);

@@ -70,6 +70,21 @@ static class ManualQrChecks
         await controller(db, actor).ConfirmTransfer(qrRef, true);
         check((await Page(qrRef)).IsPaid && !(await Page(qrRef)).HasPendingTransfer && (await Page(qrRef)).RedeemedPoints == 0,
             "Only the staff confirmation closes the invoice QR and awards points");
+
+        // Verify pending QR reserves points and locks expected amount across tier changes:
+        var lockQr = await Draft(50, true);
+        await controller(db, actor).CommitCheckout(customer.Id, lockQr, 190000, 90000, pointsToRedeem: 50, useRewardPoints: true);
+        var currentPoints = await db.Users.AsNoTracking().Where(u => u.Id == customer.Id).Select(u => u.RewardPoints).SingleAsync();
+        var secondPreview = JsonSerializer.SerializeToElement(((JsonResult)await controller(db, actor)
+            .Preview(customer.Id, 400000, 0, pointsToRedeem: currentPoints, useRewardPoints: true)).Value);
+        check(!secondPreview.GetProperty("isValid").GetBoolean(),
+            "Another checkout cannot double-spend points already reserved in a pending QR");
+        var silverTierId = await db.MembershipTiers.Where(t => t.TierName == "Silver").Select(t => t.Id).SingleAsync();
+        var goldTierId = await db.MembershipTiers.Where(t => t.TierName == "Gold").Select(t => t.Id).SingleAsync();
+        await db.Users.Where(u => u.Id == customer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.TierId, goldTierId));
+        check((await checkout(db).ConfirmTransferManuallyAsync(lockQr, actor)).Success && (await Page(lockQr)).IsPaid,
+            "Confirming a pending QR succeeds with its locked expected amount even if customer tier changed meanwhile");
+        await db.Users.Where(u => u.Id == customer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.TierId, silverTierId));
         var cashQr = await Draft();
         await controller(db, actor).CommitCheckout(customer.Id, cashQr, 190000, 90000);
         check((await checkout(db).SwitchTransferToCashAsync(cashQr, 300000, "Khách đổi sang tiền mặt", actor)).Success, "Persistent QR still supports explicit cash switch");

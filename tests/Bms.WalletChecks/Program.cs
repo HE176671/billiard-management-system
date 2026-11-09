@@ -73,10 +73,10 @@ var cmd = new CheckoutCommand(user.Id, invoiceRef, null, 100000, 0, 0, null, act
 var paid = await checkout.CompleteWalletAsync(cmd);
 Check(paid.Success && paid.FinalAmount == 95000, "Wallet pays invoice after Silver 5% discount: " + paid.Message);
 await db.Entry(user).ReloadAsync();
-Check(user.WalletBalance == 1_905_000 && user.TotalSpend == 2_095_000 && user.RewardPoints == 104, "Wallet payment earns four points and 95,000 qualifying spend after discounts");
+Check(user.WalletBalance == 1_905_000 && user.TotalSpend == 2_000_000 && user.RewardPoints == 104, "Wallet payment earns four points without double-counting qualifying spend");
 Check((await checkout.CompleteWalletAsync(cmd)).Duplicate, "Retry wallet payment cannot debit twice");
 Check(await db.PaymentTransactions.AnyAsync(p => p.InvoiceId == paid.InvoiceId && p.PaymentMethod == "Wallet" && p.AmountPaid == 95000), "Invoice payment persisted with Wallet method");
-Check(await db.PointTransactions.AnyAsync(p => p.ReferenceCode == invoiceRef && p.SpendAmount == 95000 && p.Amount == 4), "Wallet invoice persists earned points and actual eligible spending");
+Check(await db.PointTransactions.AnyAsync(p => p.ReferenceCode == invoiceRef && p.SpendAmount == 0 && p.Amount == 4), "Wallet invoice persists earned points and 0 additional qualifying spend");
 var beforeInvoices = await db.PaymentTransactions.CountAsync();
 var insufficient = await checkout.CompleteWalletAsync(cmd with { ReferenceCode = "WC-" + Guid.NewGuid().ToString("N"), SubmittedPlaytimeAmount = 4_000_000 });
 Check(!insufficient.Success && await db.PaymentTransactions.CountAsync() == beforeInvoices, "Insufficient funds cannot settle invoice");
@@ -90,7 +90,7 @@ Check(snapshot.RewardPoints == 256, "Gold multiplier doubles newly earned points
 var cash = await Checkout(db).CompleteCashAsync(new CheckoutCommand(user.Id, "WC-" + Guid.NewGuid().ToString("N"), null, 0, 20000, 0, null, actor.Id, 20000));
 Check(cash.Success, "Cash invoice still works: " + cash.Message);
 snapshot = await db.Users.AsNoTracking().SingleAsync(u => u.Id == user.Id);
-Check(snapshot.RewardPoints == 258 && snapshot.TotalSpend == 5_135_000, "Cash, wallet payment and top up share earning policy");
+Check(snapshot.RewardPoints == 258 && snapshot.TotalSpend == 5_040_000, "Cash, wallet payment and top up share earning policy");
 var summary = await new ShiftService(db).GetSummaryAsync(shift.Id);
 Check(summary?.CashCollected == 5_040_000 && summary.ExpectedCash == 5_140_000, "Cash reconciliation includes top ups exactly once");
 var duplicateKey = Guid.NewGuid().ToString("N");
@@ -113,13 +113,13 @@ async Task<CheckoutPaymentResult> ParallelPayment()
 var payments = await Task.WhenAll(ParallelPayment(), ParallelPayment());
 Check(payments.Count(p => p.Success) == 1, "Concurrent wallet payments cannot overspend");
 snapshot = await db.Users.AsNoTracking().SingleAsync(u => u.Id == user.Id);
-Check(snapshot.WalletBalance == 1_985_000 && snapshot.RewardPoints == 564 && snapshot.TotalSpend == 8_195_000, "Only the successful concurrent wallet payment earns points and qualifying spend");
+Check(snapshot.WalletBalance == 1_985_000 && snapshot.RewardPoints == 564 && snapshot.TotalSpend == 5_100_000, "Only the successful concurrent wallet payment earns points without double-counting qualifying spend");
 var ledgerSum = await db.WalletTransactions.Where(w => w.CustomerId == user.Id).SumAsync(w => w.Amount);
 Check(ledgerSum == snapshot.WalletBalance, "Wallet ledger reconciles with stored balance");
 db.PointTransactions.Add(new PointTransaction { CustomerId = user.Id, Amount = 0, TransactionType = PointTransaction.Earn,
     SpendAmount = 9_000_000, CreatedAt = DateTime.UtcNow.AddDays(-366), ReferenceCode = "OLD-" + key });
 await db.SaveChangesAsync();
-Check(await new TierEvaluationService(db).GetSpendLast12MonthsAsync(user.Id) == 8_195_000, "Rolling 365-day accumulation includes wallet payments and excludes old entries");
+Check(await new TierEvaluationService(db).GetSpendLast12MonthsAsync(user.Id) == 5_100_000, "Rolling 365-day accumulation includes top-ups and cash payments and excludes old entries");
 
 // Transfer top-ups: pending never credits funds; confirmation uses exactly the same earning pipeline.
 await using var transfersDb = Open();
@@ -338,7 +338,7 @@ async Task<WalletResult> MixedConfirm(bool byStaff)
         : await Wallet(context).ConfirmTransferAsync(mixedIntent.ReferenceCode!, "SEPAY-MIXED-" + key, 20000);
 }
 var mixedResults = await Task.WhenAll(MixedConfirm(true), MixedConfirm(false));
-Check(mixedResults.Count(r => r.Success && !r.Duplicate) == 1 && await manualDb.WalletTransactions.CountAsync(w => w.ReferenceCode == mixedIntent.ReferenceCode) == 1,
+Check(mixedResults.Count(r => r.Success && !r.Duplicate && !r.Pending) == 1 && await manualDb.WalletTransactions.CountAsync(w => w.ReferenceCode == mixedIntent.ReferenceCode) == 1,
     "Simultaneous staff and webhook confirmation credits only once");
 Console.WriteLine($"ALL {passed} WALLET CHECKS PASSED");
 

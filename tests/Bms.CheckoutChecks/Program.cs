@@ -173,8 +173,8 @@ var walletDraft = await Draft(customer.Id, 0, 20000, "Wallet");
 var walletResult = await checkout.SubmitDraftAsync(Command(walletDraft), "Wallet");
 var afterWallet = await db.Users.AsNoTracking().SingleAsync(u => u.Id == customer.Id);
 Check(walletResult.Success && afterWallet.WalletBalance == 80000 && afterWallet.RewardPoints == beforeWallet.RewardPoints + 1
-    && afterWallet.TotalSpend == beforeWallet.TotalSpend + 20000 && (await Page(walletDraft.ReferenceCode)).IsPaid,
-    "Wallet draft settles with points and qualifying spend on the final amount");
+    && afterWallet.TotalSpend == beforeWallet.TotalSpend && (await Page(walletDraft.ReferenceCode)).IsPaid,
+    "Wallet draft settles with points on the final amount without double-counting qualifying spend");
 Check((await checkout.SubmitDraftAsync(Command(walletDraft), "Wallet")).Duplicate,
     "Wallet draft retry cannot debit twice");
 

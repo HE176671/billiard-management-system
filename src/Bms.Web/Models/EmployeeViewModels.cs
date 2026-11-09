@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Bms.Web.Models;
 
-// ── Dùng cho danh sách nhân viên ──
+// ── Dùng cho danh sách người dùng / nhân viên ──
 public class EmployeeListViewModel
 {
     public List<EmployeeRowViewModel> Employees { get; set; } = new();
@@ -21,12 +21,13 @@ public class EmployeeRowViewModel
     public string? UserName { get; set; }
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
+    public string RoleName { get; set; } = "Staff";
     public DateOnly? HireDate { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 }
 
-// ── Dùng cho form tạo nhân viên ──
+// ── Dùng cho form tạo người dùng / nhân viên ──
 public class CreateEmployeeViewModel
 {
     [Required(ErrorMessage = "Vui lòng nhập họ tên.")]
@@ -34,6 +35,9 @@ public class CreateEmployeeViewModel
     [RegularExpression(ValidationRules.FullName, ErrorMessage = ValidationRules.FullNameMessage)]
     [Display(Name = "Họ và tên")]
     public string FullName { get; set; } = string.Empty;
+
+    [Display(Name = "Vai trò")]
+    public string Role { get; set; } = "Staff";
 
     [Required(ErrorMessage = "Vui lòng nhập tên đăng nhập.")]
     [StringLength(50, MinimumLength = 3, ErrorMessage = "Từ 3–50 ký tự.")]

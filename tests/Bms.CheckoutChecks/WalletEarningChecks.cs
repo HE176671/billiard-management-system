@@ -41,13 +41,13 @@ static class WalletEarningChecks
         var noChoice = await Draft(50);
         var preview = await Preview(50, false);
         check(noChoice.PointsToRedeem == 0 && preview.GetProperty("pointsDiscountAmount").GetDecimal() == 0
-            && preview.GetProperty("pointsToEarn").GetInt32() == 9 && preview.GetProperty("spend12MonthsAfter").GetDecimal() == 2_180_500,
-            "Wallet preview defaults to zero redemption and earns nine points on 180,500 actual payment");
+            && preview.GetProperty("pointsToEarn").GetInt32() == 9 && preview.GetProperty("spend12MonthsAfter").GetDecimal() == 2_000_000,
+            "Wallet preview defaults to zero redemption, earns nine points on 180,500 actual payment and does not double-count qualifying spend");
         await controller(db, actor).CommitCheckout(customer.Id, noChoice.ReferenceCode, 190000, 0, pointsToRedeem: 50, paymentMethod: "Wallet");
         var paid = await Receipt(noChoice.ReferenceCode);
         var state = await Snapshot();
         check(paid.IsPaid && paid.FinalAmount == 180500 && paid.EarnedPoints == 9 && paid.RedeemedPoints == 0
-            && state.WalletBalance == 1_819_500 && state.TotalSpend == 2_180_500 && state.RewardPoints == 109,
+            && state.WalletBalance == 1_819_500 && state.TotalSpend == 2_000_000 && state.RewardPoints == 109,
             "Wallet POST without explicit choice ignores submitted points and persists the preview result");
         var redeem = await Draft(10, true);
         preview = await Preview(10, true);
@@ -62,9 +62,9 @@ static class WalletEarningChecks
         state = await Snapshot();
         paid = await Receipt(redeem.ReferenceCode);
         check(concurrent.All(r => r.Success) && concurrent.Count(r => r.Duplicate) == 1
-            && state.WalletBalance == 1_649_000 && state.TotalSpend == 2_351_000 && state.RewardPoints == 107
+            && state.WalletBalance == 1_649_000 && state.TotalSpend == 2_000_000 && state.RewardPoints == 107
             && paid.RedeemedPoints == 10 && paid.EarnedPoints == 8, "Concurrent wallet confirmations redeem ten, earn eight and debit 170,500 exactly once");
-        check(await db.PointTransactions.CountAsync(t => t.ReferenceCode == redeem.ReferenceCode && t.TransactionType == PointTransaction.Earn && t.SpendAmount == 170500) == 1
+        check(await db.PointTransactions.CountAsync(t => t.ReferenceCode == redeem.ReferenceCode && t.TransactionType == PointTransaction.Earn && t.SpendAmount == 0) == 1
             && await db.PointTransactions.CountAsync(t => t.ReferenceCode == redeem.ReferenceCode && t.TransactionType == PointTransaction.Redeem && t.Amount == -10) == 1
             && await db.WalletTransactions.CountAsync(t => t.ReferenceCode == redeem.ReferenceCode && t.Amount == -170500) == 1,
             "Wallet receipt links one earning, one requested redemption and one wallet debit");
@@ -106,14 +106,14 @@ static class WalletEarningChecks
             "Selected-table payment ignores forged hour/F&B amounts and manual override flag");
 
         var beforeUpgrade = await Snapshot();
-        var spendAdjustment = 4_950_000 - beforeUpgrade.TotalSpend;
+        var spendAdjustment = 5_000_000 - beforeUpgrade.TotalSpend;
         db.PointTransactions.Add(new() { CustomerId = customer.Id, Amount = 0, SpendAmount = spendAdjustment, ReferenceCode = "ADJUST-" + key });
         await db.SaveChangesAsync();
-        await db.Users.Where(u => u.Id == customer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.TotalSpend, 4_950_000));
+        await db.Users.Where(u => u.Id == customer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.TotalSpend, 5_000_000));
         var upgrade = await Draft();
         check((await Pay(upgrade)).Success && (await Snapshot()).TierId == gold.Id && (await Receipt(upgrade.ReferenceCode)).EarnedPoints == 9
-            && await new TierEvaluationService(db).GetSpendLast12MonthsAsync(customer.Id) == 5_130_500,
-            "Wallet spending can upgrade Silver to Gold, using Silver multiplier on the upgrading payment");
+            && await new TierEvaluationService(db).GetSpendLast12MonthsAsync(customer.Id) == 5_000_000,
+            "Wallet spending evaluates tier at 5m top-up spend without inflating spend12M, using Silver multiplier on the upgrading payment");
         // Simulate an old paid invoice with a zero-earning ledger; a retry must not retroactively credit it.
         await db.PointTransactions.Where(t => t.ReferenceCode == noChoice.ReferenceCode && t.TransactionType == PointTransaction.Earn)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.Amount, 0).SetProperty(t => t.SpendAmount, 0));

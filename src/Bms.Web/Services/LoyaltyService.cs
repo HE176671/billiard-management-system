@@ -62,6 +62,16 @@ public class LoyaltyService : ILoyaltyService
         decimal tierDiscountPercent = currentTier?.DiscountPercent ?? 0m;
         int multiplier = currentTier?.PointMultiplier ?? 1;
 
+        var refNorm = string.IsNullOrWhiteSpace(req.ReferenceCode) ? null : req.ReferenceCode.Trim().ToUpperInvariant();
+        var pendingIntents = await _db.PaymentIntents.AsNoTracking()
+            .Where(p => p.CustomerId == user.Id
+                     && (p.Status == PaymentIntent.StatusPending || p.Status == PaymentIntent.StatusExpired)
+                     && (refNorm == null || p.ReferenceCode != refNorm))
+            .Select(p => new { p.PointsToRedeem, p.VoucherCode })
+            .ToListAsync(ct);
+        int reservedPoints = pendingIntents.Sum(p => p.PointsToRedeem);
+        int availableRewardPoints = Math.Max(0, user.RewardPoints - reservedPoints);
+
         decimal subtotal = Math.Max(0m, req.PlaytimeAmount) + Math.Max(0m, req.FandBAmount);
 
         // Bước 1: Giảm theo hạng — chỉ áp dụng trên tiền giờ chơi (PlaytimeAmount)
@@ -94,17 +104,21 @@ public class LoyaltyService : ILoyaltyService
             }
             else
             {
-                var ownedVoucher = await _db.CustomerVouchers.AsNoTracking()
+                int pendingSameVoucher = pendingIntents.Count(p => string.Equals(p.VoucherCode?.Trim(), code, StringComparison.OrdinalIgnoreCase));
+                var ownedVouchers = await _db.CustomerVouchers.AsNoTracking()
                     .Where(v => v.CustomerId == user.Id
                              && v.RewardItemId == rewardItem.Id
                              && v.Status == CustomerVoucher.StatusActive
                              && v.ExpiresAtUtc > now)
                     .OrderBy(v => v.ExpiresAtUtc)
-                    .FirstOrDefaultAsync(ct);
+                    .ToListAsync(ct);
+                var ownedVoucher = ownedVouchers.Skip(pendingSameVoucher).FirstOrDefault();
 
                 if (ownedVoucher == null)
                 {
-                    errors.Add($"Hội viên chưa sở hữu mã quà tặng \"{code}\" ({rewardItem.Name}) còn hiệu lực.");
+                    errors.Add(ownedVouchers.Count > 0
+                        ? $"Mã quà tặng \"{code}\" ({rewardItem.Name}) đang được giữ cho một yêu cầu QR chờ xác nhận khác của hội viên."
+                        : $"Hội viên chưa sở hữu mã quà tặng \"{code}\" ({rewardItem.Name}) còn hiệu lực.");
                 }
                 else if (rewardItem.RewardType == RewardItemEntity.TypeFreeHour)
                 {
@@ -122,33 +136,41 @@ public class LoyaltyService : ILoyaltyService
 
         decimal remainingAfterVoucher = Math.Max(0m, remainingAfterTier - voucherDiscountAmount);
 
-        // Bước 3: Đổi điểm — tối đa 50% số tiền còn lại sau bước 1-2, và không vượt quá RewardPoints hiện có
+        // Bước 3: Đổi điểm — tối đa 50% số tiền còn lại sau bước 1-2, và không vượt quá số điểm khả dụng hiện có
         int maxByHalfBill = (int)Math.Floor((remainingAfterVoucher * 0.5m) / 1000m);
-        int maxRedeemablePoints = Math.Max(0, Math.Min(user.RewardPoints, maxByHalfBill));
+        int maxRedeemablePoints = Math.Max(0, Math.Min(availableRewardPoints, maxByHalfBill));
 
-        if (req.PointsToRedeem > user.RewardPoints)
+        if (req.PointsToRedeem > availableRewardPoints)
         {
-            errors.Add($"Khách hàng chỉ có {user.RewardPoints} điểm, không đủ để đổi {req.PointsToRedeem} điểm.");
+            errors.Add(reservedPoints > 0 && req.PointsToRedeem <= user.RewardPoints
+                ? $"Khách hàng đang giữ {reservedPoints} điểm ở phiếu QR chờ thanh toán, chỉ còn {availableRewardPoints} điểm khả dụng."
+                : $"Khách hàng chỉ có {user.RewardPoints} điểm, không đủ để đổi {req.PointsToRedeem} điểm.");
         }
-        else if (req.PointsToRedeem > maxByHalfBill)
+        else if (req.PointsToRedeem > maxByHalfBill && !req.ExpectedFinalAmount.HasValue)
         {
             errors.Add($"Số điểm đổi ({req.PointsToRedeem} điểm = {VnFormat.Money(req.PointsToRedeem * 1000m)}) vượt quá 50% số tiền còn lại ({VnFormat.Money(remainingAfterVoucher * 0.5m)}). Tối đa được đổi {maxRedeemablePoints} điểm.");
         }
 
         decimal pointsDiscountAmount = req.PointsToRedeem >= 0 ? req.PointsToRedeem * 1000m : 0m;
-        if (pointsDiscountAmount > remainingAfterVoucher)
+        if (pointsDiscountAmount > remainingAfterVoucher && !req.ExpectedFinalAmount.HasValue)
             pointsDiscountAmount = remainingAfterVoucher;
 
-        // Bước 4: FinalAmount & Điểm tích lũy
-        decimal finalAmount = Math.Max(0m, remainingAfterVoucher - pointsDiscountAmount);
+        // Bước 4: FinalAmount & Điểm tích lũy (Nếu hoàn tất từ QR đã chốt, giữ nguyên ExpectedFinalAmount trên QR)
+        decimal finalAmount = req.ExpectedFinalAmount ?? Math.Max(0m, remainingAfterVoucher - pointsDiscountAmount);
+        if (req.ExpectedFinalAmount.HasValue)
+        {
+            decimal totalLockedDiscount = Math.Max(0m, subtotal - finalAmount);
+            tierDiscountAmount = Math.Max(0m, totalLockedDiscount - voucherDiscountAmount - pointsDiscountAmount);
+        }
         if (req.PayWithWallet && user.WalletBalance < finalAmount)
             errors.Add("Số dư ví không đủ. Vui lòng nạp thêm hoặc chọn phương thức thanh toán khác.");
         decimal eligibleAmount = finalAmount;
         int pointsToEarn = LoyaltyPolicy.EarnPoints(eligibleAmount, multiplier);
 
-        decimal spend12MonthsAfter = currentSpend12M + eligibleAmount;
-        int pointsAfter = Math.Max(0, user.RewardPoints - req.PointsToRedeem) + pointsToEarn;
-        var resolvedTierAfter = TierHelper.Resolve(tiers, spend12MonthsAfter, pointsAfter);
+        // Phương án 2C-1: Doanh thu xét hạng đã tính lúc Nạp ví; khi dùng ví trả hóa đơn không cộng trùng doanh thu xét hạng
+        decimal qualifyingSpend = req.PayWithWallet ? 0m : eligibleAmount;
+        decimal spend12MonthsAfter = currentSpend12M + qualifyingSpend;
+        var resolvedTierAfter = TierHelper.Resolve(tiers, spend12MonthsAfter);
         bool willUpgrade = resolvedTierAfter != null && resolvedTierAfter.SpendThreshold > (currentTier?.SpendThreshold ?? 0m);
 
         var nextTier = tiers.FirstOrDefault(t => t.SpendThreshold > (resolvedTierAfter?.SpendThreshold ?? currentTier?.SpendThreshold ?? 0m));
@@ -293,7 +315,9 @@ public class LoyaltyService : ILoyaltyService
                 }
             }
 
-            // 5. Ghi bút toán Earn (luôn ghi kể cả PointsToEarn == 0 để lưu SpendAmount 12 tháng và khóa Idempotent UX_PointTxn_Earn_Ref)
+            // 5. Ghi bút toán Earn (luôn ghi kể cả PointsToEarn == 0 để khóa Idempotent UX_PointTxn_Earn_Ref;
+            // Phương án 2C-1: Thanh toán bằng ví truyền spendAmount = 0m vì doanh thu xét hạng đã tính lúc nạp ví)
+            decimal qualifyingSpend = req.PayWithWallet ? 0m : preview.FinalAmount;
             var earnLedger = await _ledger.PostAsync(
                 customerId: req.CustomerId,
                 delta: preview.PointsToEarn,
@@ -302,7 +326,7 @@ public class LoyaltyService : ILoyaltyService
                 invoiceId: req.InvoiceId,
                 reason: $"Tích điểm thanh toán hóa đơn {refCode}",
                 actorId: req.CashierId,
-                spendAmount: preview.FinalAmount,
+                spendAmount: qualifyingSpend,
                 ct: ct);
 
             if (!earnLedger.Success) throw new InvalidOperationException(earnLedger.Message);
@@ -319,7 +343,7 @@ public class LoyaltyService : ILoyaltyService
             // 6. Cập nhật TotalSpend trọn đời, LastPaidDate và xét hạng 12 tháng (F5)
             var user = await _db.Users.Include(u => u.Tier).FirstAsync(u => u.Id == req.CustomerId, ct);
             await _db.Entry(user).ReloadAsync(ct);
-            user.TotalSpend += preview.FinalAmount;
+            user.TotalSpend += qualifyingSpend;
             user.LastPaidDate = DateTime.UtcNow;
 
             var spend12M = await _tierEval.GetSpendLast12MonthsAsync(user.Id, null, ct);
