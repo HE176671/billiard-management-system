@@ -34,12 +34,29 @@ public class ShiftController : Controller
     // GET /Shift
     public async Task<IActionResult> Index()
     {
-        var vm = new ShiftHomeViewModel();
+        var vm = new ShiftHomeViewModel { CanOpen = User.IsInRole("Staff") };
         var active = await _shifts.GetStoreActiveShiftAsync();
         if (active != null)
         {
             vm.Active = await _shifts.GetSummaryAsync(active.Id);
             vm.Close.ShiftId = active.Id;
+            vm.UnpaidTableCount = await _db.BilliardTables.CountAsync(t => t.Status == "InUse" || t.Status == "AwaitingPayment");
+        }
+        else
+        {
+            var previous = await _shifts.GetLastClosedShiftAsync();
+            if (previous != null)
+            {
+                vm.PreviousShiftId = previous.Id;
+                vm.PreviousEndingCash = previous.EndingCash;
+                vm.PreviousClosedByName = previous.ClosedBy?.FullName;
+                vm.PreviousEndTimeUtc = previous.EndTimeUtc;
+            }
+            // Mặc định tiền đầu ca = tiền ca trước để lại; giữ lại số đã nhập nếu lần trước bị từ chối.
+            vm.Open.StartingCash = decimal.TryParse(TempData["OpenStartingCash"] as string,
+                System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var typed)
+                ? typed : previous?.EndingCash;
+            vm.Open.Notes = TempData["OpenNotes"] as string;
         }
         // 5 ca gần nhất của cả quán (không còn "ca của tôi" vì chỉ có một ca chung).
         vm.Recent = (await LoadRowsAsync(_db.WorkShifts)).Take(5).ToList();
@@ -47,6 +64,7 @@ public class ShiftController : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
+    [Authorize(Roles = "Staff")] // UC39: chỉ nhân viên trực quầy mở ca
     public async Task<IActionResult> Open([Bind(Prefix = "Open")] OpenShiftViewModel model)
     {
         if (!ModelState.IsValid)
@@ -59,7 +77,12 @@ public class ShiftController : Controller
             var shift = await _shifts.OpenShiftAsync(CurrentUserId, model.StartingCash!.Value, model.Notes);
             TempData["Success"] = $"Đã mở ca #{shift.Id} với {shift.StartingCash:N0} VND đầu ca.";
         }
-        catch (ShiftException ex) { TempData["Error"] = ex.Message; }
+        catch (ShiftException ex)
+        {
+            TempData["Error"] = ex.Message;
+            TempData["OpenStartingCash"] = model.StartingCash?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            TempData["OpenNotes"] = model.Notes;
+        }
         return RedirectToAction(nameof(Index));
     }
 
@@ -137,7 +160,8 @@ public class ShiftController : Controller
     // GET /Shift/History
     public async Task<IActionResult> History(DateOnly? from, DateOnly? to, int page = 1)
     {
-        var vm = await BuildListAsync(_db.WorkShifts.Where(s => s.StaffId == CurrentUserId),
+        // Ca tôi mở hoặc tôi đóng (giao ca).
+        var vm = await BuildListAsync(_db.WorkShifts.Where(s => s.StaffId == CurrentUserId || s.ClosedById == CurrentUserId),
             from, to, null, null, false, page);
         return View("List", vm);
     }

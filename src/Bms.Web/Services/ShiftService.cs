@@ -49,6 +49,13 @@ public interface IShiftService
     /// </summary>
     Task<int> RequireActiveShiftIdForCashAsync(string staffId, CancellationToken ct = default);
 
+    /// <summary>Ca đã đóng gần nhất (để đối chiếu tiền bàn giao khi mở ca mới), hoặc null.</summary>
+    Task<WorkShift?> GetLastClosedShiftAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Mở ca chung của quán. Tiền đầu ca phải là số nguyên VND. Nếu khác số tiền ca trước để lại trong két
+    /// thì bắt buộc ghi lý do (ví dụ chủ quán đã rút tiền) — chống thất thoát giữa hai ca.
+    /// </summary>
     Task<WorkShift> OpenShiftAsync(string staffId, decimal startingCash, string? notes, CancellationToken ct = default);
 
     /// <summary>Đóng ca, chốt snapshot tiền mặt. Lệch tiền thì bắt buộc có ghi chú.</summary>
@@ -82,6 +89,13 @@ public class ShiftService : IShiftService
     public Task<WorkShift?> GetActiveShiftAsync(string staffId, CancellationToken ct = default) =>
         GetStoreActiveShiftAsync(ct);
 
+    public Task<WorkShift?> GetLastClosedShiftAsync(CancellationToken ct = default) =>
+        _db.WorkShifts.AsNoTracking()
+            .Include(s => s.ClosedBy)
+            .Where(s => s.Status == WorkShift.StatusClosed)
+            .OrderByDescending(s => s.EndTimeUtc).ThenByDescending(s => s.Id)
+            .FirstOrDefaultAsync(ct);
+
     public async Task<int> RequireActiveShiftIdForCashAsync(string staffId, CancellationToken ct = default)
     {
         if (_db.Database.CurrentTransaction == null)
@@ -98,13 +112,21 @@ public class ShiftService : IShiftService
 
     public async Task<WorkShift> OpenShiftAsync(string staffId, decimal startingCash, string? notes, CancellationToken ct = default)
     {
-        if (startingCash < 0 || startingCash > MaxCash)
-            throw new ShiftException("INVALID_CASH", "Tiền đầu ca phải từ 0 đến 1.000.000.000 VND.");
+        if (startingCash < 0 || startingCash > MaxCash || startingCash != decimal.Truncate(startingCash))
+            throw new ShiftException("INVALID_CASH", "Tiền đầu ca phải là số nguyên từ 0 đến 1.000.000.000 VND.");
 
         // BR-23: cả quán chỉ một ca đang mở.
         var current = await GetStoreActiveShiftAsync(ct);
         if (current != null)
             throw new ShiftException("ALREADY_OPEN", AlreadyOpenMessage(current));
+
+        // Bàn giao két: tiền đầu ca phải khớp tiền ca trước đếm lúc đóng, lệch thì bắt buộc ghi lý do.
+        var previous = await GetLastClosedShiftAsync(ct);
+        var handoverDiff = previous?.EndingCash is decimal left ? startingCash - left : 0m;
+        if (handoverDiff != 0 && Clean(notes) == null)
+            throw new ShiftException("HANDOVER_NOTE_REQUIRED",
+                $"Ca trước (#{previous!.Id}) để lại {previous.EndingCash:N0} VND trong két, bạn nhập {startingCash:N0} VND " +
+                $"({(handoverDiff > 0 ? "thừa" : "thiếu")} {Math.Abs(handoverDiff):N0} VND). Vui lòng ghi lý do, ví dụ: chủ quán đã rút tiền.");
 
         var shift = new WorkShift
         {
@@ -129,15 +151,19 @@ public class ShiftService : IShiftService
         }
 
         await _audit.LogAsync(AuditActions.ShiftOpen, "WorkShift", shift.Id.ToString(),
-            $"Mở ca #{shift.Id} với {shift.StartingCash:N0} VND đầu ca.",
-            newValue: shift.StartingCash.ToString("0"), reason: shift.Notes, actorId: staffId, ct: ct);
+            previous?.EndingCash is decimal prevLeft
+                ? $"Mở ca #{shift.Id} với {shift.StartingCash:N0} VND đầu ca (ca trước #{previous.Id} để lại {prevLeft:N0} VND" +
+                  (handoverDiff == 0 ? ", khớp)." : $", lệch {handoverDiff:N0} VND).")
+                : $"Mở ca #{shift.Id} với {shift.StartingCash:N0} VND đầu ca.",
+            oldValue: previous?.EndingCash?.ToString("0"), newValue: shift.StartingCash.ToString("0"),
+            reason: shift.Notes, actorId: staffId, ct: ct);
         return shift;
     }
 
     public async Task<ShiftSummary> CloseShiftAsync(int shiftId, string closedById, decimal endingCash, string? notes, CancellationToken ct = default)
     {
-        if (endingCash < 0 || endingCash > MaxCash)
-            throw new ShiftException("INVALID_CASH", "Tiền đếm thực tế phải từ 0 đến 1.000.000.000 VND.");
+        if (endingCash < 0 || endingCash > MaxCash || endingCash != decimal.Truncate(endingCash))
+            throw new ShiftException("INVALID_CASH", "Tiền đếm thực tế phải là số nguyên từ 0 đến 1.000.000.000 VND.");
 
         var ownTx = _db.Database.CurrentTransaction == null;
         var tx = ownTx ? await _db.Database.BeginTransactionAsync(ct) : null;

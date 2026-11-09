@@ -29,13 +29,23 @@ public class CloseShiftViewModel
     public string? Notes { get; set; }
 }
 
-/// <summary>Trang "Ca của tôi": chưa mở ca thì hiện form mở, đang mở thì hiện số liệu + form đóng.</summary>
+/// <summary>Trang "Ca làm của quán": chưa có ca thì hiện form mở ca (kèm tiền ca trước để lại), đang mở thì hiện số liệu + form đóng.</summary>
 public class ShiftHomeViewModel
 {
     public ShiftSummary? Active { get; set; }
     public OpenShiftViewModel Open { get; set; } = new();
     public CloseShiftViewModel Close { get; set; } = new();
     public List<ShiftRowViewModel> Recent { get; set; } = new();
+
+    /// <summary>Chỉ Staff được mở ca (UC39).</summary>
+    public bool CanOpen { get; set; }
+    /// <summary>Ca đóng gần nhất: số tiền để lại trong két để đối chiếu khi mở ca mới.</summary>
+    public int? PreviousShiftId { get; set; }
+    public decimal? PreviousEndingCash { get; set; }
+    public string? PreviousClosedByName { get; set; }
+    public DateTime? PreviousEndTimeUtc { get; set; }
+    /// <summary>Số bàn đang chơi hoặc chờ thanh toán lúc đóng ca (sẽ thu vào ca sau).</summary>
+    public int UnpaidTableCount { get; set; }
 }
 
 public class ShiftDetailsViewModel

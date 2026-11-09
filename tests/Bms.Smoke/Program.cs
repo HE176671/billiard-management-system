@@ -195,6 +195,15 @@ try
     var noShift = false;
     try { await shiftService.RequireActiveShiftIdForCashAsync(staff.Id); } catch (ShiftException e) { noShift = e.Code == "NO_ACTIVE_SHIFT"; }
     Check(noShift, "Cash payment after close rejected");
+    // Bàn giao két: ca trước đóng với 600.000 -> mở ca mới khác số này phải ghi lý do, khớp thì không cần.
+    var handoverRejected = false;
+    try { await shiftService.OpenShiftAsync(staff.Id, 500000, null); } catch (ShiftException e) { handoverRejected = e.Code == "HANDOVER_NOTE_REQUIRED"; }
+    var fractionRejected = false;
+    try { await shiftService.OpenShiftAsync(staff.Id, 600000.5m, "x"); } catch (ShiftException e) { fractionRejected = e.Code == "INVALID_CASH"; }
+    var handoverOk = await shiftService.OpenShiftAsync(staff.Id, 600000, null);
+    Check(handoverRejected && fractionRejected && handoverOk.Status == WorkShift.StatusActive,
+        "Shift handover: opening cash must match previous counted cash or carry a reason; whole VND only");
+    await shiftService.CloseShiftAsync(handoverOk.Id, staff.Id, 600000, null);
     var dashboardWithShift = (DashboardViewModel)((ViewResult)await Prepare(new DashboardController(db)).Index()).Model!;
     Check(dashboardWithShift.TotalTables == dashboardWithShift.AvailableTables + dashboardWithShift.InUseTables
         + dashboardWithShift.AwaitingPaymentTables + dashboardWithShift.UnavailableTables, "Dashboard table statuses add up");

@@ -1,3 +1,4 @@
+using Bms.Web.Filters;
 using System.Security.Claims;
 using Bms.Web.Data;
 using Bms.Web.Models;
@@ -339,6 +340,7 @@ public class LoyaltyTestController : Controller
     }
 
     // POST /CashierSimulator/CommitCheckout (Thanh toán trọn gói F3: Hội viên hoặc Khách lẻ, VietQR hoặc Tiền mặt)
+    [RequireOpenShift] // TV5 - BR-23: chưa mở ca thì không thu tiền
     [HttpPost("/CashierSimulator/CommitCheckout")]
     [HttpPost("/LoyaltyTest/CommitCheckout")]
     [ValidateAntiForgeryToken]
@@ -650,6 +652,7 @@ public class LoyaltyTestController : Controller
     // POST /LoyaltyTest/SimulatePayment (Giữ lại cho tương thích cũ)
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [RequireOpenShift]
     public async Task<IActionResult> SimulatePayment(string customerId, decimal finalAmount)
     {
         var result = await _loyaltyService.CommitCheckoutAsync(new CheckoutLoyaltyRequest(

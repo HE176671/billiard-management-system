@@ -16,6 +16,17 @@
         <div><div class="stat-value">@Model.TotalDifference.ToString("N0") VND</div><div class="stat-label">Tổng chênh lệch (ca đã đóng)</div></div></div></div>
 </div>
 
+@{
+    var forgotten = Model.Shifts.FirstOrDefault(r => r.Status == "Active" && DateTime.UtcNow - r.StartTimeUtc > TimeSpan.FromHours(16));
+}
+@if (Model.IsManage && forgotten != null)
+{
+    <div class="alert alert-warning" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        Ca <strong>#@forgotten.Id</strong> của @forgotten.StaffName đã mở hơn 16 giờ (từ @forgotten.StartTimeUtc.ToVn().ToString("HH:mm dd/MM")) — có thể quên đóng ca.
+        <a asp-action="Details" asp-route-id="@forgotten.Id">Xem và đóng hộ</a>.
+    </div>
+}
 <div class="data-card">
     <div class="data-card-header">
         <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>@ViewData["Title"]</span>

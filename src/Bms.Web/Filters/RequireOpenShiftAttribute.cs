@@ -17,7 +17,7 @@ public sealed class RequireOpenShiftAttribute : TypeFilterAttribute
 
 internal sealed class RequireOpenShiftFilter : IAsyncActionFilter
 {
-    public const string Message = "Quán chưa mở ca. Vào mục \"Ca làm của quán\" để mở ca trước khi mở bàn.";
+    public const string Message = "Quán chưa mở ca. Vào mục \"Ca làm của quán\" để mở ca trước khi mở bàn hoặc thu tiền.";
 
     private readonly IShiftService _shifts;
     private readonly ITempDataDictionaryFactory _tempData;
@@ -38,9 +38,11 @@ internal sealed class RequireOpenShiftFilter : IAsyncActionFilter
         }
 
         var request = context.HttpContext.Request;
+        // fetch/AJAX nhận JSON; form submit thường (trình duyệt điều hướng) thì chuyển về trang Ca làm.
+        var fetchMode = request.Headers["Sec-Fetch-Mode"].ToString();
         var wantsJson = request.Headers.XRequestedWith == "XMLHttpRequest"
             || request.Headers.Accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase)
-            || request.HasFormContentType; // các thao tác bàn đều gửi form bằng fetch và đọc JSON
+            || (fetchMode.Length > 0 && !fetchMode.Equals("navigate", StringComparison.OrdinalIgnoreCase));
 
         if (wantsJson)
         {
