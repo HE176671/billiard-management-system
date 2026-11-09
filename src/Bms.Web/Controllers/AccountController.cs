@@ -112,7 +112,7 @@ public class AccountController : Controller
     private async Task<IActionResult> RedirectByRoleAsync(ApplicationUser user)
     {
         if (await _userManager.IsInRoleAsync(user, "Admin"))
-            return RedirectToAction("Index", "RoleManagement");
+            return RedirectToAction("Index", "Employee");
         if (await _userManager.IsInRoleAsync(user, "Manager"))
             return RedirectToAction("Index", "Dashboard");
         if (await _userManager.IsInRoleAsync(user, "Staff"))

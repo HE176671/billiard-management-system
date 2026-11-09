@@ -459,27 +459,23 @@ try
     var approveAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Approve))?.GetCustomAttribute<AuthorizeAttribute>();
     var pendingAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Pending))?.GetCustomAttribute<AuthorizeAttribute>();
     var rewardAuth = typeof(RewardItemController).GetCustomAttribute<AuthorizeAttribute>();
-    var roleMgmtAuth = typeof(RoleManagementController).GetCustomAttribute<AuthorizeAttribute>();
     Check(crmAuth?.Roles == "Manager"
         && campAuth?.Roles == "Manager"
         && approveAuth?.Roles == "Manager"
         && pendingAuth?.Roles == "Manager"
         && rewardAuth?.Roles == "Manager"
-        && roleMgmtAuth?.Roles == "Admin"
         && typeof(EmployeeController).GetCustomAttribute<AuthorizeAttribute>()?.Roles == "Admin",
-        "T16: CRM/Campaign/RewardItem/PointAdjustment are Manager-only; RoleManagement and Employee are Admin-only (SRS I.4.4)");
+        "T16: CRM/Campaign/RewardItem/PointAdjustment are Manager-only; account management (Employee) is Admin-only (SRS I.4.4)");
 
-    // T17: Admin phân quyền tài khoản nội bộ (RoleManagementController: tạo/chuyển quyền Staff <-> Manager)
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-    var roleCtrl = Prepare(new RoleManagementController(users, roleManager, db), checkerPrincipal);
-    var roleIndexRes = (ViewResult)await roleCtrl.Index(null, null);
-    var roleVm = (RoleManagementViewModel)roleIndexRes.Model!;
+    // T17: Admin đổi vai trò tài khoản nội bộ trên màn Tài khoản & phân quyền (EmployeeController)
+    var roleCtrl = Prepare(new EmployeeController(users, db), checkerPrincipal);
+    var roleVm = (EmployeeListViewModel)((ViewResult)await roleCtrl.Index(null, null, null)).Model!;
     await roleCtrl.ChangeRole(staff.Id, "Manager");
     var isStaffNowManager = await users.IsInRoleAsync(staff, "Manager") && !await users.IsInRoleAsync(staff, "Staff");
     await roleCtrl.ChangeRole(staff.Id, "Staff");
     var isBackToStaff = await users.IsInRoleAsync(staff, "Staff") && !await users.IsInRoleAsync(staff, "Manager");
-    Check(roleVm.Users.Count >= 1 && isStaffNowManager && isBackToStaff,
-        "T17: Admin RoleManagementController assigns and switches internal roles (Staff <-> Manager) cleanly");
+    Check(roleVm.TotalCount >= 1 && isStaffNowManager && isBackToStaff,
+        "T17: Admin switches internal roles (Staff <-> Manager) from the single account management screen");
 
     // T18: Luồng Staff lập phiếu điều chỉnh điểm -> Manager vào màn riêng (/PointAdjustment/Pending - View 'Manage') phê duyệt
     var managerUser = new ApplicationUser { UserName = "manager.tv2." + key, Email = "mgr." + key + "@example.invalid", FullName = "TV2 Manager Checker" };

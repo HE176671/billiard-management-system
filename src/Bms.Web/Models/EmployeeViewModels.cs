@@ -8,9 +8,16 @@ public class EmployeeListViewModel
     public List<EmployeeRowViewModel> Employees { get; set; } = new();
     public string? Search { get; set; }
     public string? StatusFilter { get; set; }   // "active" | "inactive" | null = tất cả
+    public string? RoleFilter { get; set; }     // "Admin" | "Manager" | "Staff" | null = tất cả
     public int Page { get; set; } = 1;
     public int TotalPages { get; set; }
     public int TotalCount { get; set; }
+    public int ActiveCount { get; set; }
+    public int AdminCount { get; set; }
+    public int ManagerCount { get; set; }
+    public int StaffCount { get; set; }
+    /// <summary>Id tài khoản đang đăng nhập, để ẩn thao tác tự khóa / tự đổi vai trò / tự xóa.</summary>
+    public string CurrentUserId { get; set; } = string.Empty;
 }
 
 public class EmployeeRowViewModel

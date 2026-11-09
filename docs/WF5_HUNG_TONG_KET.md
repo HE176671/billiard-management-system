@@ -14,7 +14,7 @@ WF5 là **chu trình một ngày làm việc của quán**:
 |---|---|---|---|
 | UC01 | Đăng nhập / đăng xuất | Admin, Manager, Staff | `/Account/Login` |
 | UC02 | Đổi mật khẩu | Admin, Manager, Staff | `/Profile/ChangePassword` |
-| UC03 | Quản lý tài khoản nhân viên, phân quyền | **Admin** | `/Employee`, `/RoleManagement` |
+| UC03 | Tài khoản & phân quyền: tạo, sửa, khóa, đặt lại mật khẩu, đổi vai trò (Admin/Manager/Staff) | **Admin** | `/Employee` |
 | UC35 | Thêm / đổi tên loại bàn, sửa giá giờ (1 giá/loại) | Manager | `/Pricing` |
 | UC36 | Kiểm kê (điều chỉnh tồn, bắt buộc lý do) | Manager | `/Inventory` |
 | UC37 | Báo cáo doanh thu theo **ngày / tháng / ca**, xuất CSV | Manager | `/Revenue` |
@@ -30,7 +30,7 @@ script `18_WF5_AuditLog_SingleShift.sql` (web tự áp dụng khi khởi động
 
 ## Phân quyền (SRS I.4.4)
 
-- **Admin**: chỉ quản trị tài khoản và phân quyền (`/Employee`, `/RoleManagement`, hồ sơ cá nhân).
+- **Admin**: chỉ quản trị tài khoản và phân quyền (`/Employee`, hồ sơ cá nhân). Không tự khóa / tự đổi vai trò, không hạ hoặc khóa Admin cuối cùng.
 - **Manager**: vận hành và quản lý quán (giá, món, kho, ca, báo cáo, nhật ký, hạng, quà, điều chỉnh điểm, email ưu đãi). Không hủy món / hủy bill (BR-22).
 - **Staff**: ca, bàn, gọi món, thanh toán, hủy món/bill có lý do, hội viên tại quầy.
 

@@ -1,5 +1,7 @@
 using Bms.Web.Data;
 using Bms.Web.Models;
+using Bms.Web.Services;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -22,27 +24,18 @@ public class EmployeeController : Controller
 
     #region UC43 - Danh sach, tim kiem, loc va phan trang
 
-    // GET /Employee
-    public async Task<IActionResult> Index(string? search, string? status, int page = 1)
+    // GET /Employee — TV5: một màn duy nhất quản lý mọi tài khoản nội bộ (Admin / Manager / Staff).
+    public async Task<IActionResult> Index(string? search, string? status, string? role, int page = 1)
     {
-        bool isAdmin = User.IsInRole("Admin");
+        var roleOf = await LoadInternalRoleMapAsync();
+        var roleFilter = role != null && InternalRoles.Contains(role) ? role : null;
 
-        // Lấy tất cả user có role Staff; nếu là Admin thì lấy cả Manager
-        var targetIds = (await _userManager.GetUsersInRoleAsync("Staff"))
-                        .Select(u => u.Id).ToHashSet();
-        var managerIds = new HashSet<string>();
+        var targetIds = roleFilter == null
+            ? roleOf.Keys.ToHashSet()
+            : roleOf.Where(kv => kv.Value == roleFilter).Select(kv => kv.Key).ToHashSet();
 
-        if (isAdmin)
-        {
-            managerIds = (await _userManager.GetUsersInRoleAsync("Manager"))
-                         .Select(u => u.Id).ToHashSet();
-            targetIds.UnionWith(managerIds);
-        }
+        var query = _userManager.Users.Where(u => targetIds.Contains(u.Id));
 
-        var query = _userManager.Users
-            .Where(u => targetIds.Contains(u.Id));
-
-        // Tìm kiếm
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim().ToLower();
@@ -53,7 +46,6 @@ public class EmployeeController : Controller
                 (u.UserName  != null && u.UserName.ToLower().Contains(s)));
         }
 
-        // Lọc trạng thái
         if (status == "active")   query = query.Where(u => u.IsActive);
         if (status == "inactive") query = query.Where(u => !u.IsActive);
 
@@ -67,30 +59,84 @@ public class EmployeeController : Controller
             .Take(PageSize)
             .ToListAsync();
 
-        var rows = users.Select(u => new EmployeeRowViewModel
-        {
-            Id           = u.Id,
-            FullName     = u.FullName,
-            EmployeeCode = u.EmployeeCode,
-            UserName     = u.UserName,
-            Email        = u.Email,
-            PhoneNumber  = u.PhoneNumber,
-            RoleName     = managerIds.Contains(u.Id) ? "Manager" : "Staff",
-            HireDate     = u.HireDate,
-            IsActive     = u.IsActive,
-            CreatedAtUtc = u.CreatedAtUtc
-        }).ToList();
-
+        var allIds = roleOf.Keys.ToList();
         var vm = new EmployeeListViewModel
         {
-            Employees    = rows,
-            Search       = search,
-            StatusFilter = status,
-            Page         = page,
-            TotalPages   = totalPages,
-            TotalCount   = total
+            Employees = users.Select(u => new EmployeeRowViewModel
+            {
+                Id           = u.Id,
+                FullName     = u.FullName,
+                EmployeeCode = u.EmployeeCode,
+                UserName     = u.UserName,
+                Email        = u.Email,
+                PhoneNumber  = u.PhoneNumber,
+                RoleName     = roleOf.GetValueOrDefault(u.Id, "Staff"),
+                HireDate     = u.HireDate,
+                IsActive     = u.IsActive,
+                CreatedAtUtc = u.CreatedAtUtc
+            }).ToList(),
+            Search        = search,
+            StatusFilter  = status,
+            RoleFilter    = roleFilter,
+            Page          = page,
+            TotalPages    = totalPages,
+            TotalCount    = total,
+            ActiveCount   = await _userManager.Users.CountAsync(u => allIds.Contains(u.Id) && u.IsActive),
+            AdminCount    = roleOf.Count(kv => kv.Value == "Admin"),
+            ManagerCount  = roleOf.Count(kv => kv.Value == "Manager"),
+            StaffCount    = roleOf.Count(kv => kv.Value == "Staff"),
+            CurrentUserId = CurrentUserId
         };
         return View(vm);
+    }
+
+    // POST /Employee/ChangeRole — Admin đổi vai trò (thay màn "Phân quyền tài khoản" cũ).
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChangeRole(string id, string newRole)
+    {
+        newRole = (newRole ?? "").Trim();
+        if (!InternalRoles.Contains(newRole))
+        {
+            TempData["Error"] = "Vai trò không hợp lệ (chỉ Admin, Manager hoặc Staff).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var user = await GetStaffOrNull(id);
+        if (user == null) return NotFound();
+        if (user.Id == CurrentUserId)
+        {
+            TempData["Error"] = "Không thể tự đổi vai trò của tài khoản đang đăng nhập.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var currentRoles = (await _userManager.GetRolesAsync(user)).Where(r => InternalRoles.Contains(r)).ToList();
+        var oldRole = currentRoles.FirstOrDefault() ?? "—";
+        if (currentRoles.Count == 1 && oldRole == newRole)
+        {
+            TempData["Success"] = $"{user.FullName} đã là {newRole}.";
+            return RedirectToAction(nameof(Index));
+        }
+        if (currentRoles.Contains("Admin") && newRole != "Admin" && await IsLastActiveAdminAsync(user))
+        {
+            TempData["Error"] = "Không thể hạ quyền Admin cuối cùng của hệ thống.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (currentRoles.Count > 0)
+            await _userManager.RemoveFromRolesAsync(user, currentRoles);
+        var add = await _userManager.AddToRoleAsync(user, newRole);
+        if (!add.Succeeded)
+        {
+            TempData["Error"] = "Không đổi được vai trò. Vui lòng thử lại.";
+            return RedirectToAction(nameof(Index));
+        }
+        // Đăng xuất phiên đang mở của tài khoản để quyền mới có hiệu lực ngay.
+        await _userManager.UpdateSecurityStampAsync(user);
+        await AuditAsync(user.Id, $"Đổi vai trò {user.FullName} ({user.UserName}) từ {oldRole} sang {newRole}.", oldRole, newRole);
+
+        TempData["Success"] = $"Đã đổi vai trò {user.FullName} từ {oldRole} sang {newRole}.";
+        return RedirectToAction(nameof(Index));
     }
 
     #endregion
@@ -110,9 +156,8 @@ public class EmployeeController : Controller
     {
         if (!ModelState.IsValid) return View(model);
 
-        bool isAdmin = User.IsInRole("Admin");
-        string targetRole = isAdmin && model.Role == "Manager" ? "Manager" : "Staff";
-        string prefix = targetRole == "Manager" ? "MG" : "NV";
+        string targetRole = InternalRoles.Contains(model.Role) ? model.Role : "Staff";
+        string prefix = CodePrefix(targetRole);
 
         // Mã do hệ thống cấp (ô nhập là readonly), không tin giá trị gửi lên từ form.
         string empCode = await GenerateNextEmployeeCodeAsync(prefix);
@@ -162,7 +207,8 @@ public class EmployeeController : Controller
             return View(model);
         }
 
-        TempData["Success"] = $"Đã tạo tài khoản người dùng {user.FullName} ({targetRole}) thành công.";
+        await AuditAsync(user.Id, $"Tạo tài khoản {user.FullName} ({user.UserName}, {empCode}) với vai trò {targetRole}.", null, targetRole);
+        TempData["Success"] = $"Đã tạo tài khoản {user.FullName} ({targetRole}, mã {empCode}) thành công.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -198,7 +244,7 @@ public class EmployeeController : Controller
         if (user == null) return NotFound();
 
         // Mã người dùng không sửa được trên form; chỉ cấp mới nếu tài khoản cũ còn thiếu.
-        string prefix = await _userManager.IsInRoleAsync(user, "Manager") ? "MG" : "NV";
+        string prefix = CodePrefix((await _userManager.GetRolesAsync(user)).FirstOrDefault(r => InternalRoles.Contains(r)) ?? "Staff");
         var newCode = string.IsNullOrWhiteSpace(user.EmployeeCode)
             ? await GenerateNextEmployeeCodeAsync(prefix)
             : user.EmployeeCode;
@@ -246,6 +292,16 @@ public class EmployeeController : Controller
     {
         var user = await GetStaffOrNull(id);
         if (user == null) return NotFound();
+        if (user.Id == CurrentUserId)
+        {
+            TempData["Error"] = "Không thể tự khóa tài khoản đang đăng nhập.";
+            return RedirectToAction(nameof(Index));
+        }
+        if (user.IsActive && await _userManager.IsInRoleAsync(user, "Admin") && await IsLastActiveAdminAsync(user))
+        {
+            TempData["Error"] = "Không thể khóa Admin cuối cùng đang hoạt động.";
+            return RedirectToAction(nameof(Index));
+        }
 
         user.IsActive = !user.IsActive;
         // Đổi SecurityStamp để cookie phiên hiện tại mất hiệu lực ngay
@@ -257,6 +313,8 @@ public class EmployeeController : Controller
         }
 
         var action = user.IsActive ? "mở khóa" : "khóa";
+        await AuditAsync(user.Id, $"Đã {action} tài khoản {user.FullName} ({user.UserName}).",
+            user.IsActive ? "Khóa" : "Hoạt động", user.IsActive ? "Hoạt động" : "Khóa");
         TempData["Success"] = $"Đã {action} tài khoản {user.FullName}.";
         return RedirectToAction(nameof(Index));
     }
@@ -271,12 +329,18 @@ public class EmployeeController : Controller
     {
         var user = await GetStaffOrNull(id);
         if (user == null) return NotFound();
+        if (user.Id == CurrentUserId || await _userManager.IsInRoleAsync(user, "Admin"))
+        {
+            TempData["Error"] = "Không xóa tài khoản Admin. Hãy đổi vai trò hoặc khóa tài khoản.";
+            return RedirectToAction(nameof(Index));
+        }
 
         try
         {
             var result = await _userManager.DeleteAsync(user);
             if (result.Succeeded)
             {
+                await AuditAsync(null, $"Xóa tài khoản chưa phát sinh dữ liệu: {user.FullName} ({user.UserName}, {user.EmployeeCode}).", user.UserName, null);
                 TempData["Success"] = $"Đã xóa vĩnh viễn tài khoản {user.FullName}.";
             }
             else
@@ -331,6 +395,8 @@ public class EmployeeController : Controller
             return View(model);
         }
 
+        await _userManager.UpdateSecurityStampAsync(user);
+        await AuditAsync(user.Id, $"Đặt lại mật khẩu cho {user.FullName} ({user.UserName}).", null, null);
         TempData["Success"] = $"Đã đặt lại mật khẩu cho {user.FullName}.";
         return RedirectToAction(nameof(Index));
     }
@@ -341,16 +407,42 @@ public class EmployeeController : Controller
 
     // ── Helpers ──
 
-    /// <summary>Lấy user theo ID, trả về nếu là Staff (hoặc Manager khi người thao tác là Admin).</summary>
+    /// <summary>Lấy user theo ID, chỉ trả về nếu là tài khoản nội bộ (Admin / Manager / Staff).</summary>
     private async Task<ApplicationUser?> GetStaffOrNull(string id)
     {
         var user = await _userManager.FindByIdAsync(id);
         if (user == null) return null;
-        if (await _userManager.IsInRoleAsync(user, "Staff")) return user;
-        if (User.IsInRole("Admin") && await _userManager.IsInRoleAsync(user, "Manager")) return user;
-        return null;
+        var roles = await _userManager.GetRolesAsync(user);
+        return roles.Any(r => InternalRoles.Contains(r)) ? user : null;
     }
 
+
+    private static readonly string[] InternalRoles = { "Admin", "Manager", "Staff" };
+
+    private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+
+    private static string CodePrefix(string role) => role switch { "Admin" => "AD", "Manager" => "MG", _ => "NV" };
+
+    /// <summary>UserId → vai trò nội bộ (ưu tiên Admin > Manager > Staff nếu dữ liệu cũ có nhiều vai trò).</summary>
+    private async Task<Dictionary<string, string>> LoadInternalRoleMapAsync()
+    {
+        var map = new Dictionary<string, string>();
+        foreach (var r in new[] { "Staff", "Manager", "Admin" })
+            foreach (var u in await _userManager.GetUsersInRoleAsync(r))
+                map[u.Id] = r;
+        return map;
+    }
+
+    private async Task<bool> IsLastActiveAdminAsync(ApplicationUser user) =>
+        !(await _userManager.GetUsersInRoleAsync("Admin")).Any(a => a.Id != user.Id && a.IsActive);
+
+    /// <summary>Ghi Nhật ký hệ thống (bỏ qua khi chạy test không có DI).</summary>
+    private async Task AuditAsync(string? targetUserId, string description, string? oldValue, string? newValue)
+    {
+        var audit = HttpContext?.RequestServices?.GetService<IAuditLogService>();
+        if (audit == null) return;
+        await audit.LogAsync(AuditActions.AccountChange, "User", targetUserId, description, oldValue, newValue);
+    }
 
     private static string TranslateIdentityError(IdentityError err) => err.Code switch
     {
