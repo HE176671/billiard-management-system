@@ -8,7 +8,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-/// <summary>TV5 — BMS-017: mở ca, đóng ca, đối soát tiền mặt, lịch sử ca.</summary>
+/// <summary>
+/// TV5 — mở ca, đóng ca, đối soát tiền mặt, lịch sử ca.
+/// BR-23: cả quán chỉ có một ca đang mở; nhân viên nào đang trực cũng xem và đóng được ca đó (giao ca).
+/// </summary>
 [Authorize(Roles = "Staff,Manager,Admin")]
 public class ShiftController : Controller
 {
@@ -26,20 +29,20 @@ public class ShiftController : Controller
 
     private string CurrentUserId => _users.GetUserId(User)!;
 
-    #region Ca cua toi: mo ca hoac xem ca dang mo
+    #region Ca cua quan: mo ca hoac xem ca dang mo
 
     // GET /Shift
     public async Task<IActionResult> Index()
     {
         var vm = new ShiftHomeViewModel();
-        var active = await _shifts.GetActiveShiftAsync(CurrentUserId);
+        var active = await _shifts.GetStoreActiveShiftAsync();
         if (active != null)
         {
             vm.Active = await _shifts.GetSummaryAsync(active.Id);
             vm.Close.ShiftId = active.Id;
         }
-        vm.Recent = (await LoadRowsAsync(_db.WorkShifts.Where(s => s.StaffId == CurrentUserId)))
-            .Take(5).ToList();
+        // 5 ca gần nhất của cả quán (không còn "ca của tôi" vì chỉ có một ca chung).
+        vm.Recent = (await LoadRowsAsync(_db.WorkShifts)).Take(5).ToList();
         return View(vm);
     }
 
@@ -69,10 +72,13 @@ public class ShiftController : Controller
     {
         var shift = await _db.WorkShifts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == model.ShiftId);
         if (shift == null) return NotFound();
-        var isOwner = shift.StaffId == CurrentUserId;
-        if (!isOwner && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
+        // BR-23: ca của quán, nhân viên đang trực nào cũng đóng được (giao ca). Ca đã đóng thì service báo lỗi.
+        var isManager = User.IsInRole("Manager") || User.IsInRole("Admin");
+        if (shift.Status != WorkShift.StatusActive && !isManager) return Forbid();
 
-        var back = isOwner ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Details), new { id = shift.Id });
+        var back = isManager && shift.StaffId != CurrentUserId
+            ? RedirectToAction(nameof(Details), new { id = shift.Id })
+            : RedirectToAction(nameof(Index));
         if (!ModelState.IsValid)
         {
             TempData["Error"] = FirstError() ?? "Dữ liệu đóng ca không hợp lệ.";
@@ -99,12 +105,13 @@ public class ShiftController : Controller
 
     #region Chi tiet ca
 
-    // GET /Shift/Details/5 — chủ ca hoặc Admin
+    // GET /Shift/Details/5 — người mở ca, ca đang mở của quán, hoặc Manager/Admin
     public async Task<IActionResult> Details(int id)
     {
         var summary = await _shifts.GetSummaryAsync(id);
         if (summary == null) return NotFound();
-        if (summary.Shift.StaffId != CurrentUserId && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
+        if (summary.Shift.StaffId != CurrentUserId && !summary.IsActive
+            && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
 
         var vm = new ShiftDetailsViewModel
         {

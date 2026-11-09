@@ -15,15 +15,18 @@ public class InventoryController : Controller
     private readonly IInventoryService _inventoryService;
     private readonly IProductService _productService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IAuditLogService _audit;
 
     public InventoryController(
         IInventoryService inventoryService,
         IProductService productService,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IAuditLogService audit)
     {
         _inventoryService = inventoryService;
         _productService = productService;
         _userManager = userManager;
+        _audit = audit;
     }
 
     // UC-13: Quản lý tồn kho hàng hóa F&B
@@ -153,7 +156,18 @@ public class InventoryController : Controller
         }
 
         var userId = _userManager.GetUserId(User) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Manager";
+        var before = await _productService.GetProductByIdAsync(productId);
         var result = await _inventoryService.AdjustStockAsync(productId, newQuantity, reason.Trim(), userId);
+
+        // TV5: ghi nhật ký kiểm kê (UC36) khi điều chỉnh thành công và số lượng thực sự thay đổi.
+        if (result.Success && before != null && before.StockQuantity != result.BalanceAfter)
+        {
+            var diff = result.BalanceAfter - before.StockQuantity;
+            await _audit.LogAsync(AuditActions.StockCount, "Product", productId.ToString(),
+                $"Kiểm kê [{before.Name}]: hệ thống {before.StockQuantity}, thực tế {result.BalanceAfter} ({(diff > 0 ? "+" : "")}{diff}).",
+                oldValue: before.StockQuantity.ToString(), newValue: result.BalanceAfter.ToString(),
+                reason: reason.Trim(), actorId: userId);
+        }
 
         if (IsAjaxRequest())
         {

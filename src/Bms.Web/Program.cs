@@ -71,6 +71,9 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 // TV5: dich vu ca lam dung chung (TV3 goi khi ghi nhan tien mat)
 builder.Services.AddScoped<IShiftService, ShiftService>();
+// TV5: nhat ky thao tac nhay cam dung chung
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 
 // WF2: Goi mon & Kho (Tung)
 builder.Services.AddSignalR();
@@ -121,6 +124,10 @@ using (var upgradeScope = app.Services.CreateScope())
         upgradeLogger.LogError(ex,
             "Không tự nâng cấp được schema. Hãy chạy tay BMS_Database_Starter/08_AddWorkShiftReconciliation.sql và 09_TV2_CrmLoyaltyV2.sql.");
     }
+
+    // TV5: bảng AuditLogs + ràng buộc một ca đang mở (script 18). Tự bắt lỗi bên trong.
+    await Wf5SchemaUpgrader.ApplyAsync(
+        upgradeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), upgradeLogger);
 }
 
 #endregion

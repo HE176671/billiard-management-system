@@ -2,6 +2,20 @@
 
 Cập nhật: 27/10/2026. Mã tracking: BMS-017.1/017.2, BMS-049, BMS-053.
 
+> **Cập nhật 09/11/2026 — BR-23 và Audit Log (nhánh `hung-wf5`)**
+>
+> - **Cả quán chỉ có MỘT ca đang mở**, không còn "ca của từng nhân viên". `GetStoreActiveShiftAsync()` trả về ca của quán; `GetActiveShiftAsync(staffId)` giữ lại cho code cũ nhưng cũng trả ca của quán. `RequireActiveShiftIdForCashAsync(staffId)` khóa ca của quán, không lọc theo nhân viên. Nhân viên nào đang trực cũng đóng được ca (giao ca), người đóng được ghi lại.
+> - Ràng buộc DB mới: `UX_WorkShifts_SingleActive` (script `18_WF5_AuditLog_SingleShift.sql`, web tự áp dụng khi khởi động).
+> - **Chưa mở ca thì không mở bàn được**: `TableController.OpenSession` gắn `[RequireOpenShift]`. Thanh toán (TV3) cũng phải gọi `RequireActiveShiftIdForCashAsync` cho **mọi** phương thức thu tại quầy (tiền mặt và VietQR), không để `WorkShiftId = NULL`.
+> - **Nhật ký thao tác nhạy cảm**: inject `IAuditLogService`. Trong transaction của mình thì gọi `AddAsync(...)` trước `SaveChangesAsync()`; ngoài transaction thì gọi `LogAsync(...)`. Mã thao tác dùng hằng trong `AuditActions` (ví dụ `ItemCancel`, `BillCancel`, `PointAdjust`, `ProductPriceChange`, `TierChange`). Manager xem ở menu "Nhật ký hệ thống" (`/AuditLog`).
+>
+> ```csharp
+> await _audit.AddAsync(AuditActions.BillCancel, "Invoice", invoiceId.ToString(),
+>     $"Hủy hóa đơn #{invoiceId} bàn {tableCode}, tổng {amount:N0} VND.",
+>     oldValue: amount.ToString("0"), reason: reason);
+> await _db.SaveChangesAsync();
+> ```
+
 ## 1. Cài đặt
 
 1. Chạy `BMS_Database_Starter/08_AddWorkShiftReconciliation.sql` trên `BilliardDB` (sau 05, 06, 07). Script chỉ thêm cột/ràng buộc, chạy lại an toàn.

@@ -16,6 +16,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PaymentTransaction>      PaymentTransactions      => Set<PaymentTransaction>();
     public DbSet<BilliardTable>           BilliardTables           => Set<BilliardTable>();
     public DbSet<WorkShift>               WorkShifts               => Set<WorkShift>();
+    public DbSet<AuditLog>                AuditLogs                => Set<AuditLog>();
     public DbSet<PlaySession>             PlaySessions             => Set<PlaySession>();
     public DbSet<PlaySessionTableSegment> PlaySessionTableSegments => Set<PlaySessionTableSegment>();
     public DbSet<SessionCombo>            SessionCombos            => Set<SessionCombo>();
@@ -281,6 +282,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.Ignore(x => x.CashDifference);
             e.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.ClosedBy).WithMany().HasForeignKey(x => x.ClosedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // AuditLogs (Hung) - nhat ky thao tac nhay cam
+        builder.Entity<AuditLog>(e =>
+        {
+            e.ToTable("AuditLogs");
+            e.Property(x => x.ActionType).HasMaxLength(50).IsUnicode(false).IsRequired();
+            e.Property(x => x.EntityType).HasMaxLength(50).IsUnicode(false).IsRequired();
+            e.Property(x => x.EntityId).HasMaxLength(100);
+            e.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.OldValue).HasMaxLength(1000);
+            e.Property(x => x.NewValue).HasMaxLength(1000);
+            e.Property(x => x.Reason).HasMaxLength(500);
+            e.Property(x => x.ActorId).HasMaxLength(450);
+            e.Property(x => x.ActorName).HasMaxLength(200);
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.CreatedAtUtc);
         });
 
         builder.Entity<ProductCategory>(e =>

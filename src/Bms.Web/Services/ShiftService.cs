@@ -27,17 +27,23 @@ public record ShiftSummary(
 
 /// <summary>
 /// Hợp đồng ca làm TV5 cung cấp cho cả nhóm.
-/// TV3 khi ghi nhận tiền mặt: mở transaction → <see cref="RequireActiveShiftIdForCashAsync"/>
+/// BR-23: cả quán chỉ có MỘT ca đang mở (một két tiền). Mọi nhân viên trực đều thao tác trên ca đó.
+/// TV3 khi ghi nhận thanh toán: mở transaction → <see cref="RequireActiveShiftIdForCashAsync"/>
 /// → insert PaymentTransactions với WorkShiftId + ReceivedById → commit.
-/// VNPay/IPN không gọi hàm này và để WorkShiftId = NULL.
 /// </summary>
 public interface IShiftService
 {
-    /// <summary>Ca đang mở của nhân viên, hoặc null.</summary>
+    /// <summary>Ca đang mở của cả quán, hoặc null.</summary>
+    Task<WorkShift?> GetStoreActiveShiftAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Giữ lại để tương thích code cũ. Theo BR-23 trả về ca đang mở của cả quán,
+    /// không phụ thuộc <paramref name="staffId"/>.
+    /// </summary>
     Task<WorkShift?> GetActiveShiftAsync(string staffId, CancellationToken ct = default);
 
     /// <summary>
-    /// Khóa (UPDLOCK) ca đang mở của nhân viên và trả về Id để gắn vào giao dịch tiền mặt.
+    /// Khóa (UPDLOCK) ca đang mở của quán và trả về Id để gắn vào giao dịch thanh toán.
     /// Bắt buộc gọi bên trong transaction của bên gọi để đóng ca không "lọt" giao dịch.
     /// Ném <see cref="ShiftException"/> mã NO_ACTIVE_SHIFT nếu chưa mở ca.
     /// </summary>
@@ -55,11 +61,26 @@ public class ShiftService : IShiftService
 {
     public const decimal MaxCash = 1_000_000_000m;
     private readonly ApplicationDbContext _db;
-    public ShiftService(ApplicationDbContext db) => _db = db;
+    private readonly IAuditLogService _audit;
+
+    public ShiftService(ApplicationDbContext db, IAuditLogService audit)
+    {
+        _db = db;
+        _audit = audit;
+    }
+
+    private static string AlreadyOpenMessage(WorkShift current) =>
+        $"Quán đang có ca #{current.Id} do {current.Staff?.FullName ?? "nhân viên khác"} mở lúc " +
+        $"{current.StartTimeUtc.ToVn():HH:mm dd/MM}. Mỗi lúc chỉ được một ca (BR-23), hãy đóng ca đó trước.";
+
+    public Task<WorkShift?> GetStoreActiveShiftAsync(CancellationToken ct = default) =>
+        _db.WorkShifts.AsNoTracking()
+            .Include(s => s.Staff)
+            .OrderBy(s => s.Id)
+            .FirstOrDefaultAsync(s => s.Status == WorkShift.StatusActive, ct);
 
     public Task<WorkShift?> GetActiveShiftAsync(string staffId, CancellationToken ct = default) =>
-        _db.WorkShifts.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.StaffId == staffId && s.Status == WorkShift.StatusActive, ct);
+        GetStoreActiveShiftAsync(ct);
 
     public async Task<int> RequireActiveShiftIdForCashAsync(string staffId, CancellationToken ct = default)
     {
@@ -69,10 +90,10 @@ public class ShiftService : IShiftService
 
         var ids = await _db.Database.SqlQuery<int>($@"
             SELECT Id AS Value FROM dbo.WorkShifts WITH (UPDLOCK, HOLDLOCK)
-            WHERE StaffId = {staffId} AND Status = 'Active'").ToListAsync(ct);
+            WHERE Status = 'Active'").ToListAsync(ct);
         if (ids.Count == 0)
-            throw new ShiftException("NO_ACTIVE_SHIFT", "Bạn chưa mở ca. Hãy mở ca trước khi thu tiền mặt.");
-        return ids[0];
+            throw new ShiftException("NO_ACTIVE_SHIFT", "Quán chưa mở ca. Hãy mở ca trước khi thu tiền.");
+        return ids.Min();
     }
 
     public async Task<WorkShift> OpenShiftAsync(string staffId, decimal startingCash, string? notes, CancellationToken ct = default)
@@ -80,8 +101,10 @@ public class ShiftService : IShiftService
         if (startingCash < 0 || startingCash > MaxCash)
             throw new ShiftException("INVALID_CASH", "Tiền đầu ca phải từ 0 đến 1.000.000.000 VND.");
 
-        if (await _db.WorkShifts.AnyAsync(s => s.StaffId == staffId && s.Status == WorkShift.StatusActive, ct))
-            throw new ShiftException("ALREADY_OPEN", "Bạn đang có một ca chưa đóng. Hãy đóng ca đó trước.");
+        // BR-23: cả quán chỉ một ca đang mở.
+        var current = await GetStoreActiveShiftAsync(ct);
+        if (current != null)
+            throw new ShiftException("ALREADY_OPEN", AlreadyOpenMessage(current));
 
         var shift = new WorkShift
         {
@@ -98,10 +121,16 @@ public class ShiftService : IShiftService
         }
         catch (DbUpdateException)
         {
-            // UX_WorkShifts_ActiveStaff chặn hai request mở ca cùng lúc.
+            // UX_WorkShifts_SingleActive chặn hai request mở ca cùng lúc.
             _db.Entry(shift).State = EntityState.Detached;
-            throw new ShiftException("ALREADY_OPEN", "Bạn đang có một ca chưa đóng. Hãy đóng ca đó trước.");
+            var other = await GetStoreActiveShiftAsync(ct);
+            throw new ShiftException("ALREADY_OPEN",
+                other != null ? AlreadyOpenMessage(other) : "Quán đang có một ca chưa đóng. Hãy đóng ca đó trước.");
         }
+
+        await _audit.LogAsync(AuditActions.ShiftOpen, "WorkShift", shift.Id.ToString(),
+            $"Mở ca #{shift.Id} với {shift.StartingCash:N0} VND đầu ca.",
+            newValue: shift.StartingCash.ToString("0"), reason: shift.Notes, actorId: staffId, ct: ct);
         return shift;
     }
 
@@ -142,6 +171,18 @@ public class ShiftService : IShiftService
             shift.Status        = WorkShift.StatusClosed;
             if (cleanNotes != null)
                 shift.Notes = shift.Notes == null ? cleanNotes : Truncate(shift.Notes + " | Đóng ca: " + cleanNotes);
+
+            // Nhật ký lưu cùng transaction với việc đóng ca.
+            var diff = shift.EndingCash.Value - expected;
+            await _audit.AddAsync(AuditActions.ShiftClose, "WorkShift", shiftId.ToString(),
+                $"Đóng ca #{shiftId}: kỳ vọng {expected:N0} VND, đếm thực tế {shift.EndingCash:N0} VND.",
+                oldValue: expected.ToString("0"), newValue: shift.EndingCash.Value.ToString("0"),
+                reason: cleanNotes, actorId: closedById, ct: ct);
+            if (diff != 0)
+                await _audit.AddAsync(AuditActions.ShiftCashDiff, "WorkShift", shiftId.ToString(),
+                    $"Ca #{shiftId} {(diff > 0 ? "thừa" : "thiếu")} {Math.Abs(diff):N0} VND tiền mặt.",
+                    oldValue: expected.ToString("0"), newValue: shift.EndingCash.Value.ToString("0"),
+                    reason: cleanNotes, actorId: closedById, ct: ct);
             await _db.SaveChangesAsync(ct);
 
             if (tx != null) await tx.CommitAsync(ct);

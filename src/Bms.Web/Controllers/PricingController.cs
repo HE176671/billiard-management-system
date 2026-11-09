@@ -1,5 +1,6 @@
 using Bms.Web.Data;
 using Bms.Web.Models;
+using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,8 +17,13 @@ namespace Bms.Web.Controllers;
 public class PricingController : Controller
 {
     private readonly ApplicationDbContext _context;
+    private readonly IAuditLogService _audit;
 
-    public PricingController(ApplicationDbContext context) => _context = context;
+    public PricingController(ApplicationDbContext context, IAuditLogService audit)
+    {
+        _context = context;
+        _audit = audit;
+    }
 
     #region Lay danh sach loai ban cho form
 
@@ -199,7 +205,18 @@ public class PricingController : Controller
         var tableType = await _context.TableTypes.FindAsync(id);
         if (tableType == null) return NotFound();
 
+        var oldRate = tableType.HourlyRate;
+        if (oldRate == hourlyRate)
+        {
+            TempData["Success"] = $"Giá bàn [{tableType.Name}] không thay đổi ({hourlyRate:N0} VND/giờ).";
+            return RedirectToAction(nameof(Index));
+        }
+
         tableType.HourlyRate = hourlyRate;
+        // TV5: ghi nhật ký đổi giá, lưu cùng lần SaveChanges. Phiên đang chơi giữ giá snapshot cũ.
+        await _audit.AddAsync(AuditActions.TableRateChange, "TableType", tableType.Id.ToString(),
+            $"Đổi giá giờ loại bàn [{tableType.Name}] từ {oldRate:N0} thành {hourlyRate:N0} VND/giờ.",
+            oldValue: oldRate.ToString("0"), newValue: hourlyRate.ToString("0"));
         await _context.SaveChangesAsync();
 
         TempData["Success"] = $"Đã cập nhật giá chuẩn bàn [{tableType.Name}] thành {hourlyRate:N0} VND/giờ.";

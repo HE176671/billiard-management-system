@@ -60,6 +60,7 @@ await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 await SchemaUpgrader.ApplyAsync(db, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+await Wf5SchemaUpgrader.ApplyAsync(db, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
 await using var tx = await db.Database.BeginTransactionAsync();
 var passed = 0;
 void Check(bool condition, string label) {
@@ -94,15 +95,15 @@ try
     // Use a temporary type so existing configs never interfere with the test.
     var testType = new TableType { Name = "Smoke " + key[..8], HourlyRate = 50000 };
     db.TableTypes.Add(testType); await db.SaveChangesAsync();
-    var pricing = Prepare(new PricingController(db));
+    var pricing = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
     Check(await pricing.Create(new() { TableTypeId = testType.Id, StartHour = "08:00", EndHour = "12:00", HourlyRate = 50000 }) is RedirectToActionResult, "Pricing create");
     var config = await db.PricingConfigs.SingleAsync(p => p.TableTypeId == testType.Id);
-    var overlap = Prepare(new PricingController(db));
+    var overlap = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
     Check(await overlap.Create(new() { Id = config.Id, TableTypeId = testType.Id, StartHour = "09:00", EndHour = "10:00", HourlyRate = 50000 }) is ViewResult && !overlap.ModelState.IsValid, "Overlap rejected even with forged create ID");
     Check(await pricing.Create(new() { TableTypeId = testType.Id, StartHour = "12:00", EndHour = "14:00", HourlyRate = 60000 }) is RedirectToActionResult, "Adjacent pricing intervals accepted");
-    var invalid = Prepare(new PricingController(db));
+    var invalid = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
     Check(await invalid.Create(new() { TableTypeId = testType.Id, StartHour = "25:00", EndHour = "26:00", HourlyRate = 50000 }) is ViewResult && !invalid.ModelState.IsValid, "Out-of-day hours rejected");
-    var unknown = Prepare(new PricingController(db));
+    var unknown = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
     Check(await unknown.Create(new() { TableTypeId = int.MaxValue, StartHour = "08:00", EndHour = "10:00", HourlyRate = 50000 }) is ViewResult && !unknown.ModelState.IsValid, "Unknown table type rejected");
     Check(await pricing.Edit(new CreateEditPricingViewModel() { Id = config.Id, TableTypeId = testType.Id, StartHour = "08:00", EndHour = "11:00", HourlyRate = 70000 }) is RedirectToActionResult && config.HourlyRate == 70000, "Pricing update");
     Check(await pricing.Delete(config.Id) is RedirectToActionResult && !await db.PricingConfigs.AnyAsync(p => p.Id == config.Id), "Pricing delete");
@@ -155,12 +156,15 @@ try
     Check(((ViewResult)await dashboard.Index()).Model is DashboardViewModel { TotalTables: > 0 }, "Dashboard live SQL queries");
 
     // TV5 ca làm (cần 08_AddWorkShiftReconciliation.sql). Ngoại tx đang mở nên service dùng chung tx.
-    var shiftService = new ShiftService(db);
+    // BR-23: cả quán một ca. Đóng tạm các ca đang mở trong DB thật (transaction sẽ rollback cuối test).
+    await db.Database.ExecuteSqlRawAsync(
+        "UPDATE dbo.WorkShifts SET Status = 'Closed', EndTimeUtc = SYSUTCDATETIME(), EndingCash = StartingCash WHERE Status = 'Active'");
+    var shiftService = new ShiftService(db, new AuditLogService(db, new HttpContextAccessor()));
     var opened = await shiftService.OpenShiftAsync(staff.Id, 500000, "smoke");
     Check(opened.Status == WorkShift.StatusActive && opened.StartingCash == 500000, "Shift open");
     var secondRejected = false;
     try { await shiftService.OpenShiftAsync(staff.Id, 0, null); } catch (ShiftException e) { secondRejected = e.Code == "ALREADY_OPEN"; }
-    Check(secondRejected, "Second active shift for same staff rejected");
+    Check(secondRejected, "Second active shift in store rejected (BR-23)");
     var negativeRejected = false;
     try { await shiftService.OpenShiftAsync(customer.Id, -1, null); } catch (ShiftException) { negativeRejected = true; }
     Check(negativeRejected, "Negative starting cash rejected");
@@ -181,6 +185,10 @@ try
     Check(noteRequired, "Cash difference requires a note");
     var closed = await shiftService.CloseShiftAsync(opened.Id, staff.Id, 600000, "Thiếu tiền lẻ");
     Check(!closed.IsActive && closed.Difference == -20000 && closed.Shift.ExpectedCash == 620000, "Shift close snapshots expected cash and difference");
+    var openedKey = opened.Id.ToString();
+    Check(await db.AuditLogs.AnyAsync(log => log.EntityId == openedKey && log.ActionType == AuditActions.ShiftOpen)
+        && await db.AuditLogs.AnyAsync(log => log.EntityId == openedKey && log.ActionType == AuditActions.ShiftCashDiff && log.Reason == "Thiếu tiền lẻ"),
+        "Shift open and cash difference are audit-logged");
     var closeTwice = false;
     try { await shiftService.CloseShiftAsync(opened.Id, staff.Id, 620000, null); } catch (ShiftException e) { closeTwice = e.Code == "ALREADY_CLOSED"; }
     Check(closeTwice, "Closing twice rejected");
@@ -495,7 +503,7 @@ try
         "T18: Staff creates pending point adjustment (with requester role label) and Manager approves it on dedicated Manage screen");
 
     // T19: Manager cấu hình Giá Bàn chuẩn, Giá Gậy cho thuê theo lượt & Khuyến mãi Combo Giờ chơi tặng nước
-    var mgrPricingCtrl = Prepare(new PricingController(db), managerPrincipal);
+    var mgrPricingCtrl = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())), managerPrincipal);
     await mgrPricingCtrl.UpdateTableBaseRate(testType.Id, 65000m);
     var updatedTableRate = (await db.TableTypes.AsNoTracking().SingleAsync(t => t.Id == testType.Id)).HourlyRate;
     var cueName = "Gậy Carbon Smoke " + key[..6];
@@ -718,7 +726,7 @@ try
     var b01Detail = await tableSessionSvc.GetTableDetailAsync(1);
     var loyaltyAuth = typeof(LoyaltyTestController).GetCustomAttribute<AuthorizeAttribute>();
     var quickEnrollAuth = typeof(CustomerManagementController).GetMethod(nameof(CustomerManagementController.QuickEnroll))?.GetCustomAttribute<AuthorizeAttribute>();
-    var staffCtrlRedirect = new StaffController(db, new ShiftService(db), users).Index() as RedirectToActionResult;
+    var staffCtrlRedirect = new StaffController(db, new ShiftService(db, new AuditLogService(db, new HttpContextAccessor())), users).Index() as RedirectToActionResult;
     Check(TableSessionService.MapDisplayStatus("Available") == "Còn trống"
         && TableSessionService.MapDisplayStatus("InUse", false) == "Đang sử dụng"
         && TableSessionService.MapDisplayStatus("InUse", true) == "Đã hết giờ Combo (Tính vượt giờ)"

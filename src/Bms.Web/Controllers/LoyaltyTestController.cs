@@ -631,7 +631,7 @@ public class LoyaltyTestController : Controller
             if (invoiceId > 0)
             {
                 var activeShiftId = await _context.WorkShifts.AsNoTracking()
-                    .Where(s => s.StaffId == actorId && s.Status == WorkShift.StatusActive)
+                    .Where(s => s.Status == WorkShift.StatusActive) // BR-23: ca chung của quán
                     .Select(s => (int?)s.Id)
                     .FirstOrDefaultAsync();
 
