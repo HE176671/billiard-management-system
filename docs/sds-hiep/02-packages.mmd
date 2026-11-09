@@ -1,0 +1,20 @@
+flowchart LR
+    Root["Bms.Web<br/>Program.cs — Composition Root"]
+    C["«namespace» Bms.Web.Controllers<br/>OrderController<br/>TableController<br/>PosCheckoutController"]
+    H["«namespace» Bms.Web.Hubs<br/>OrderHub"]
+    S["«namespace» Bms.Web.Services<br/>IOrderService / OrderService<br/>IProductService / ProductService<br/>ICheckoutService / CheckoutService<br/>ITableSessionService"]
+    M["«namespace» Bms.Web.Models<br/>OrderViewModels<br/>TableViewModels<br/>FandBViewModels"]
+    E["«namespace» Bms.Web.Data.Entities<br/>Order, OrderDetail<br/>Product, ProductCategory<br/>PlaySession, BilliardTable<br/>Invoice, PaymentTransaction"]
+    D["«namespace» Bms.Web.Data<br/>ApplicationDbContext"]
+    EF["«framework» EF Core 8<br/>Microsoft.EntityFrameworkCore.SqlServer"]
+
+    Root -.->|"đăng ký DI & MapHub"| C
+    Root -.->|"đăng ký DI"| S
+    Root -.->|"MapHub /hubs/order"| H
+    Root -.-> D
+    C -->|"gọi nghiệp vụ"| S
+    C -->|"nhận/trả model"| M
+    S -->|"phát sự kiện realtime"| H
+    S -->|"xử lý entities"| E
+    S -->|"truy vấn DB"| D
+    D --> EF

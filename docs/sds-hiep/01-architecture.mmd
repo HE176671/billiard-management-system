@@ -1,0 +1,21 @@
+flowchart TB
+    Actor["Khách hàng tại bàn / Thu ngân / Nhân viên phục vụ"] --> Browser["Trình duyệt Web & Thiết bị di động<br/>HTML5, Bootstrap, SignalR Client, Camera QR"]
+    subgraph App["Bms.Web — ASP.NET Core MVC & Realtime Web"]
+        Gate["Routing + Security Pipeline<br/>Role: Staff, Manager, Admin & Anonymous QR"]
+        Hub["SignalR Hub<br/>OrderHub (/hubs/order)<br/>ReceiveNewOrder, OrderConfirmed, OrderRejected"]
+        Controllers["Controllers<br/>OrderController, TableController, PosCheckoutController"]
+        Views["Razor Views + ViewModels<br/>Order/Table, Order/Pending, Order/Counter, Table/QrCodes"]
+        Services["Tầng Dịch vụ Nghiệp vụ<br/>IOrderService / OrderService<br/>IProductService / ProductService<br/>ICheckoutService / CheckoutService<br/>ITableSessionService / TableSessionService"]
+        Data["ApplicationDbContext / EF Core 8<br/>SQL có tham số, Transactions, Optimistic Concurrency"]
+
+        Gate --> Controllers
+        Gate --> Hub
+        Controllers --> Views
+        Controllers --> Services
+        Services --> Hub
+        Services --> Data
+    end
+    Browser -->|"HTTP POST / GET + Cookie / QR Token"| Gate
+    Hub -->|"Websocket / SSE (Realtime Audio & Badge)"| Browser
+    Views -->|"HTML / View / QR Codes SVG"| Browser
+    Data -->|"SQL Queries / Stored Procedures / Transactions"| DB[("SQL Server<br/>BilliardDB")]
