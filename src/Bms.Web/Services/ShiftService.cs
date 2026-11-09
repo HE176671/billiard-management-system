@@ -185,7 +185,10 @@ public class ShiftService : IShiftService
             .ToListAsync(ct);
         var cash = groups.FirstOrDefault(g => g.IsCash);
         var other = groups.FirstOrDefault(g => !g.IsCash);
-        return (cash?.Total ?? 0, cash?.Count ?? 0, other?.Total ?? 0, other?.Count ?? 0);
+        var topUps = await _db.WalletTransactions.AsNoTracking()
+            .Where(w => w.WorkShiftId == shiftId && w.TransactionType == WalletTransaction.TopUp && w.PaymentMethod == "Cash")
+            .Select(w => w.Amount).ToListAsync(ct);
+        return ((cash?.Total ?? 0) + topUps.Sum(), (cash?.Count ?? 0) + topUps.Count, other?.Total ?? 0, other?.Count ?? 0);
     }
 
     private static DateTime TruncateToSecond(DateTime t) => new(t.Ticks - t.Ticks % TimeSpan.TicksPerSecond, t.Kind);

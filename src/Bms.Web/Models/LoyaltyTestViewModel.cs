@@ -20,9 +20,25 @@ public class LoyaltyTestViewModel
     public List<SessionOrderLineViewModel> SessionOrderLines { get; set; } = new();
 
     // Dữ liệu form Quầy thu ngân & Thanh toán (F3)
-    public string ReferenceCode { get; set; } = $"HD-{DateTime.UtcNow:yyyyMMddHHmmss}";
-    public decimal PlaytimeAmount { get; set; } = 300000;
-    public decimal FandBAmount { get; set; } = 80000;
+    public string ReferenceCode { get; set; } = "";
+    public string CheckoutStatus { get; set; } = CheckoutDraft.Draft;
+    public bool IsCheckoutLocked => CheckoutStatus != CheckoutDraft.Draft;
+    public bool IsPaid => CheckoutStatus == CheckoutDraft.Paid;
+    public int? InvoiceId { get; set; }
+    public decimal? StoredFinalAmount { get; set; }
+    public bool CanConfirmTransfer { get; set; }
+    public string? ConfirmationMethod { get; set; }
+    public string? ConfirmedByName { get; set; }
+    public DateTime? PaidAtUtc { get; set; }
+    public int EarnedPoints { get; set; }
+    public bool CashSwitchMode { get; set; }
+    public decimal CashSwitchReceived { get; set; }
+    public string CashSwitchReason { get; set; } = "Ngân hàng của khách gặp lỗi";
+    public PaymentMethodChange? MethodChange { get; set; }
+    public string? MethodChangedByName { get; set; }
+    public int RedeemedPoints { get; set; }
+    public decimal PlaytimeAmount { get; set; }
+    public decimal FandBAmount { get; set; }
     public int PointsToRedeem { get; set; } = 0;
     public string? VoucherCode { get; set; }
     public List<CustomerVoucher> AvailableVouchers { get; set; } = new();
@@ -31,10 +47,9 @@ public class LoyaltyTestViewModel
     // Hình thức thanh toán: "VietQR" (Chuyển khoản qua VietQR) | "Cash" (Tiền mặt)
     public string PaymentMethod { get; set; } = "VietQR";
     public decimal CashReceived { get; set; } = 0;
-    public decimal FinalAmount => Preview?.FinalAmount ?? Math.Max(0m, PlaytimeAmount + FandBAmount);
+    public decimal FinalAmount => StoredFinalAmount ?? Preview?.FinalAmount ?? Math.Max(0m, PlaytimeAmount + FandBAmount);
     public decimal ChangeAmount => Math.Max(0m, CashReceived - FinalAmount);
     public bool HasPendingTransfer { get; set; }
-    public DateTime? PendingTransferExpiresAtUtc { get; set; }
 
     // Dữ liệu form cũ để tương thích
     public decimal PaymentFinalAmount { get; set; } = 100000;
@@ -117,6 +132,7 @@ public class CustomerSelectItemViewModel
 
 public class SelectedCustomerDetailViewModel
 {
+    public decimal WalletBalance { get; set; }
     public string Id { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
     public string? PhoneNumber { get; set; }

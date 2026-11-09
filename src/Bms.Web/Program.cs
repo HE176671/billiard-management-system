@@ -30,6 +30,7 @@ builder.Services.AddScoped<ICustomerSegmentService, CustomerSegmentService>();
 builder.Services.AddScoped<ICampaignService, CampaignService>();
 builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
+builder.Services.AddScoped<IWalletService, WalletService>();
 builder.Services.AddHostedService<LoyaltyDailyJob>();
 
 // Identity — khớp schema SQL V1, khóa login/token dài 128

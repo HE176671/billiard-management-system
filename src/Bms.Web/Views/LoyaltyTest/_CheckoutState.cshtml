@@ -1,0 +1,88 @@
+@model Bms.Web.Models.LoyaltyTestViewModel
+@using Bms.Web.Services
+<div id="checkoutState" data-reference="@Model.ReferenceCode" data-status="@(Model.IsPaid ? "Confirmed" : Model.HasPendingTransfer ? "Pending" : Model.CanConfirmTransfer ? "Expired" : "Failed")" data-cash-mode="@(Model.CashSwitchMode ? "true" : "false")" data-amount="@Model.FinalAmount.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+    <h2 class="h5 mb-3">@(Model.IsPaid ? "Thanh toán hoàn tất" : "Xác nhận chuyển khoản")</h2>
+    <p class="mb-1 fw-semibold">@(Model.IsGuestMode ? "Khách lẻ" : Model.CustomerDetail?.FullName)</p>
+    <p class="text-muted small">Hóa đơn #@Model.InvoiceId · @(Model.SelectedSession != null ? $"Bàn {Model.SelectedSession.TableCode}" : $"Phiên chơi #{Model.SelectedSessionId}")</p>
+    <div class="d-flex justify-content-between border-top border-bottom py-3 mb-3">
+        <span>@(Model.IsPaid ? "Đã thanh toán" : "Số tiền cần nhận")</span>
+        <strong class="fs-5">@VnFormat.Money(Model.FinalAmount)</strong>
+    </div>
+    @if (Model.IsPaid)
+    {
+        <div class="alert alert-success" role="status">Hóa đơn đã được ghi nhận. Không cần xác nhận lại.</div>
+        <p class="small text-muted">
+            @(Model.PaymentMethod == "Cash" ? "Tiền mặt" : Model.PaymentMethod == "Wallet" ? "Ví trả trước" : "Chuyển khoản")
+            @if (Model.PaidAtUtc != null) { <span> · @Model.PaidAtUtc.Value.ToVn().ToString("HH:mm · dd/MM/yyyy")</span> }
+            @if (Model.ConfirmedByName != null) { <span class="d-block">Nhân viên xác nhận: @Model.ConfirmedByName</span> }
+        </p>
+        @if (Model.CustomerDetail is { } customer)
+        {
+            <p>Đã cộng <strong>@Model.EarnedPoints điểm</strong> · Hạng hiện tại: <strong>@customer.TierName</strong></p>
+            <p class="small text-muted">Điểm hiện có: @VnFormat.Number(customer.RewardPoints) · Số dư ví: @VnFormat.Money(customer.WalletBalance)</p>
+        }
+        @if (Model.MethodChange is { } change)
+        {
+            <div class="small border rounded p-3 mb-3">
+                <strong>Đã đổi từ QR sang tiền mặt</strong>
+                <div>@Model.MethodChangedByName · @change.ChangedAtUtc.ToVn().ToString("HH:mm · dd/MM/yyyy")</div>
+                <div>Lý do: @change.Reason</div>
+                <div>Khách đưa: @VnFormat.Money(change.CashReceived) · Tiền thừa: @VnFormat.Money(change.CashReceived - change.Amount)</div>
+            </div>
+        }
+        <a asp-action="Index" class="btn btn-primary">Thanh toán giao dịch mới</a>
+    }
+    else if (Model.CanConfirmTransfer)
+    {
+        <div id="checkoutTransferMessage" class="alert @(Model.HasPendingTransfer ? "alert-info" : "alert-warning")" role="status">
+            Chờ nhận tiền. Nhân viên kiểm tra tiền vào trên ứng dụng ngân hàng trước khi xác nhận. QR không hết hạn theo thời gian.
+        </div>
+        <div id="checkoutTransferActions" hidden="@Model.CashSwitchMode">
+        <form asp-action="ConfirmTransfer" method="post" id="checkoutConfirmTransfer">
+            <input type="hidden" name="referenceCode" value="@Model.ReferenceCode" />
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="checkoutReceivedTransfer" name="receivedTransfer" value="true" required />
+                <label class="form-check-label" for="checkoutReceivedTransfer">Tôi đã kiểm tra tiền vào tài khoản nhận, đúng số tiền và nội dung.</label>
+            </div>
+            <button type="submit" class="btn btn-success">Xác nhận đã nhận tiền</button>
+        </form>
+        <button type="button" id="checkoutShowCash" class="btn btn-outline-primary mt-3">Chuyển sang tiền mặt</button>
+        <details class="mt-4 border-top pt-3">
+            <summary class="text-secondary">Sửa thanh toán</summary>
+            <p class="small text-muted mt-2">Dùng khi khách chưa chuyển tiền và cần đổi số tiền, khách hàng hoặc cách thanh toán. Yêu cầu QR cũ sẽ ngừng được xác nhận trong hệ thống.</p>
+            <form asp-action="ReopenTransfer" method="post" id="checkoutReopenTransfer">
+                <input type="hidden" name="referenceCode" value="@Model.ReferenceCode" />
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="checkoutCheckedUnpaid" name="checkedUnpaid" value="true" required />
+                    <label class="form-check-label" for="checkoutCheckedUnpaid">Tôi đã kiểm tra chưa nhận tiền cho yêu cầu QR này.</label>
+                </div>
+                <button type="submit" class="btn btn-outline-secondary">Sửa thanh toán</button>
+            </form>
+        </details>
+        </div>
+        <section id="checkoutCashPanel" hidden="@(!Model.CashSwitchMode)">
+            <h3 class="h6">Thu tiền mặt cho hóa đơn này</h3>
+            <p class="small text-muted">Giữ nguyên hóa đơn và số tiền. Yêu cầu QR chỉ ngừng sử dụng sau khi xác nhận thu tiền mặt thành công. Cần có ca đang mở.</p>
+            <p class="alert alert-warning small">Nếu khách đã bị trừ tiền hoặc giao dịch ngân hàng còn đang xử lý, hãy đối chiếu trước khi thu thêm tiền mặt.</p>
+            <form asp-action="SwitchToCash" method="post" id="checkoutSwitchCash">
+                <input type="hidden" name="referenceCode" value="@Model.ReferenceCode" />
+                <label for="checkoutSwitchReceived" class="form-label">Tiền khách đưa (VND)</label>
+                <input id="checkoutSwitchReceived" name="cashReceived" class="form-control mb-2" type="number" min="@Model.FinalAmount.ToString("0", System.Globalization.CultureInfo.InvariantCulture)" max="100000000" step="1" value="@Model.CashSwitchReceived.ToString("0", System.Globalization.CultureInfo.InvariantCulture)" required />
+                <p class="small">Tiền thừa: <strong id="checkoutCashChange">@VnFormat.Money(Math.Max(0, Model.CashSwitchReceived - Model.FinalAmount))</strong></p>
+                <label for="checkoutSwitchReason" class="form-label">Lý do chuyển sang tiền mặt</label>
+                <input id="checkoutSwitchReason" name="reason" value="@Model.CashSwitchReason" class="form-control mb-3" minlength="5" maxlength="250" required />
+                <div class="form-check mb-3">
+                    <input id="checkedCashAndBank" name="checkedCashAndBank" class="form-check-input" type="checkbox" value="true" required />
+                    <label for="checkedCashAndBank" class="form-check-label">Tôi đã kiểm tra chưa nhận tiền chuyển khoản và đã nhận đủ tiền mặt.</label>
+                </div>
+                <button type="submit" class="btn btn-success">Xác nhận thu tiền mặt</button>
+                <button type="button" id="checkoutBackToQr" class="btn btn-outline-secondary">Quay lại QR</button>
+            </form>
+        </section>
+    }
+    else
+    {
+        <p class="alert alert-warning">Yêu cầu QR này đã ngừng sử dụng. Kiểm tra lịch sử trước khi tạo giao dịch khác.</p>
+        <a asp-action="Index" class="btn btn-outline-primary">Thanh toán giao dịch mới</a>
+    }
+</div>

@@ -23,4 +23,8 @@ logs/
 Thumbs.db
 
 ## Temp credentials
-customer*.txt
+customer*.txt
+## Khong day docs va file markdown moi (file da tracked van giu nguyen)
+docs/
+*.md
+

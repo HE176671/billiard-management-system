@@ -2,7 +2,7 @@ namespace Bms.Web.Data;
 
 /// <summary>
 /// Yêu cầu chuyển khoản đang chờ ngân hàng xác nhận. PaymentTransactions chỉ được tạo
-/// sau khi webhook hợp lệ xác nhận đã nhận đủ tiền.
+/// sau khi webhook hợp lệ hoặc nhân viên xác nhận đã nhận đủ tiền.
 /// </summary>
 public class PaymentIntent
 {
@@ -10,6 +10,7 @@ public class PaymentIntent
     public const string StatusConfirmed = "Confirmed";
     public const string StatusExpired = "Expired";
     public const string StatusFailed = "Failed";
+    public const string StatusCancelled = "Cancelled";
 
     public int Id { get; set; }
     public int InvoiceId { get; set; }
@@ -26,6 +27,9 @@ public class PaymentIntent
     public string? VoucherCode { get; set; }
     public string? CashierId { get; set; }
     public DateTime CreatedAtUtc { get; set; }
-    public DateTime ExpiresAtUtc { get; set; }
+    public DateTime? ExpiresAtUtc { get; set; }
+    public bool RequiresStaffConfirmation { get; set; } = true;
     public DateTime? ConfirmedAtUtc { get; set; }
+    public string? ConfirmationMethod { get; set; }
+    public string? ConfirmedById { get; set; }
 }

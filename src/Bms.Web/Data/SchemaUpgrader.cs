@@ -470,6 +470,11 @@ public static class SchemaUpgrader
             logger.LogWarning(ex, "Không thể nâng cấp schema PaymentIntents/chống giao dịch trùng.");
         }
 
+        await WalletSchema.ApplyAsync(db);
+        await CheckoutWorkflowSchema.ApplyAsync(db);
+        await PaymentReviewSchema.ApplyAsync(db);
+        await ManualQrSchema.ApplyAsync(db);
+
         // 4. Đảm bảo Role Manager, bảng ComboItems, danh mục Gậy cho thuê & dữ liệu mẫu Combo/Review
         try
         {

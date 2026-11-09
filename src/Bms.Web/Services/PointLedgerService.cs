@@ -134,7 +134,7 @@ public class PointLedgerService : IPointLedgerService
             return new LedgerResult(true, false, newBalance, pt.Id,
                 delta >= 0 ? $"Đã cộng +{delta} điểm." : $"Đã trừ {delta} điểm.");
         }
-        catch (DbUpdateException) when (normalizedRef != null)
+        catch (DbUpdateException ex) when (normalizedRef != null && ownTx != null && ex.InnerException is Microsoft.Data.SqlClient.SqlException sql && (sql.Number == 2601 || sql.Number == 2627))
         {
             if (ownTx != null) await ownTx.RollbackAsync(ct);
             _db.ChangeTracker.Clear();

@@ -32,6 +32,7 @@
     </div>
 }
 
+<p class="alert alert-info">Xét hạng bằng tiền nạp và tiền thanh toán trực tiếp sau ưu đãi trong 365 ngày. Thanh toán bằng ví không tính lại. Điểm thưởng chỉ dùng đổi ưu đãi. Giữ hạng được xét hàng tháng, có 30 ngày ân hạn. Quy đổi: 20.000đ = 1 điểm × hệ số hạng trước giao dịch.</p>
 <!-- Stat cards -->
 <div class="row g-3 mb-4">
     @foreach (var t in Model.Tiers)
@@ -69,7 +70,7 @@
                     <thead>
                         <tr>
                             <th>Hội viên</th>
-                            <th class="text-end">Tổng mức chi tiêu</th>
+                            <th class="text-end">Tích lũy xét hạng 365 ngày</th>
                             <th>Hạng hiện tại</th>
                             <th>Hạng theo mức mới</th>
                             <th>Ghi chú</th>
@@ -118,7 +119,7 @@
                     <input type="text" name="tierName" class="form-control" placeholder="VD: Platinum, Diamond, VIP..." maxlength="50" required />
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Tổng mức chi tiêu đạt hạng (VND) <span class="text-danger">*</span></label>
+                    <label class="form-label">Tích lũy xét hạng 365 ngày đạt hạng (VND) <span class="text-danger">*</span></label>
                     <input type="number" name="spendThreshold" class="form-control" min="0" step="500000" value="10000000" required />
                 </div>
                 <div class="row g-2 mb-3">
@@ -143,7 +144,7 @@
         <div class="data-card h-100">
             <div class="data-card-header">
                 <span class="data-card-title">Danh sách hạng &amp; quyền lợi hội viên (@Model.Tiers.Count hạng)</span>
-                <span class="text-muted" style="font-size:0.8rem">Xét theo tổng mức chi tiêu</span>
+                <span class="text-muted" style="font-size:0.8rem">Xét theo tích lũy xét hạng 365 ngày</span>
             </div>
 
             <form method="post" id="tierForm">
@@ -153,7 +154,7 @@
                         <thead>
                             <tr>
                                 <th>Hạng</th>
-                                <th style="width:190px">Tổng mức chi tiêu (VND)</th>
+                                <th style="width:190px">Tích lũy xét hạng 365 ngày (VND)</th>
                                 <th style="width:130px">Giảm giờ (%)</th>
                                 <th style="width:125px">Nhân điểm</th>
                                 <th class="text-center" style="width:90px">Hội viên</th>

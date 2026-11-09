@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 using Bms.Web.Services;
+using Bms.Web.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,15 +14,17 @@ namespace Bms.Web.Controllers;
 public class PaymentWebhookController : ControllerBase
 {
     private readonly ICheckoutService _checkout;
+    private readonly IWalletService _wallet;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PaymentWebhookController> _logger;
 
     public PaymentWebhookController(
         ICheckoutService checkout,
         IConfiguration configuration,
-        ILogger<PaymentWebhookController> logger)
+        ILogger<PaymentWebhookController> logger, IWalletService wallet)
     {
         _checkout = checkout;
+        _wallet = wallet;
         _configuration = configuration;
         _logger = logger;
     }
@@ -45,15 +48,27 @@ public class PaymentWebhookController : ControllerBase
         if (!FixedTimeEquals(configuredKey, suppliedKey))
             return Unauthorized(new { success = false, message = "Xác thực webhook không hợp lệ." });
 
-        if (request.Id <= 0 || request.TransferAmount <= 0 || string.IsNullOrWhiteSpace(request.Code))
+        var referenceCode = SePayPaymentReference.Resolve(request.Code, request.Content);
+        if (request.Id <= 0 || request.TransferAmount <= 0 || string.IsNullOrWhiteSpace(referenceCode))
             return BadRequest(new { success = false, message = "Payload webhook thiếu mã giao dịch, mã thanh toán hoặc số tiền." });
 
         if (!string.IsNullOrWhiteSpace(request.TransferType)
             && !string.Equals(request.TransferType, "in", StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { success = false, message = "Chỉ chấp nhận giao dịch tiền vào." });
 
+        if (referenceCode.StartsWith(WalletTopUpIntent.ReferencePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var walletResult = await _wallet.ConfirmTransferAsync(referenceCode, $"SEPAY-{request.Id}", request.TransferAmount, ct);
+            if (!walletResult.Success)
+            {
+                _logger.LogWarning("Nạp chuyển khoản cần đối soát. Code={Code}, TransactionId={TransactionId}, Reason={Reason}", request.Code, request.Id, walletResult.Message);
+                return UnprocessableEntity(new { success = false, message = walletResult.Message });
+            }
+            return StatusCode(walletResult.Pending ? StatusCodes.Status202Accepted : StatusCodes.Status201Created,
+                new { success = true, duplicate = walletResult.Duplicate, pending = walletResult.Pending });
+        }
         var result = await _checkout.ConfirmTransferAsync(
-            request.Code,
+            referenceCode,
             $"SEPAY-{request.Id}",
             request.TransferAmount,
             ct);
@@ -65,7 +80,8 @@ public class PaymentWebhookController : ControllerBase
             return UnprocessableEntity(new { success = false, message = result.Message });
         }
 
-        return StatusCode(StatusCodes.Status201Created, new { success = true, duplicate = result.Duplicate });
+        return StatusCode(result.Pending ? StatusCodes.Status202Accepted : StatusCodes.Status201Created,
+            new { success = true, duplicate = result.Duplicate, pending = result.Pending });
     }
 
     private static bool FixedTimeEquals(string expected, string actual)
@@ -90,4 +106,7 @@ public sealed class SePayWebhookRequest
 
     [JsonPropertyName("code")]
     public string? Code { get; set; }
+
+    [JsonPropertyName("content")]
+    public string? Content { get; set; }
 }

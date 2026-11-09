@@ -91,6 +91,8 @@ public class TierConfigController : Controller
         {
             if (parsed.Count != tiers.Count)
                 ModelState.AddModelError(string.Empty, "Dữ liệu gửi lên không đầy đủ các hạng thành viên.");
+            else if (parsed.Select(p => p.Tier.Id).Distinct().Count() != tiers.Count)
+                ModelState.AddModelError(string.Empty, "Danh sách hạng bị trùng lặp.");
             else if (parsed[0].Threshold != 0)
                 ModelState.AddModelError(string.Empty, $"Hạng thấp nhất ({parsed[0].Tier.TierName}) phải có ngưỡng chi tiêu bằng 0 để mọi khách đều có hạng.");
             else
@@ -134,20 +136,11 @@ public class TierConfigController : Controller
             foreach (var u in customers)
             {
                 var spend12M = await _tierEval.GetSpendLast12MonthsAsync(u.Id, now);
-                var curTier = allTiers.FirstOrDefault(t => t.Id == u.TierId) ?? allTiers[0];
-                var resolved = TierHelper.Resolve(allTiers, spend12M, u.RewardPoints) ?? allTiers[0];
-
-                if (u.TierId == null || resolved.SpendThreshold > curTier.SpendThreshold)
-                {
-                    u.TierId = resolved.Id;
-                    u.TierAchievedAtUtc = now;
-                    u.TierReviewAtUtc = now.AddMonths(1);
-                    u.TierGraceUntilUtc = null;
-                    upgradedCount++;
-                }
+                var evaluation = await _tierEval.EvaluateUpgradeOnCheckoutAsync(u, spend12M);
+                if (evaluation.Upgraded) upgradedCount++;
             }
 
-            if (upgradedCount > 0) await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
             await tx.CommitAsync();
 
             TempData["Success"] = upgradedCount > 0

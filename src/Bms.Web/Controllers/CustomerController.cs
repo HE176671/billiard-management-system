@@ -29,7 +29,7 @@ public class CustomerController : Controller
                           .Select(u => u.Id).ToHashSet();
 
         var tiers = await _context.MembershipTiers
-                          .OrderBy(t => t.MinPoints)
+                          .OrderBy(t => t.SpendThreshold)
                           .Select(t => new TierOptionViewModel { Id = t.Id, TierName = t.TierName })
                           .ToListAsync();
 

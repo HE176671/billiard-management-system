@@ -25,7 +25,8 @@ public record CheckoutLoyaltyRequest(
     decimal FandBAmount,
     int PointsToRedeem,
     string? VoucherCode,
-    string? CashierId);
+    string? CashierId,
+    bool PayWithWallet = false);
 
 public record CheckoutLoyaltyPreview(
     bool IsValid,
