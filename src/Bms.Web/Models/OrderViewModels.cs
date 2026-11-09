@@ -83,3 +83,14 @@ public class SubmitOrderInputModel
     public string? IdempotencyToken { get; set; }
     public List<OrderItemInputModel> Items { get; set; } = new();
 }
+
+/// <summary>ViewModel hợp nhất cho màn hình Phục vụ F&amp;B (UC-24 Duyệt đơn QR Realtime &amp; Gọi món bàn/quầy).</summary>
+public class OrderServiceViewModel
+{
+    public List<OrderViewModel> PendingOrders { get; set; } = new();
+    public List<Bms.Web.Data.Entities.PlaySession> ActiveSessions { get; set; } = new();
+    public Bms.Web.Data.Entities.PlaySession? SelectedSession { get; set; }
+    public List<CategoryMenuViewModel> Categories { get; set; } = new();
+    public List<CustomerOrderSummaryViewModel> CurrentOrders { get; set; } = new();
+    public string ActiveTab { get; set; } = "queue"; // "queue" | "table" | "takeaway"
+}

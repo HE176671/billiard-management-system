@@ -184,15 +184,18 @@ public class OrderController : Controller
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 2. KÊNH DÀNH CHO STAFF & QUẦY
+    // 2. KÊNH PHỤC VỤ F&B HỢP NHẤT DÀNH CHO STAFF & QUẦY (UC-07 & UC-24)
     // ─────────────────────────────────────────────────────────────
 
-    // GET /Order/Counter (Staff thao tác)
-    [Authorize(Roles = "Staff")]
+    // GET /Order/Service (Màn hình Phục vụ F&B tích hợp: Tab 1 Realtime Queue & Tab 2 Gọi món bàn/quầy)
+    [Authorize(Roles = "Staff,Manager,Admin")]
     [HttpGet]
-    public async Task<IActionResult> Counter(int? sessionId)
+    public async Task<IActionResult> Service(int? sessionId, string tab = "queue")
     {
-        // Lấy danh sách tất cả các bàn đang có phiên Active
+        var pendingOrders = _orderService != null
+            ? await _orderService.GetPendingOrdersAsync()
+            : new List<OrderViewModel>();
+
         var activeSessions = await _db.PlaySessions
             .Include(s => s.BilliardTable).ThenInclude(t => t.TableType)
             .Where(s => s.Status == "Active")
@@ -211,9 +214,6 @@ public class OrderController : Controller
 
         var categories = await GetActiveMenuCategoriesAsync();
 
-        ViewBag.ActiveSessions = activeSessions;
-        ViewBag.SelectedSession = selectedSession;
-
         List<CustomerOrderSummaryViewModel> currentOrders = new();
         if (selectedSession != null)
         {
@@ -226,20 +226,26 @@ public class OrderController : Controller
             }
         }
 
-        var vm = new OrderMenuViewModel
+        var vm = new OrderServiceViewModel
         {
-            HasActiveSession = selectedSession != null,
-            ActiveSessionId  = selectedSession?.Id,
-            TableCode        = selectedSession?.BilliardTable.TableCode,
-            TableTypeName    = selectedSession?.BilliardTable.TableType.Name,
-            FloorNumber      = selectedSession?.BilliardTable.FloorNumber,
-            StartAtUtc       = selectedSession?.StartAtUtc,
-            Categories       = categories,
-            MyOrders         = currentOrders
+            PendingOrders = pendingOrders,
+            ActiveSessions = activeSessions,
+            SelectedSession = selectedSession,
+            Categories = categories,
+            CurrentOrders = currentOrders,
+            ActiveTab = string.IsNullOrWhiteSpace(tab) ? "queue" : tab
         };
 
-        ViewData["Title"] = "Gọi món tại quầy & Quản lý bàn";
-        return View("Counter", vm);
+        ViewData["Title"] = "Phục vụ F&B";
+        return View("Service", vm);
+    }
+
+    // GET /Order/Counter (Chuyển tiếp đến Tab Gọi món tại bàn / Quầy trên màn hình Phục vụ F&B)
+    [Authorize(Roles = "Staff,Manager,Admin")]
+    [HttpGet]
+    public IActionResult Counter(int? sessionId, string tab = "table")
+    {
+        return RedirectToAction(nameof(Service), new { sessionId, tab = string.IsNullOrEmpty(tab) ? "table" : tab });
     }
 
     // POST /Order/SubmitStaffOrder (Staff gọi trực tiếp cho bàn)
@@ -255,7 +261,7 @@ public class OrderController : Controller
         if (session == null)
         {
             TempData["Error"] = "Phiên chơi không tồn tại hoặc đã kết thúc.";
-            return RedirectToAction(nameof(Counter), new { tab = "table" });
+            return RedirectToAction(nameof(Service), new { tab = "table" });
         }
 
         var paymentLocked = await _db.PaymentIntents.AsNoTracking()
@@ -265,14 +271,14 @@ public class OrderController : Controller
         if (paymentLocked)
         {
             TempData["Error"] = "Bàn đang chờ xác nhận thanh toán, không thể thêm món vào hóa đơn.";
-            return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
+            return RedirectToAction(nameof(Service), new { sessionId, tab = "table" });
         }
 
         var validItems = input.Items?.Where(i => i.Quantity > 0).ToList() ?? new List<OrderItemInputModel>();
         if (!validItems.Any())
         {
             TempData["Error"] = OrderConstants.MsgEmptyCart;
-            return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
+            return RedirectToAction(nameof(Service), new { sessionId, tab = "table" });
         }
 
         var aggregatedItems = validItems
@@ -292,7 +298,7 @@ public class OrderController : Controller
                 {
                     await tx.RollbackAsync();
                     TempData["Error"] = $"Món {(prod?.Name ?? "đã chọn")} không đủ số lượng tồn kho (còn {prod?.StockQuantity ?? 0}).";
-                    return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
+                    return RedirectToAction(nameof(Service), new { sessionId, tab = "table" });
                 }
             }
 
@@ -323,14 +329,14 @@ public class OrderController : Controller
             await tx.CommitAsync();
 
             TempData["Success"] = "Đã thêm món thành công cho bàn " + session.BilliardTable.TableCode;
-            return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
+            return RedirectToAction(nameof(Service), new { sessionId, tab = "table" });
         }
         catch (Exception ex)
         {
             await tx.RollbackAsync();
             _logger.LogError(ex, "Lỗi khi staff đặt món cho phiên {SessionId}", sessionId);
             TempData["Error"] = "Có lỗi xảy ra khi tạo đơn.";
-            return RedirectToAction(nameof(Counter), new { sessionId, tab = "table" });
+            return RedirectToAction(nameof(Service), new { sessionId, tab = "table" });
         }
     }
 
@@ -348,7 +354,7 @@ public class OrderController : Controller
         if (!validItems.Any())
         {
             TempData["Error"] = OrderConstants.MsgEmptyCart;
-            return RedirectToAction(nameof(Counter));
+            return RedirectToAction(nameof(Service), new { tab = "takeaway" });
         }
 
         var aggregatedItems = validItems
@@ -369,7 +375,7 @@ public class OrderController : Controller
                 {
                     await tx.RollbackAsync();
                     TempData["Error"] = $"Món {(prod?.Name ?? "đã chọn")} không đủ số lượng tồn kho (còn {prod?.StockQuantity ?? 0}).";
-                    return RedirectToAction(nameof(Counter));
+                    return RedirectToAction(nameof(Service), new { tab = "takeaway" });
                 }
                 totalAmount += prod.Price * item.Quantity;
             }
@@ -419,23 +425,23 @@ public class OrderController : Controller
             await tx.CommitAsync();
 
             TempData["Success"] = $"Đã tạo đơn bán mang về thành công! Tổng tiền: {totalAmount:#,##0 ₫}.";
-            return RedirectToAction(nameof(Counter));
+            return RedirectToAction(nameof(Service), new { tab = "takeaway" });
         }
         catch (Exception ex)
         {
             await tx.RollbackAsync();
             _logger.LogError(ex, "Lỗi khi xử lý đơn khách mua tại quầy");
             TempData["Error"] = "Có lỗi xảy ra: " + ex.Message;
-            return RedirectToAction(nameof(Counter));
+            return RedirectToAction(nameof(Service), new { tab = "takeaway" });
         }
     }
 
-    // GET /Order/Manage (Chuyển tiếp đến màn hình duyệt đơn Pending chuẩn của Staff)
+    // GET /Order/Manage (Chuyển tiếp đến màn hình Phục vụ F&B chuẩn của Staff)
     [Authorize(Roles = "Staff,Manager,Admin")]
     [HttpGet]
     public IActionResult Manage()
     {
-        return RedirectToAction(nameof(Pending));
+        return RedirectToAction(nameof(Service), new { tab = "queue" });
     }
 
     // POST /Order/ApproveOrder (Staff duyệt đơn: Hợp nhất logic Concurrency, PaymentLock, Trừ kho & Thẻ kho)
@@ -580,9 +586,9 @@ public class OrderController : Controller
     [HttpGet]
     public async Task<IActionResult> Index()
     {
-        if (User.IsInRole("Staff") || User.IsInRole("Admin"))
+        if (User.IsInRole("Staff") || User.IsInRole("Admin") || User.IsInRole("Manager"))
         {
-            return RedirectToAction(nameof(Counter));
+            return RedirectToAction(nameof(Service));
         }
 
         if (User.IsInRole("Customer"))
@@ -739,18 +745,12 @@ public class OrderController : Controller
         });
     }
 
-    // UC-24: Màn hình nhân viên nhận đơn QR Realtime
+    // UC-24: Màn hình nhận đơn QR Realtime (Chuyển tiếp đến màn hình Phục vụ F&B)
     [Authorize(Roles = "Staff,Manager,Admin")]
     [HttpGet]
-    public async Task<IActionResult> Pending()
+    public async Task<IActionResult> Pending(int? sessionId, string tab = "queue")
     {
-        if (_orderService == null)
-        {
-            return View(new List<OrderViewModel>());
-        }
-
-        var pendingOrders = await _orderService.GetPendingOrdersAsync();
-        return View(pendingOrders);
+        return await Service(sessionId, tab);
     }
 
     // UC-24: Nhân viên xác nhận đơn QR (trừ kho)
@@ -781,7 +781,7 @@ public class OrderController : Controller
             TempData["ErrorMessage"] = result.Message;
         }
 
-        return RedirectToAction(nameof(Pending));
+        return RedirectToAction(nameof(Service), new { tab = "queue" });
     }
 
     // UC-24: Nhân viên từ chối đơn QR (kèm lý do)
@@ -802,7 +802,7 @@ public class OrderController : Controller
                 return Json(new { success = false, message = "Vui lòng nhập lý do từ chối đơn hàng" });
             }
             TempData["ErrorMessage"] = "Vui lòng nhập lý do từ chối đơn hàng";
-            return RedirectToAction(nameof(Pending));
+            return RedirectToAction(nameof(Service), new { tab = "queue" });
         }
 
         var userId = _userManager.GetUserId(User) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Staff";
@@ -822,7 +822,7 @@ public class OrderController : Controller
             TempData["ErrorMessage"] = result.Message;
         }
 
-        return RedirectToAction(nameof(Pending));
+        return RedirectToAction(nameof(Service), new { tab = "queue" });
     }
 
     private bool IsAjaxRequest()
