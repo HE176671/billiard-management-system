@@ -13,6 +13,7 @@ public class MembershipTier
     public decimal DiscountPercent { get; set; }
 
     /// <summary>Số điểm tối thiểu (dùng cho MemberTierController của Hung).</summary>
+    // Legacy database compatibility only; no longer used to determine rank.
     public int MinPoints { get; set; }
 
     /// <summary>Ngưỡng chi tiêu 12 tháng gần nhất để đạt/giữ hạng này (decimal(18,2)).</summary>
@@ -20,9 +21,6 @@ public class MembershipTier
 
     /// <summary>Hệ số nhân điểm thưởng.</summary>
     public int PointMultiplier { get; set; } = 1;
-
-    /// <summary>Giá trị voucher sinh nhật (VND).</summary>
-    public decimal BirthdayVoucherValue { get; set; }
 
     /// <summary>Thứ tự sắp xếp hạng tăng dần.</summary>
     public int SortOrder { get; set; }

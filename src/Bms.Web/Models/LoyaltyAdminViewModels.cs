@@ -18,7 +18,6 @@ public class TierEditItem
     public string SpendThreshold { get; set; } = "0";
     public string DiscountPercent { get; set; } = "0";
     public int PointMultiplier { get; set; } = 1;
-    public string BirthdayVoucherValue { get; set; } = "0";
     public int CustomerCount { get; set; }
 }
 
@@ -192,35 +191,4 @@ public class MonthlyPointsFlowPoint
     public string MonthLabel { get; set; } = string.Empty;
     public int EarnedPoints { get; set; }
     public int RedeemedPoints { get; set; }
-}
-
-// ── Chiến dịch (F7) ──
-public class CampaignIndexViewModel
-{
-    public List<Campaign> Campaigns { get; set; } = new();
-    public List<TierOptionViewModel> Tiers { get; set; } = new();
-    public List<RewardItemEntity> RewardItems { get; set; } = new();
-    public CampaignCreateInputModel Form { get; set; } = new();
-    public CampaignPreviewResult? Preview { get; set; }
-}
-
-public class CampaignCreateInputModel
-{
-    [Required(ErrorMessage = "Vui lòng nhập tên chiến dịch.")]
-    [StringLength(150)]
-    public string Name { get; set; } = string.Empty;
-
-    public string CampaignType { get; set; } = Campaign.TypeManual;
-    public string? TargetSegment { get; set; } = "AtRisk";
-    public int? TargetTierId { get; set; }
-    public int? RewardItemId { get; set; }
-    public int BonusPoints { get; set; }
-
-    [Required(ErrorMessage = "Vui lòng nhập tiêu đề thông báo.")]
-    [StringLength(200)]
-    public string MessageTitle { get; set; } = "Ưu đãi đặc biệt dành riêng cho {FullName}!";
-
-    [Required(ErrorMessage = "Vui lòng nhập nội dung thông báo.")]
-    [StringLength(1000)]
-    public string MessageContent { get; set; } = "Xin chào {FullName} (Hạng {TierName}), quán gửi tặng bạn ưu đãi đặc biệt. Số điểm hiện tại của bạn: {Points} điểm. Hẹn gặp lại bạn tại quán!";
 }

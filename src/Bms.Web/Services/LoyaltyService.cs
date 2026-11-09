@@ -48,6 +48,9 @@ public class LoyaltyService : ILoyaltyService
 
         if (!user.IsActive)
             errors.Add("Tài khoản khách hàng đang bị khóa.");
+        var role = await _db.Roles.Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync(ct);
+        if (!await _db.UserRoles.AnyAsync(r => r.UserId == user.Id && r.RoleId == role, ct))
+            errors.Add("Tài khoản không phải hội viên.");
 
         var tiers = await _db.MembershipTiers.AsNoTracking()
             .OrderBy(t => t.SpendThreshold).ThenBy(t => t.SortOrder).ThenBy(t => t.Id)
@@ -65,84 +68,53 @@ public class LoyaltyService : ILoyaltyService
         decimal tierDiscountAmount = Math.Round(Math.Max(0m, req.PlaytimeAmount) * (tierDiscountPercent / 100m), 0, MidpointRounding.AwayFromZero);
         decimal remainingAfterTier = Math.Max(0m, subtotal - tierDiscountAmount);
 
-        // Bước 2: Voucher (tối đa 1 voucher/hóa đơn) — kiểm tra đồng bộ danh mục quà & điều kiện Hạng tối thiểu (MinTier)
+        // Bước 2: Mã quà tặng Manager (tối đa 1 mã/hóa đơn).
+        // Staff nhập RewardItems.Code; hệ thống tự chọn voucher còn hiệu lực mà hội viên sở hữu.
         decimal voucherDiscountAmount = 0m;
         if (!string.IsNullOrWhiteSpace(req.VoucherCode))
         {
             var code = req.VoucherCode.Trim().ToUpperInvariant();
-            var voucher = await _db.CustomerVouchers.AsNoTracking()
-                .Include(v => v.RewardItem)
-                    .ThenInclude(r => r!.MinTier)
-                .FirstOrDefaultAsync(v => v.Code == code && v.CustomerId == user.Id, ct);
-
             var now = DateTime.UtcNow;
             decimal userTierThreshold = currentTier?.SpendThreshold ?? 0m;
+            var rewardItem = await _db.RewardItems.AsNoTracking()
+                .Include(r => r.MinTier)
+                .FirstOrDefaultAsync(r => r.Code == code, ct);
 
-            if (voucher == null)
+            if (rewardItem == null)
             {
-                var templateItem = await _db.RewardItems.AsNoTracking()
-                    .Include(r => r.MinTier)
-                    .FirstOrDefaultAsync(r => r.Code == code, ct);
-                var otherVoucher = await _db.CustomerVouchers.AsNoTracking()
-                    .Include(v => v.RewardItem)
-                        .ThenInclude(r => r!.MinTier)
-                    .FirstOrDefaultAsync(v => v.Code == code, ct);
-
-                if (templateItem != null)
-                {
-                    if (templateItem.MinTier != null && userTierThreshold < templateItem.MinTier.SpendThreshold)
-                    {
-                        errors.Add($"Không thể áp dụng mã \"{code}\" ({templateItem.Name}): Ưu đãi này yêu cầu từ Hạng {templateItem.MinTier.TierName} trở lên, nhưng hội viên hiện đang ở Hạng {tierName}.");
-                    }
-                    else
-                    {
-                        errors.Add($"Mã \"{code}\" ({templateItem.Name}) là mã danh mục quà tặng — hội viên chưa sở hữu voucher khả dụng cho mã này.");
-                    }
-                }
-                else if (otherVoucher?.RewardItem?.MinTier != null && userTierThreshold < otherVoucher.RewardItem.MinTier.SpendThreshold)
-                {
-                    errors.Add($"Không thể áp dụng voucher \"{code}\" ({otherVoucher.Title}): Voucher yêu cầu từ Hạng {otherVoucher.RewardItem.MinTier.TierName} trở lên (hạng hiện tại: Hạng {tierName}) và không thuộc về khách hàng này.");
-                }
-                else
-                {
-                    errors.Add($"Voucher \"{code}\" không tồn tại hoặc không thuộc về khách hàng này.");
-                }
+                errors.Add($"Mã quà tặng \"{code}\" không tồn tại.");
             }
-            else if (voucher.Status != CustomerVoucher.StatusActive)
+            else if (!rewardItem.IsActive)
             {
-                errors.Add($"Voucher \"{code}\" không còn khả dụng (trạng thái: {voucher.Status}).");
+                errors.Add($"Mã quà tặng \"{code}\" ({rewardItem.Name}) đang bị Manager đóng.");
             }
-            else if (voucher.ExpiresAtUtc <= now)
+            else if (rewardItem.MinTier != null && userTierThreshold < rewardItem.MinTier.SpendThreshold)
             {
-                errors.Add($"Voucher \"{code}\" đã hết hạn vào {voucher.ExpiresAtUtc.ToVn():dd/MM/yyyy}.");
-            }
-            else if (voucher.RewardItem != null && !voucher.RewardItem.IsActive)
-            {
-                errors.Add($"Voucher \"{code}\" ({voucher.Title}) thuộc danh mục quà đổi điểm đang tạm khóa, không thể áp dụng.");
-            }
-            else if (voucher.RewardItem?.MinTier != null && userTierThreshold < voucher.RewardItem.MinTier.SpendThreshold)
-            {
-                errors.Add($"Không thể áp dụng voucher \"{code}\" ({voucher.Title}): Loại voucher này yêu cầu từ Hạng {voucher.RewardItem.MinTier.TierName} trở lên, nhưng hội viên hiện đang ở Hạng {tierName}.");
+                errors.Add($"Không thể áp dụng mã \"{code}\" ({rewardItem.Name}): yêu cầu từ Hạng {rewardItem.MinTier.TierName} trở lên, nhưng hội viên hiện đang ở Hạng {tierName}.");
             }
             else
             {
-                string effectiveType = voucher.RewardItem?.RewardType ?? voucher.VoucherType;
-                decimal? effectiveDiscount = voucher.RewardItem?.DiscountValue ?? voucher.DiscountValue;
+                var ownedVoucher = await _db.CustomerVouchers.AsNoTracking()
+                    .Where(v => v.CustomerId == user.Id
+                             && v.RewardItemId == rewardItem.Id
+                             && v.Status == CustomerVoucher.StatusActive
+                             && v.ExpiresAtUtc > now)
+                    .OrderBy(v => v.ExpiresAtUtc)
+                    .FirstOrDefaultAsync(ct);
 
-                if (effectiveType == RewardItemEntity.TypeGift)
+                if (ownedVoucher == null)
                 {
-                    decimal val = effectiveDiscount ?? 0m;
-                    voucherDiscountAmount = Math.Min(remainingAfterTier, val);
+                    errors.Add($"Hội viên chưa sở hữu mã quà tặng \"{code}\" ({rewardItem.Name}) còn hiệu lực.");
                 }
-                else if (effectiveType == RewardItemEntity.TypeFreeHour)
+                else if (rewardItem.RewardType == RewardItemEntity.TypeFreeHour)
                 {
                     decimal playAfterTier = Math.Max(0m, req.PlaytimeAmount - tierDiscountAmount);
-                    decimal cap = effectiveDiscount ?? 80000m;
+                    decimal cap = rewardItem.DiscountValue ?? 80000m;
                     voucherDiscountAmount = Math.Min(playAfterTier, cap);
                 }
-                else // BillDiscount
+                else
                 {
-                    decimal val = effectiveDiscount ?? 0m;
+                    decimal val = rewardItem.DiscountValue ?? 0m;
                     voucherDiscountAmount = Math.Min(remainingAfterTier, val);
                 }
             }
@@ -169,9 +141,12 @@ public class LoyaltyService : ILoyaltyService
 
         // Bước 4: FinalAmount & Điểm tích lũy
         decimal finalAmount = Math.Max(0m, remainingAfterVoucher - pointsDiscountAmount);
-        int pointsToEarn = (int)Math.Floor(finalAmount / 20000m) * multiplier;
+        if (req.PayWithWallet && user.WalletBalance < finalAmount)
+            errors.Add("Số dư ví không đủ. Vui lòng nạp thêm hoặc chọn phương thức thanh toán khác.");
+        decimal eligibleAmount = finalAmount;
+        int pointsToEarn = LoyaltyPolicy.EarnPoints(eligibleAmount, multiplier);
 
-        decimal spend12MonthsAfter = currentSpend12M + finalAmount;
+        decimal spend12MonthsAfter = currentSpend12M + eligibleAmount;
         int pointsAfter = Math.Max(0, user.RewardPoints - req.PointsToRedeem) + pointsToEarn;
         var resolvedTierAfter = TierHelper.Resolve(tiers, spend12MonthsAfter, pointsAfter);
         bool willUpgrade = resolvedTierAfter != null && resolvedTierAfter.SpendThreshold > (currentTier?.SpendThreshold ?? 0m);
@@ -287,12 +262,23 @@ public class LoyaltyService : ILoyaltyService
                 }
             }
 
-            // 4. Đánh dấu Voucher Used (nếu có dùng voucher)
+            // 4. Staff nhập mã quà Manager; đánh dấu đúng voucher sở hữu của hội viên là Used.
             if (!string.IsNullOrWhiteSpace(req.VoucherCode))
             {
                 var vCode = req.VoucherCode.Trim().ToUpperInvariant();
+                int voucherId = await _db.CustomerVouchers
+                    .Where(v => v.CustomerId == req.CustomerId
+                             && v.RewardItem != null
+                             && v.RewardItem.Code == vCode
+                             && v.RewardItem.IsActive
+                             && v.Status == CustomerVoucher.StatusActive
+                             && v.ExpiresAtUtc > now)
+                    .OrderBy(v => v.ExpiresAtUtc)
+                    .Select(v => v.Id)
+                    .FirstOrDefaultAsync(ct);
+
                 int vUpdated = await _db.CustomerVouchers
-                    .Where(v => v.Code == vCode && v.CustomerId == req.CustomerId && v.Status == CustomerVoucher.StatusActive)
+                    .Where(v => v.Id == voucherId && v.Status == CustomerVoucher.StatusActive)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(v => v.Status, CustomerVoucher.StatusUsed)
                         .SetProperty(v => v.UsedAtUtc, now)
@@ -302,7 +288,7 @@ public class LoyaltyService : ILoyaltyService
                 if (vUpdated == 0)
                 {
                     if (ownTx != null) await ownTx.RollbackAsync(ct);
-                    return new CheckoutLoyaltyResult(false, false, $"Voucher {vCode} đã được sử dụng hoặc không còn hợp lệ.",
+                    return new CheckoutLoyaltyResult(false, false, $"Mã quà tặng {vCode} đã được sử dụng, hết hạn hoặc không thuộc hội viên này.",
                         req.PlaytimeAmount + req.FandBAmount, 0, 0, 0, 0, preview.FinalAmount, 0, 0, 0, preview.TierName, false);
                 }
             }
@@ -319,6 +305,7 @@ public class LoyaltyService : ILoyaltyService
                 spendAmount: preview.FinalAmount,
                 ct: ct);
 
+            if (!earnLedger.Success) throw new InvalidOperationException(earnLedger.Message);
             if (earnLedger.Duplicate)
             {
                 if (ownTx != null) await ownTx.RollbackAsync(ct);

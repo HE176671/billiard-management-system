@@ -6,8 +6,6 @@
     Layout = "_AdminLayout";
     var tiers = ViewBag.Tiers as List<MembershipTier> ?? new List<MembershipTier>();
     var editItem = ViewBag.EditItem as RewardItemEntity;
-    var campaignUsage = ViewBag.CampaignUsage as Dictionary<int, int> ?? new Dictionary<int, int>();
-    var campaignIssued = ViewBag.CampaignIssued as Dictionary<int, int> ?? new Dictionary<int, int>();
 }
 
 @if (TempData["Success"] != null)
@@ -41,7 +39,7 @@
                             <th class="text-end">Điểm đổi</th>
                             <th class="text-end">Giá trị quy đổi</th>
                             <th>Hạng áp dụng</th>
-                            <th>Trạng thái</th>
+                            <th class="text-nowrap" style="width:110px">Trạng thái</th>
                             <th class="text-end">Thao tác</th>
                         </tr>
                     </thead>
@@ -53,25 +51,19 @@
                                 <td>
                                     <strong>@item.Name</strong>
                                     <div class="text-muted" style="font-size:0.75rem">@item.Description</div>
-                                    @if (campaignUsage.TryGetValue(item.Id, out var usedIn) && usedIn > 0)
-                                    {
-                                        <div class="mt-1" style="font-size:0.72rem;color:#1e40af">
-                                            <i class="bi bi-megaphone me-1"></i>Dùng trong @usedIn chương trình ưu đãi · đã phát @(campaignIssued.GetValueOrDefault(item.Id)) mã
-                                        </div>
-                                    }
                                 </td>
                                 <td><span class="badge bg-light text-dark border">@VnFormat.RewardTypeLabel(item.RewardType)</span></td>
                                 <td class="text-end fw-bold text-danger">@VnFormat.Number(item.PointCost) điểm</td>
                                 <td class="text-end">@(item.DiscountValue.HasValue ? VnFormat.Money(item.DiscountValue.Value) : "—")</td>
                                 <td>@(item.MinTier != null ? $"Từ hạng {item.MinTier.TierName}" : "Mọi hạng")</td>
-                                <td>
+                                <td class="text-nowrap">
                                     @if (item.IsActive)
                                     {
-                                        <span class="badge-active">Đang mở</span>
+                                        <span class="badge-active text-nowrap" style="white-space:nowrap; display:inline-block;">Đang mở</span>
                                     }
                                     else
                                     {
-                                        <span class="badge-inactive">Đã đóng</span>
+                                        <span class="badge-inactive text-nowrap" style="white-space:nowrap; display:inline-block;">Đã đóng</span>
                                     }
                                 </td>
                                 <td class="text-end text-nowrap">
@@ -91,12 +83,6 @@
                                             </button>
                                         }
                                     </form>
-                                    @if (item.IsActive)
-                                    {
-                                        <a asp-controller="Campaign" asp-action="Index" asp-route-rewardItemId="@item.Id" class="btn-sm-icon me-1" title="Gửi ưu đãi kèm voucher này">
-                                            <i class="bi bi-send"></i>
-                                        </a>
-                                    }
                                     <a asp-action="Index" asp-route-editId="@item.Id" class="btn-sm-icon" title="Chỉnh sửa phần quà">
                                         <i class="bi bi-pencil"></i>
                                     </a>

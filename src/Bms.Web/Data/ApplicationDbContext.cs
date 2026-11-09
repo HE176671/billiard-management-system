@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Bms.Web.Data.Entities;
@@ -10,10 +10,17 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options) { }
 
+    public DbSet<WalletTopUpIntent> WalletTopUpIntents => Set<WalletTopUpIntent>();
+    public DbSet<CheckoutDraft> CheckoutDrafts => Set<CheckoutDraft>();
+    public DbSet<PaymentMethodChange> PaymentMethodChanges => Set<PaymentMethodChange>();
+    public DbSet<PaymentReconciliation> PaymentReconciliations => Set<PaymentReconciliation>();
+    public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
+
     // Custom business tables (Hung & Doan)
     public DbSet<TableType>               TableTypes               => Set<TableType>();
     public DbSet<PricingConfig>           PricingConfigs           => Set<PricingConfig>();
     public DbSet<PaymentTransaction>      PaymentTransactions      => Set<PaymentTransaction>();
+    public DbSet<PaymentIntent>           PaymentIntents           => Set<PaymentIntent>();
     public DbSet<BilliardTable>           BilliardTables           => Set<BilliardTable>();
     public DbSet<WorkShift>               WorkShifts               => Set<WorkShift>();
     public DbSet<PlaySession>             PlaySessions             => Set<PlaySession>();
@@ -44,6 +51,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<OrderDetail>             OrderDetails             => Set<OrderDetail>();
     public DbSet<Combo>                   Combos                   => Set<Combo>();
     public DbSet<ComboItem>               ComboItems               => Set<ComboItem>();
+
+
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -90,8 +99,38 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.TierName).HasMaxLength(50).IsRequired();
             e.Property(x => x.DiscountPercent).HasColumnType("decimal(5,2)");
             e.Property(x => x.SpendThreshold).HasColumnType("decimal(18,2)");
-            e.Property(x => x.BirthdayVoucherValue).HasColumnType("decimal(18,2)");
         });
+
+        builder.Entity<WalletTransaction>(e =>
+        {
+            e.ToTable("WalletTransactions");
+            e.Property(x => x.PaymentMethod).HasColumnType("varchar(20)");
+            e.Property(x => x.ProviderTransactionId).HasMaxLength(100);
+            e.Property(x => x.CustomerId).HasMaxLength(450);
+            e.Property(x => x.CreatedById).HasMaxLength(450);
+            e.Property(x => x.TransactionType).HasColumnType("varchar(20)");
+            e.Property(x => x.ReferenceCode).HasColumnType("varchar(50)");
+            e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.BalanceAfter).HasColumnType("decimal(18,2)");
+            e.HasIndex(x => x.ReferenceCode).IsUnique();
+            e.HasIndex(x => x.InvoiceId).IsUnique().HasFilter("[InvoiceId] IS NOT NULL");
+        });
+        builder.Entity<WalletTopUpIntent>(e =>
+        {
+            e.ToTable("WalletTopUpIntents");
+            e.Property(x => x.ConfirmationMethod).HasColumnType("varchar(20)");
+            e.Property(x => x.ConfirmedById).HasMaxLength(450);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ConfirmedById).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.CustomerId).HasMaxLength(450);
+            e.Property(x => x.CreatedById).HasMaxLength(450);
+            e.Property(x => x.ReferenceCode).HasColumnType("varchar(50)");
+            e.Property(x => x.Status).HasColumnType("varchar(20)");
+            e.Property(x => x.ProviderTransactionId).HasMaxLength(100);
+            e.Property(x => x.ExpectedAmount).HasColumnType("decimal(18,2)");
+            e.HasIndex(x => x.ReferenceCode).IsUnique();
+            e.HasIndex(x => x.ProviderTransactionId).IsUnique().HasFilter("[ProviderTransactionId] IS NOT NULL");
+        });
+        user.Property(x => x.WalletBalance).HasColumnType("decimal(18,2)");
 
         // PointTransactions (TV2)
         var pt = builder.Entity<PointTransaction>();
@@ -258,10 +297,83 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.ToTable("PaymentTransactions");
             e.Property(x => x.AmountPaid).HasColumnType("decimal(18,2)");
             e.Property(x => x.PaymentMethod).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.GatewayRefCode).HasMaxLength(100);
             e.Property(x => x.TransactionTimeUtc).HasColumnType("datetime2(0)");
             e.Property(x => x.ReceivedById).HasMaxLength(450);
             e.HasOne<WorkShift>().WithMany().HasForeignKey(x => x.WorkShiftId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ReceivedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<CheckoutDraft>(e =>
+        {
+            e.ToTable("CheckoutDrafts");
+            e.HasKey(x => x.ReferenceCode);
+            e.Property(x => x.ReferenceCode).HasMaxLength(50).IsUnicode(false);
+            e.Property(x => x.ReplacementReference).HasMaxLength(50).IsUnicode(false);
+            e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.PaymentMethod).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.CreatedById).HasMaxLength(450);
+            e.Property(x => x.CustomerId).HasMaxLength(450);
+            e.Property(x => x.VoucherCode).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.PlaytimeAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.FandBAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.CashReceived).HasColumnType("decimal(18,2)");
+            e.Property(x => x.FinalAmount).HasColumnType("decimal(18,2)");
+            e.HasIndex(x => x.InvoiceId);
+        });
+
+        builder.Entity<PaymentMethodChange>(e =>
+        {
+            e.Property(x => x.ReferenceCode).HasMaxLength(50).IsUnicode(false);
+            e.HasIndex(x => x.ReferenceCode).IsUnique();
+            e.Property(x => x.FromMethod).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.ToMethod).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.CashReceived).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Reason).HasMaxLength(250);
+            e.Property(x => x.ChangedById).HasMaxLength(450);
+        });
+
+        builder.Entity<PaymentReconciliation>(e =>
+        {
+            e.Property(x => x.ReferenceCode).HasMaxLength(50).IsUnicode(false);
+            e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Source).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Reason).HasMaxLength(40).IsUnicode(false);
+            e.Property(x => x.ProviderTransactionId).HasMaxLength(100);
+            e.HasIndex(x => x.ProviderTransactionId).IsUnique().HasFilter("[ProviderTransactionId] IS NOT NULL");
+            e.Property(x => x.RequestId).HasMaxLength(32).IsUnicode(false);
+            e.HasIndex(x => x.RequestId).IsUnique().HasFilter("[RequestId] IS NOT NULL");
+            e.Property(x => x.CreatedById).HasMaxLength(450);
+            e.Property(x => x.ResolvedById).HasMaxLength(450);
+            e.Property(x => x.Notes).HasMaxLength(1000);
+            e.Property(x => x.Resolution).HasMaxLength(40).IsUnicode(false);
+            e.Property(x => x.ResolutionNotes).HasMaxLength(1000);
+            e.HasIndex(x => new { x.Status, x.CreatedAtUtc });
+            e.HasIndex(x => x.InvoiceId);
+        });
+
+        builder.Entity<PaymentIntent>(e =>
+        {
+            e.ToTable("PaymentIntents");
+            e.Property(x => x.ReferenceCode).HasMaxLength(50).IsUnicode(false).IsRequired();
+            e.Property(x => x.ExpectedAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Provider).HasMaxLength(30).IsUnicode(false).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false).IsRequired();
+            e.Property(x => x.ProviderTransactionId).HasMaxLength(100);
+            e.Property(x => x.CustomerId).HasMaxLength(450);
+            e.Property(x => x.PlaytimeAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.FandBAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.VoucherCode).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.CashierId).HasMaxLength(450);
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ExpiresAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ConfirmedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.ConfirmationMethod).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.ConfirmedById).HasMaxLength(450);
+            e.HasIndex(x => x.ReferenceCode).IsUnique();
+            e.HasIndex(x => x.ProviderTransactionId).IsUnique().HasFilter("[ProviderTransactionId] IS NOT NULL");
         });
 
         // WorkShifts (Hung)
@@ -393,6 +505,29 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.ToTable("BilliardTables");
             e.Property(x => x.TableCode).HasMaxLength(20);
             e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
+        });
+
+        // Orders & OrderDetails (F&B)
+        builder.Entity<Order>(e =>
+        {
+            e.ToTable("Orders");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.OrderTimeUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.Status).HasMaxLength(20).IsUnicode(false);
+            e.HasOne(x => x.Session).WithMany(s => s.Orders)
+                .HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<OrderDetail>(e =>
+        {
+            e.ToTable("OrderDetails");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UnitPrice).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Subtotal).HasColumnType("decimal(18,2)").ValueGeneratedOnAddOrUpdate();
+            e.HasOne(x => x.Order).WithMany(o => o.OrderDetails)
+                .HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Product).WithMany()
+                .HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

@@ -1,0 +1,96 @@
+#checkoutForm {
+    container: checkout-form / inline-size;
+}
+
+#checkoutForm .checkout-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 1.25rem;
+}
+
+#checkoutForm .checkout-field {
+    min-width: 0;
+}
+
+#checkoutForm .checkout-field-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    min-height: 2rem;
+    margin-bottom: .5rem;
+}
+
+#checkoutForm .checkout-field-heading .form-label {
+    margin: 0;
+    line-height: 1.4;
+}
+
+#checkoutForm .checkout-field-action {
+    flex: 0 0 auto;
+    min-width: 6rem;
+    min-height: 2rem;
+    padding: .25rem .5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #fff;
+    color: #475569;
+    font-size: .75rem;
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+#checkoutForm .checkout-field-action:hover:not(:disabled) {
+    border-color: #e94560;
+    color: #c62a47;
+    background: #fff1f2;
+}
+
+#checkoutForm .checkout-field-action:disabled {
+    color: #94a3b8;
+    background: #f8fafc;
+    opacity: 1;
+}
+
+#checkoutForm .checkout-field > .form-control,
+#checkoutForm .checkout-field .input-group > .form-control,
+#checkoutForm .checkout-field .input-group-text {
+    height: 2.75rem;
+    min-height: 2.75rem;
+    font-size: .875rem;
+}
+
+#checkoutForm .checkout-field .input-group-text {
+    justify-content: center;
+    width: 2.75rem;
+    padding: .5rem;
+    border-color: #e2e8f0;
+    border-radius: 8px 0 0 8px;
+}
+
+#checkoutForm .checkout-field-note,
+#checkoutForm .checkout-points-choice {
+    margin-top: .5rem;
+    font-size: .75rem;
+    line-height: 1.5;
+}
+
+#checkoutForm .checkout-points-choice {
+    margin-bottom: 0;
+    color: #475569;
+}
+
+#checkoutForm .payment-method-btn {
+    height: 100%;
+}
+
+#checkoutForm .payment-method-btn > i {
+    flex-shrink: 0;
+}
+
+@container checkout-form (max-width: 32rem) {
+    #checkoutForm .checkout-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

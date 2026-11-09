@@ -1,12 +1,13 @@
 @model Bms.Web.Models.RevenueReportViewModel
 @{ ViewData["Title"] = "Báo cáo doanh thu — UC46"; Layout = "~/Views/Shared/_AdminLayout.cshtml"; }
-<p class="text-muted">Doanh thu thực thu từ PaymentTransactions theo thời điểm giao dịch (giờ Việt Nam UTC+7).</p>
+<p class="text-muted">Doanh thu hóa đơn đã thanh toán theo giờ Việt Nam (UTC+7), bao gồm hóa đơn trả bằng ví. Tiền nạp trước là tiền khách gửi để sử dụng dần, chỉ tính doanh thu khi thanh toán hóa đơn.</p>
 <form method="get" class="row g-3 mb-4">
     <div class="col-md-3"><label for="from" class="form-label">Từ ngày</label><input id="from" name="from" type="date" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" required /></div>
     <div class="col-md-3"><label for="to" class="form-label">Đến ngày</label><input id="to" name="to" type="date" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" required /></div>
     <div class="col-md-3"><label for="groupBy" class="form-label">Nhóm theo</label><select id="groupBy" name="groupBy" class="form-select"><option value="day" selected="@(Model.GroupBy == "day")">Ngày</option><option value="month" selected="@(Model.GroupBy == "month")">Tháng</option></select></div>
     <div class="col-md-3 d-flex align-items-end gap-2"><button class="btn-primary-bms" type="submit">Xem báo cáo</button><a asp-action="Export" asp-route-from="@Model.From.ToString("yyyy-MM-dd")" asp-route-to="@Model.To.ToString("yyyy-MM-dd")" asp-route-groupBy="@Model.GroupBy" class="btn-outline-bms">Xuất CSV</a></div>
 </form>
+<div class="alert alert-info">Tiền nạp nhận trong kỳ: <strong>@Model.TopUpReceipts.ToString("N0")đ</strong> · Hóa đơn trả bằng ví: <strong>@Model.WalletPayments.ToString("N0")đ</strong> · Tiền mới thực nhận (không đếm lại ví): <strong>@Model.NewMoneyReceived.ToString("N0")đ</strong></div>
 <div asp-validation-summary="All" class="text-danger mb-3"></div>
 <div class="row g-3 mb-4">
     <div class="col-md-4"><div class="stat-card"><div><div class="stat-value">@Model.TotalRevenue.ToString("N0") VND</div><div class="stat-label">Tổng doanh thu</div></div></div></div>

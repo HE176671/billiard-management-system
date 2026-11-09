@@ -6,6 +6,9 @@ public class RevenueReportViewModel
     public DateOnly To { get; set; }
     public string GroupBy { get; set; } = "day";
     public decimal TotalRevenue { get; set; }
+    public decimal TopUpReceipts { get; set; }
+    public decimal WalletPayments { get; set; }
+    public decimal NewMoneyReceived => TotalRevenue - WalletPayments + TopUpReceipts;
     public int PaymentCount { get; set; }
     public int InvoiceCount { get; set; }
     public List<RevenuePeriodRow> Periods { get; set; } = new();

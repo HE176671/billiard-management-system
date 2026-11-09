@@ -1,0 +1,20 @@
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Không có phiên chơi";
+}
+
+<div class="row justify-content-center py-5">
+    <div class="col-md-6 text-center">
+        <div class="data-card p-5">
+            <div class="display-3 text-warning mb-3">🎱</div>
+            <h4 class="fw-bold">Bạn chưa có phiên chơi nào</h4>
+            <p class="text-muted">Tính năng gọi đồ ăn/uống chỉ áp dụng khi bạn đang có phiên chơi tại bàn.<br />Nếu bạn đang ngồi tại bàn, hãy quét mã QR được dán trực tiếp trên bàn để gọi món nhé!</p>
+            <div class="mt-4">
+                <a asp-controller="CustomerProfile" asp-action="Index" class="btn btn-outline-secondary">
+                    <i class="bi bi-person me-1"></i> Về hồ sơ của tôi
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+

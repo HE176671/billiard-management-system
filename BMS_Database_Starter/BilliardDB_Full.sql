@@ -289,6 +289,39 @@ BEGIN TRY
         CONSTRAINT CK_Payment_Amount CHECK (AmountPaid > 0)
     );
 
+    CREATE UNIQUE INDEX UX_PaymentTransactions_GatewayRefCode
+        ON dbo.PaymentTransactions(GatewayRefCode) WHERE GatewayRefCode IS NOT NULL;
+
+    CREATE TABLE dbo.PaymentIntents (
+        Id int IDENTITY NOT NULL CONSTRAINT PK_PaymentIntents PRIMARY KEY,
+        InvoiceId int NOT NULL,
+        ReferenceCode varchar(50) NOT NULL CONSTRAINT UQ_PaymentIntents_ReferenceCode UNIQUE,
+        ExpectedAmount decimal(18,2) NOT NULL,
+        Provider varchar(30) NOT NULL CONSTRAINT DF_PaymentIntent_Provider DEFAULT 'SePay',
+        Status varchar(20) NOT NULL CONSTRAINT DF_PaymentIntent_Status DEFAULT 'Pending',
+        ProviderTransactionId nvarchar(100) NULL,
+        CustomerId nvarchar(450) NULL,
+        SessionId int NULL,
+        PlaytimeAmount decimal(18,2) NOT NULL,
+        FandBAmount decimal(18,2) NOT NULL,
+        PointsToRedeem int NOT NULL CONSTRAINT DF_PaymentIntent_Points DEFAULT 0,
+        VoucherCode varchar(20) NULL,
+        CashierId nvarchar(450) NULL,
+        CreatedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_PaymentIntent_Created DEFAULT SYSUTCDATETIME(),
+        ExpiresAtUtc datetime2(0) NOT NULL,
+        ConfirmedAtUtc datetime2(0) NULL,
+        CONSTRAINT FK_PaymentIntent_Invoice FOREIGN KEY (InvoiceId) REFERENCES dbo.Invoices(Id),
+        CONSTRAINT FK_PaymentIntent_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.AspNetUsers(Id),
+        CONSTRAINT FK_PaymentIntent_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+        CONSTRAINT FK_PaymentIntent_Cashier FOREIGN KEY (CashierId) REFERENCES dbo.AspNetUsers(Id),
+        CONSTRAINT CK_PaymentIntent_Amount CHECK (ExpectedAmount > 0),
+        CONSTRAINT CK_PaymentIntent_Status CHECK (Status IN ('Pending','Confirmed','Expired','Failed')),
+        CONSTRAINT CK_PaymentIntent_Points CHECK (PointsToRedeem >= 0)
+    );
+    CREATE UNIQUE INDEX UX_PaymentIntents_ProviderTransactionId ON dbo.PaymentIntents(ProviderTransactionId)
+        WHERE ProviderTransactionId IS NOT NULL;
+    CREATE INDEX IX_PaymentIntents_Status_Expires ON dbo.PaymentIntents(Status, ExpiresAtUtc);
+
     CREATE TABLE dbo.Combos (
         Id int IDENTITY NOT NULL CONSTRAINT PK_Combos PRIMARY KEY,
         Name nvarchar(100) NOT NULL CONSTRAINT UQ_Combos_Name UNIQUE,

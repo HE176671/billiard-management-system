@@ -62,6 +62,7 @@
             </div>
         </div>
 
+        <a asp-controller="Wallet" asp-action="Index" asp-route-customerId="@Model.Id" class="btn-outline-bms">Ví trả trước / Nạp tiền</a>
         <!-- Nút hành động nhanh -->
         <div class="d-flex gap-2 flex-wrap">
             @if (canCashier)
@@ -109,8 +110,8 @@
         <div class="stat-card">
             <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
             <div>
-                <div class="stat-value" style="font-size:1.25rem">@VnFormat.Money(Math.Max(Model.TotalSpendLifetime, Model.Spend12Months))</div>
-                <div class="stat-label">Tổng mức chi tiêu của khách hàng</div>
+                <div class="stat-value" style="font-size:1.25rem">@VnFormat.Money(Model.Spend12Months)</div>
+                <div class="stat-label">Tích lũy xét hạng 365 ngày của khách hàng</div>
             </div>
         </div>
     </div>
@@ -152,7 +153,7 @@
         <span>
             @if (Model.NextTierName != null)
             {
-                <span>Cần thêm <strong>@VnFormat.Money(Model.AmountToNextTier)</strong> tổng mức chi tiêu để lên hạng <strong>@Model.NextTierName</strong></span>
+                <span>Cần thêm <strong>@VnFormat.Money(Model.AmountToNextTier)</strong> tích lũy xét hạng 365 ngày để lên hạng <strong>@Model.NextTierName</strong></span>
             }
             else
             {
@@ -248,7 +249,7 @@
                                             if (canCashier)
                                             {
                                                 <a asp-controller="LoyaltyTest" asp-action="Index"
-                                                   asp-route-customerId="@Model.Id" asp-route-voucherCode="@v.Code"
+                                                   asp-route-customerId="@Model.Id" asp-route-voucherCode="@v.RewardItem?.Code"
                                                    class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
                                                     Dùng khi tính tiền
                                                 </a>

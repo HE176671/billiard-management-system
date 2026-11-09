@@ -17,17 +17,20 @@ public class LoyaltyTestController : Controller
     private readonly ILoyaltyService _loyaltyService;
     private readonly IPointLedgerService _ledger;
     private readonly ITierEvaluationService _tierEval;
+    private readonly ICheckoutService _checkout;
 
     public LoyaltyTestController(
         ApplicationDbContext context,
         ILoyaltyService loyaltyService,
         IPointLedgerService ledger,
-        ITierEvaluationService tierEval)
+        ITierEvaluationService tierEval,
+        ICheckoutService checkout)
     {
         _context = context;
         _loyaltyService = loyaltyService;
         _ledger = ledger;
         _tierEval = tierEval;
+        _checkout = checkout;
     }
 
     private string? CurrentActorId => User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -41,14 +44,43 @@ public class LoyaltyTestController : Controller
         string? customerId = null,
         string? customerMode = null,
         int? sessionId = null,
-        decimal playtimeAmount = 300000m,
-        decimal fandBAmount = 80000m,
+        decimal playtimeAmount = 0m,
+        decimal fandBAmount = 0m,
         int pointsToRedeem = 0,
         string? voucherCode = null,
         string? referenceCode = null,
         string paymentMethod = "VietQR",
-        decimal? cashReceived = null)
+        decimal? cashReceived = null,
+        bool cashMode = false,
+        decimal? switchCashReceived = null,
+        string? switchReason = null,
+        bool useRewardPoints = false)
     {
+        if (!useRewardPoints) pointsToRedeem = 0;
+        // A persisted reference owns the customer, session and receipt snapshot.
+        // Query-string values must not rewrite a pending or completed checkout.
+        var draft = string.IsNullOrWhiteSpace(referenceCode) ? null : await _context.CheckoutDrafts.AsNoTracking()
+            .SingleOrDefaultAsync(d => d.ReferenceCode == referenceCode);
+        var selectedIntent = string.IsNullOrWhiteSpace(referenceCode) ? null : await _context.PaymentIntents.AsNoTracking()
+            .SingleOrDefaultAsync(i => i.ReferenceCode == referenceCode);
+        if (draft?.Status == CheckoutDraft.Superseded)
+            return RedirectToAction(nameof(Index), new { referenceCode = draft.ReplacementReference });
+        if (!string.IsNullOrWhiteSpace(referenceCode) && draft == null && selectedIntent == null)
+            return NotFound("Phiếu không tồn tại. Mở Thanh toán & Tích điểm để bắt đầu giao dịch mới.");
+        if (draft != null || selectedIntent != null)
+        {
+            customerId = draft != null ? draft.CustomerId : selectedIntent!.CustomerId;
+            customerMode = customerId == null ? "guest" : "member";
+            sessionId = draft != null ? draft.SessionId : selectedIntent!.SessionId;
+            playtimeAmount = draft != null ? draft.PlaytimeAmount : selectedIntent!.PlaytimeAmount;
+            fandBAmount = draft != null ? draft.FandBAmount : selectedIntent!.FandBAmount;
+            pointsToRedeem = draft != null ? draft.PointsToRedeem : selectedIntent!.PointsToRedeem;
+            voucherCode = draft != null ? draft.VoucherCode : selectedIntent!.VoucherCode;
+            paymentMethod = draft?.PaymentMethod ?? "VietQR";
+            cashReceived = draft?.CashReceived;
+        }
+        var checkoutLocked = (draft != null && draft.Status != CheckoutDraft.Draft) || selectedIntent != null;
+        var paid = draft?.Status == CheckoutDraft.Paid || selectedIntent?.Status == PaymentIntent.StatusConfirmed;
         var roleId = await _context.Roles.Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync();
 
         var customers = await _context.Users
@@ -69,21 +101,17 @@ public class LoyaltyTestController : Controller
             .ToListAsync();
 
         // Tải danh sách phiên chơi từ bảng PlaySessions + Orders/OrderDetails (Tích hợp vận hành bàn & thực đơn F&B)
-        var activeSessions = await LoadCheckoutSessionsAsync();
+        var activeSessions = await LoadCheckoutSessionsAsync(sessionId);
         CheckoutSessionItemViewModel? selectedSession = null;
         var sessionOrderLines = new List<SessionOrderLineViewModel>();
 
         if (sessionId.HasValue && sessionId.Value > 0)
         {
-            selectedSession = activeSessions.FirstOrDefault(s => s.SessionId == sessionId.Value);
-            if (selectedSession != null)
+            selectedSession = draft?.IsManualEntry == true ? null : activeSessions.FirstOrDefault(s => s.SessionId == sessionId.Value);
+            if (selectedSession != null && !checkoutLocked)
             {
                 playtimeAmount = selectedSession.PlaytimeAmount;
                 fandBAmount = selectedSession.FandBAmount;
-                if (string.IsNullOrEmpty(customerId) && !string.IsNullOrEmpty(selectedSession.CustomerId) && customerMode != "guest")
-                {
-                    customerId = selectedSession.CustomerId;
-                }
             }
             sessionOrderLines = await LoadSessionOrderLinesAsync(sessionId.Value);
         }
@@ -104,9 +132,31 @@ public class LoyaltyTestController : Controller
         SelectedCustomerDetailViewModel? detail = null;
         var availableVouchers = new List<CustomerVoucher>();
         CheckoutLoyaltyPreview? preview = null;
-        var refCode = string.IsNullOrWhiteSpace(referenceCode)
-            ? $"HD-{DateTime.UtcNow:yyyyMMddHHmmss}"
-            : referenceCode.Trim();
+        if (string.IsNullOrWhiteSpace(referenceCode))
+        {
+            if (customerId != null && !customers.Any(c => c.Id == customerId))
+                return BadRequest("Hội viên không hợp lệ.");
+            if (sessionId.HasValue && selectedSession == null)
+                return BadRequest("Phiên chơi không tồn tại hoặc đã được thanh toán. Hãy chọn phiên khác.");
+            if (playtimeAmount < 0 || fandBAmount < 0 || playtimeAmount > 100_000_000 || fandBAmount > 100_000_000
+                || playtimeAmount != decimal.Truncate(playtimeAmount) || fandBAmount != decimal.Truncate(fandBAmount)
+                || pointsToRedeem < 0 || (voucherCode?.Length ?? 0) > 20)
+                return BadRequest("Dữ liệu khởi tạo phiếu thanh toán không hợp lệ.");
+            draft = new CheckoutDraft
+            {
+                CreatedById = CurrentActorId!, CustomerId = customerId, SessionId = sessionId,
+                IsManualEntry = sessionId == null,
+                PlaytimeAmount = playtimeAmount, FandBAmount = fandBAmount,
+                PointsToRedeem = pointsToRedeem, VoucherCode = voucherCode,
+                PaymentMethod = paymentMethod is "Cash" or "Wallet" ? paymentMethod : "VietQR",
+                CashReceived = cashReceived
+            };
+            _context.CheckoutDrafts.Add(draft);
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index), new { referenceCode = draft.ReferenceCode });
+        }
+        var refCode = referenceCode.Trim();
+        var pendingIntent = selectedIntent is { Status: PaymentIntent.StatusPending or PaymentIntent.StatusExpired } ? selectedIntent : null;
 
         if (resolvedMode == "member" && !string.IsNullOrEmpty(customerId))
         {
@@ -145,9 +195,10 @@ public class LoyaltyTestController : Controller
                     TierName = user.Tier?.TierName ?? "Member",
                     PointMultiplier = user.Tier?.PointMultiplier ?? 1,
                     DiscountPercent = user.Tier?.DiscountPercent ?? 0,
+                    WalletBalance = user.WalletBalance,
                     RewardPoints = user.RewardPoints,
-                    TotalSpend = Math.Max(user.TotalSpend, spend12M),
-                    Spend12Months = Math.Max(user.TotalSpend, spend12M),
+                    TotalSpend = user.TotalSpend,
+                    Spend12Months = spend12M,
                     LastPaidDate = user.LastPaidDate,
                     RecentTransactions = transactions
                 };
@@ -157,12 +208,15 @@ public class LoyaltyTestController : Controller
                     .Include(v => v.RewardItem)
                         .ThenInclude(r => r!.MinTier)
                     .Where(v => v.CustomerId == customerId
+                             && v.RewardItemId != null
+                             && v.RewardItem != null
+                             && v.RewardItem.IsActive
                              && v.Status == CustomerVoucher.StatusActive
                              && v.ExpiresAtUtc > now)
                     .OrderBy(v => v.ExpiresAtUtc)
                     .ToListAsync();
 
-                preview = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
+                if (!paid) preview = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
                     CustomerId: customerId,
                     ReferenceCode: refCode,
                     InvoiceId: null,
@@ -170,7 +224,8 @@ public class LoyaltyTestController : Controller
                     FandBAmount: fandBAmount,
                     PointsToRedeem: pointsToRedeem,
                     VoucherCode: voucherCode,
-                    CashierId: CurrentActorId));
+                    CashierId: CurrentActorId,
+                    PayWithWallet: paymentMethod == "Wallet"));
             }
         }
 
@@ -195,7 +250,8 @@ public class LoyaltyTestController : Controller
         }
 
         decimal finalAmt = preview?.FinalAmount ?? Math.Max(0m, playtimeAmount + fandBAmount);
-        string normalizedMethod = string.Equals(paymentMethod, "Cash", StringComparison.OrdinalIgnoreCase) ? "Cash" : "VietQR";
+        string normalizedMethod = paymentMethod == "Wallet" && resolvedMode == "member" ? "Wallet" : (string.Equals(paymentMethod, "Cash", StringComparison.OrdinalIgnoreCase) ? "Cash" : "VietQR");
+        var methodChange = await _context.PaymentMethodChanges.AsNoTracking().SingleOrDefaultAsync(c => c.ReferenceCode == refCode);
 
         var vm = new LoyaltyTestViewModel
         {
@@ -208,6 +264,20 @@ public class LoyaltyTestController : Controller
             SelectedSession = selectedSession,
             SessionOrderLines = sessionOrderLines,
             ReferenceCode = refCode,
+            CheckoutStatus = paid ? CheckoutDraft.Paid : checkoutLocked ? CheckoutDraft.Pending : CheckoutDraft.Draft,
+            InvoiceId = draft?.InvoiceId ?? selectedIntent?.InvoiceId,
+            StoredFinalAmount = checkoutLocked ? draft?.FinalAmount ?? selectedIntent?.ExpectedAmount : null,
+            CanConfirmTransfer = pendingIntent != null,
+            ConfirmationMethod = selectedIntent?.ConfirmationMethod,
+            ConfirmedByName = selectedIntent?.ConfirmedById == null ? null : await _context.Users.Where(u => u.Id == selectedIntent.ConfirmedById).Select(u => u.FullName).FirstOrDefaultAsync(),
+            PaidAtUtc = draft?.PaidAtUtc ?? selectedIntent?.ConfirmedAtUtc,
+            EarnedPoints = paid ? await _context.PointTransactions.Where(t => t.ReferenceCode == refCode && t.TransactionType == PointTransaction.Earn).SumAsync(t => t.Amount) : 0,
+            CashSwitchMode = cashMode && pendingIntent != null,
+            CashSwitchReceived = switchCashReceived ?? pendingIntent?.ExpectedAmount ?? 0,
+            CashSwitchReason = string.IsNullOrWhiteSpace(switchReason) ? "Ngân hàng của khách gặp lỗi" : switchReason,
+            MethodChange = methodChange,
+            MethodChangedByName = methodChange == null ? null : await _context.Users.Where(u => u.Id == methodChange.ChangedById).Select(u => u.FullName).FirstOrDefaultAsync(),
+            RedeemedPoints = paid ? -(await _context.PointTransactions.Where(t => t.ReferenceCode == refCode && t.TransactionType == PointTransaction.Redeem).SumAsync(t => t.Amount)) : pointsToRedeem,
             PlaytimeAmount = playtimeAmount,
             FandBAmount = fandBAmount,
             PointsToRedeem = pointsToRedeem,
@@ -216,7 +286,8 @@ public class LoyaltyTestController : Controller
             Preview = preview,
             PaymentMethod = normalizedMethod,
             CashReceived = cashReceived ?? finalAmt,
-            CustomerNotifications = customerNotifications
+            CustomerNotifications = customerNotifications,
+            HasPendingTransfer = pendingIntent != null && !paid
         };
 
         return View(vm);
@@ -232,8 +303,11 @@ public class LoyaltyTestController : Controller
         int pointsToRedeem = 0,
         string? voucherCode = null,
         string? referenceCode = null,
-        string customerMode = "member")
+        string customerMode = "member",
+        string paymentMethod = "VietQR",
+        bool useRewardPoints = false)
     {
+        if (!useRewardPoints) pointsToRedeem = 0;
         decimal subtotal = Math.Max(0m, playtimeAmount) + Math.Max(0m, fandBAmount);
 
         if (string.Equals(customerMode, "guest", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(customerId))
@@ -275,12 +349,13 @@ public class LoyaltyTestController : Controller
             FandBAmount: fandBAmount,
             PointsToRedeem: pointsToRedeem,
             VoucherCode: string.IsNullOrWhiteSpace(voucherCode) ? null : voucherCode,
-            CashierId: CurrentActorId));
+            CashierId: CurrentActorId,
+                    PayWithWallet: paymentMethod == "Wallet"));
 
         var user = await _context.Users.AsNoTracking()
             .Include(u => u.Tier)
             .FirstOrDefaultAsync(u => u.Id == customerId);
-        var spend12M = user != null ? Math.Max(user.TotalSpend, await _tierEval.GetSpendLast12MonthsAsync(user.Id)) : 0m;
+        var spend12M = user != null ? await _tierEval.GetSpendLast12MonthsAsync(user.Id) : 0m;
         var nowUtc = DateTime.UtcNow;
         decimal userTierThreshold = user?.Tier?.SpendThreshold ?? 0m;
         var rawVouchers = user != null
@@ -288,13 +363,19 @@ public class LoyaltyTestController : Controller
                 .Include(v => v.RewardItem)
                     .ThenInclude(r => r!.MinTier)
                 .Where(v => v.CustomerId == user.Id
+                         && v.RewardItemId != null
+                         && v.RewardItem != null
+                         && v.RewardItem.IsActive
                          && v.Status == CustomerVoucher.StatusActive
                          && v.ExpiresAtUtc > nowUtc)
                 .OrderBy(v => v.ExpiresAtUtc)
                 .ToListAsync()
             : new List<CustomerVoucher>();
 
-        var vouchers = rawVouchers.Select(v =>
+        var vouchers = rawVouchers
+            .GroupBy(v => v.RewardItem!.Code)
+            .Select(group => group.OrderBy(v => v.ExpiresAtUtc).First())
+            .Select(v =>
         {
             var minTier = v.RewardItem?.MinTier;
             bool eligible = minTier == null || userTierThreshold >= minTier.SpendThreshold;
@@ -303,10 +384,10 @@ public class LoyaltyTestController : Controller
                 : "";
             return new
             {
-                code = v.Code,
+                code = v.RewardItem!.Code,
                 minTierName = minTier?.TierName,
                 isEligible = eligible,
-                label = $"{v.Code} — {v.Title} ({(v.DiscountValue.HasValue ? "-" + VnFormat.Money(v.DiscountValue.Value) : VnFormat.RewardTypeLabel(v.VoucherType))}{tierNote})"
+                label = $"{v.RewardItem.Code} — {v.RewardItem.Name} ({(v.RewardItem.DiscountValue.HasValue ? "-" + VnFormat.Money(v.RewardItem.DiscountValue.Value) : VnFormat.RewardTypeLabel(v.RewardItem.RewardType))}{tierNote})"
             };
         }).ToList();
 
@@ -318,6 +399,7 @@ public class LoyaltyTestController : Controller
             customerName = user?.FullName ?? "—",
             customerPhone = user?.PhoneNumber ?? "—",
             rewardPoints = user?.RewardPoints ?? 0,
+            walletBalance = user?.WalletBalance ?? 0m,
             spend12Months = spend12M,
             pointMultiplier = user?.Tier?.PointMultiplier ?? 1,
             tierBadgeStyle = VnFormat.TierBadgeStyle(res.TierName),
@@ -352,96 +434,59 @@ public class LoyaltyTestController : Controller
         string customerMode = "member",
         string paymentMethod = "VietQR",
         decimal? cashReceived = null,
-        int? sessionId = null)
+        int? sessionId = null,
+        bool useRewardPoints = false)
     {
+        if (!useRewardPoints) pointsToRedeem = 0;
         bool isGuest = string.Equals(customerMode, "guest", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(customerId);
-        bool isCash = string.Equals(paymentMethod, "Cash", StringComparison.OrdinalIgnoreCase);
-        string methodLabel = isCash ? "Tiền mặt" : "Chuyển khoản VietQR";
-        string dbPaymentMethod = isCash ? "Cash" : "Transfer";
+        bool hasFractionalMoney = playtimeAmount != decimal.Truncate(playtimeAmount)
+            || fandBAmount != decimal.Truncate(fandBAmount)
+            || (cashReceived.HasValue && cashReceived.Value != decimal.Truncate(cashReceived.Value));
 
-        if (!ModelState.IsValid || playtimeAmount < 0 || fandBAmount < 0 || pointsToRedeem < 0 || (cashReceived.HasValue && cashReceived.Value < 0))
+        if (!ModelState.IsValid || hasFractionalMoney || playtimeAmount < 0 || fandBAmount < 0 || pointsToRedeem < 0 || (cashReceived.HasValue && cashReceived.Value < 0))
         {
             TempData["Error"] = "Dữ liệu nhập không hợp lệ: Tiền giờ chơi, tiền F&B, số điểm đổi và tiền khách đưa phải là số từ 0 trở lên (không được nhập số âm hoặc ký tự đặc biệt).";
-            return RedirectToAction(nameof(Index), new { customerId, customerMode, sessionId, playtimeAmount = Math.Max(0m, playtimeAmount), fandBAmount = Math.Max(0m, fandBAmount), paymentMethod });
+            return RedirectToAction(nameof(Index), new { referenceCode });
         }
 
         if ((playtimeAmount + fandBAmount) <= 0)
         {
             TempData["Error"] = "Tổng tiền giờ chơi và dịch vụ ăn uống phải lớn hơn 0 VND.";
-            return RedirectToAction(nameof(Index), new { customerId, customerMode, sessionId, playtimeAmount, fandBAmount, paymentMethod });
+            return RedirectToAction(nameof(Index), new { referenceCode });
         }
 
-        if (isGuest)
+        if (isGuest && !string.IsNullOrWhiteSpace(voucherCode))
         {
-            if (!string.IsNullOrWhiteSpace(voucherCode))
-            {
-                TempData["Error"] = $"Khách lẻ không thể sử dụng mã voucher hội viên ({voucherCode.Trim().ToUpperInvariant()}).";
-                return RedirectToAction(nameof(Index), new { customerMode = "guest", sessionId, playtimeAmount, fandBAmount, paymentMethod, referenceCode });
-            }
-            decimal guestFinal = playtimeAmount + fandBAmount;
-            decimal actualCash = cashReceived ?? guestFinal;
-            if (isCash && actualCash < guestFinal)
-            {
-                TempData["Error"] = $"Số tiền khách đưa ({VnFormat.Money(actualCash)}) nhỏ hơn tổng cần thanh toán ({VnFormat.Money(guestFinal)}). Vui lòng nhập lại số tiền khách đưa.";
-                return RedirectToAction(nameof(Index), new { customerMode = "guest", sessionId, playtimeAmount, fandBAmount, paymentMethod = "Cash", cashReceived = actualCash, referenceCode });
-            }
-
-            decimal changeAmt = isCash ? (actualCash - guestFinal) : 0m;
-            await RecordInvoiceAndPaymentAsync(sessionId, null, playtimeAmount, fandBAmount, 0m, guestFinal, dbPaymentMethod);
-
-            string cashSummary = isCash
-                ? $" (Khách đưa: {VnFormat.Money(actualCash)} · Tiền thừa trả khách: {VnFormat.Money(changeAmt)})"
-                : $" (Đã xác nhận thanh toán qua mã VietQR số tiền {VnFormat.Money(guestFinal)})";
-
-            TempData["Success"] = $"Đã thanh toán thành công hóa đơn {referenceCode} cho Khách lẻ bằng hình thức {methodLabel}: {VnFormat.Money(guestFinal)}{cashSummary}.";
-            return RedirectToAction(nameof(Index), new
-            {
-                customerMode = "guest",
-                playtimeAmount,
-                fandBAmount,
-                paymentMethod,
-                referenceCode = $"HD-{DateTime.UtcNow:yyyyMMddHHmmss}"
-            });
+            TempData["Error"] = $"Khách lẻ không thể sử dụng mã voucher hội viên ({voucherCode.Trim().ToUpperInvariant()}).";
+            return RedirectToAction(nameof(Index), new { customerMode = "guest", sessionId, playtimeAmount, fandBAmount, paymentMethod, referenceCode });
         }
 
-        // Luồng Khách hội viên: kiểm tra trước FinalAmount nếu thanh toán bằng Tiền mặt
-        var preview = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
-            CustomerId: customerId!,
-            ReferenceCode: referenceCode,
-            InvoiceId: null,
-            PlaytimeAmount: playtimeAmount,
-            FandBAmount: fandBAmount,
-            PointsToRedeem: pointsToRedeem,
-            VoucherCode: string.IsNullOrWhiteSpace(voucherCode) ? null : voucherCode,
-            CashierId: CurrentActorId));
+        var command = new CheckoutCommand(
+            isGuest ? null : customerId,
+            referenceCode,
+            sessionId,
+            playtimeAmount,
+            fandBAmount,
+            pointsToRedeem,
+            voucherCode,
+            CurrentActorId,
+            cashReceived);
 
-        if (!preview.IsValid)
+        if (paymentMethod != "Cash" && paymentMethod != "VietQR" && paymentMethod != "Wallet") return BadRequest("Hình thức thanh toán không hợp lệ.");
+        if (paymentMethod == "VietQR" && !new BankTransferSettings(HttpContext.RequestServices.GetRequiredService<IConfiguration>()).CanCreateQr)
         {
-            TempData["Error"] = string.Join(" ", preview.Errors);
-            return RedirectToAction(nameof(Index), new { customerId, customerMode = "member", sessionId, playtimeAmount, fandBAmount, pointsToRedeem, voucherCode, paymentMethod, cashReceived, referenceCode });
+            TempData["Error"] = "Chưa cấu hình tài khoản nhận chuyển khoản.";
+            return RedirectToAction(nameof(Index), new { referenceCode });
         }
-
-        decimal memberCashReceived = cashReceived ?? preview.FinalAmount;
-        if (isCash && memberCashReceived < preview.FinalAmount)
-        {
-            TempData["Error"] = $"Số tiền khách đưa ({VnFormat.Money(memberCashReceived)}) nhỏ hơn tổng thanh toán ({VnFormat.Money(preview.FinalAmount)}). Vui lòng nhập đủ số tiền khách đưa.";
-            return RedirectToAction(nameof(Index), new { customerId, customerMode = "member", sessionId, playtimeAmount, fandBAmount, pointsToRedeem, voucherCode, paymentMethod = "Cash", cashReceived = memberCashReceived, referenceCode });
-        }
-
-        // Thanh toán bằng bất kỳ hình thức nào (VietQR hoặc Tiền mặt) đều cộng điểm và xét hạng cho hội viên
-        var result = await _loyaltyService.CommitCheckoutAsync(new CheckoutLoyaltyRequest(
-            CustomerId: customerId!,
-            ReferenceCode: referenceCode,
-            InvoiceId: null,
-            PlaytimeAmount: playtimeAmount,
-            FandBAmount: fandBAmount,
-            PointsToRedeem: pointsToRedeem,
-            VoucherCode: string.IsNullOrWhiteSpace(voucherCode) ? null : voucherCode,
-            CashierId: CurrentActorId));
+        CheckoutPaymentResult result = await _checkout.SubmitDraftAsync(command, paymentMethod);
 
         if (!result.Success)
         {
             TempData["Error"] = result.Message;
+        }
+        else if (result.Pending)
+        {
+            TempData["Warning"] = result.Message;
         }
         else if (result.Duplicate)
         {
@@ -449,67 +494,114 @@ public class LoyaltyTestController : Controller
         }
         else
         {
-            decimal totalDiscount = (playtimeAmount + fandBAmount) - result.FinalAmount;
-            await RecordInvoiceAndPaymentAsync(sessionId, customerId, playtimeAmount, fandBAmount, totalDiscount, result.FinalAmount, dbPaymentMethod);
-
-            decimal memberChange = isCash ? (memberCashReceived - result.FinalAmount) : 0m;
-            string paymentDetail = isCash
-                ? $" [Hình thức: Tiền mặt · Khách đưa: {VnFormat.Money(memberCashReceived)} · Trả lại khách: {VnFormat.Money(memberChange)}]"
-                : $" [Hình thức: Chuyển khoản VietQR · Số tiền: {VnFormat.Money(result.FinalAmount)}]";
-
-            TempData["Success"] = result.Message + paymentDetail;
+            TempData["Success"] = $"{result.Message} Số tiền: {VnFormat.Money(result.FinalAmount)}. Tiền trả lại khách: {VnFormat.Money(result.ChangeAmount)}.";
         }
 
         return RedirectToAction(nameof(Index), new
         {
-            customerId,
-            customerMode = "member",
-            playtimeAmount,
-            fandBAmount,
-            pointsToRedeem = 0,
-            paymentMethod,
-            referenceCode
+            referenceCode = result.ReferenceCode ?? referenceCode
         });
+    }
+
+    [HttpPost("/CashierSimulator/ConfirmTransfer"), ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmTransfer(string referenceCode, bool receivedTransfer)
+    {
+        if (!ModelState.IsValid || !receivedTransfer)
+            TempData["Error"] = "Hãy kiểm tra tiền vào tài khoản nhận, đúng số tiền và nội dung, rồi tích ô xác nhận.";
+        else
+        {
+            var result = await _checkout.ConfirmTransferManuallyAsync(referenceCode, CurrentActorId ?? "");
+            TempData[result.Success ? "Success" : "Error"] = result.Message;
+        }
+        return RedirectToAction(nameof(Index), new { referenceCode });
+    }
+
+    [HttpPost("/CashierSimulator/ReopenTransfer"), ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReopenTransfer(string referenceCode, bool checkedUnpaid)
+    {
+        if (!ModelState.IsValid || !checkedUnpaid)
+        {
+            TempData["Error"] = "Kiểm tra chưa nhận tiền cho QR cũ trước khi sửa thanh toán.";
+            return RedirectToAction(nameof(Index), new { referenceCode });
+        }
+        var result = await _checkout.ReopenTransferAsync(referenceCode, CurrentActorId ?? "");
+        TempData[result.Success ? "Success" : "Error"] = result.Message;
+        return RedirectToAction(nameof(Index), new { referenceCode = result.ReferenceCode ?? referenceCode });
+    }
+
+    [HttpPost("/CashierSimulator/SwitchToCash"), ValidateAntiForgeryToken]
+    public async Task<IActionResult> SwitchToCash(string referenceCode, decimal cashReceived, string reason, bool checkedCashAndBank)
+    {
+        if (!ModelState.IsValid || !checkedCashAndBank)
+        {
+            TempData["Error"] = "Hãy kiểm tra chưa nhận tiền chuyển khoản và xác nhận đã nhận đủ tiền mặt.";
+            return RedirectToAction(nameof(Index), new { referenceCode, cashMode = true, switchCashReceived = cashReceived, switchReason = reason });
+        }
+        var result = await _checkout.SwitchTransferToCashAsync(referenceCode, cashReceived, reason, CurrentActorId ?? "");
+        TempData[result.Success ? "Success" : "Error"] = result.Success
+            ? $"{result.Message} Tiền trả lại khách: {VnFormat.Money(result.ChangeAmount)}." : result.Message;
+        return RedirectToAction(nameof(Index), new { referenceCode, cashMode = !result.Success, switchCashReceived = cashReceived, switchReason = reason });
+    }
+
+    [HttpGet("/CashierSimulator/CheckoutStatus")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> CheckoutStatus(string referenceCode)
+    {
+        var intent = await _context.PaymentIntents.AsNoTracking().SingleOrDefaultAsync(i => i.ReferenceCode == referenceCode);
+        if (intent == null) return NotFound();
+        return Json(new { status = intent.Status == PaymentIntent.StatusExpired ? PaymentIntent.StatusPending : intent.Status });
     }
 
     // ── Helpers tích hợp Vận hành bàn (PlaySessions) & Thực đơn F&B (Orders/OrderDetails) ──
 
-    private async Task<List<CheckoutSessionItemViewModel>> LoadCheckoutSessionsAsync()
+    private async Task<List<CheckoutSessionItemViewModel>> LoadCheckoutSessionsAsync(int? includeSessionId = null)
     {
         try
         {
+            int targetId = includeSessionId ?? 0;
             return await _context.Database.SqlQuery<CheckoutSessionItemViewModel>($@"
+                ;WITH RankedSessions AS (
+                    SELECT
+                        s.Id AS SessionId,
+                        ISNULL(t.TableCode, CONCAT(N'Bàn #', s.TableId)) AS TableCode,
+                        CAST(NULL AS nvarchar(450)) AS CustomerId,
+                        CAST(NULL AS nvarchar(256)) AS CustomerName,
+                        s.StartAtUtc AS StartAtUtc,
+                        s.EndAtUtc AS EndAtUtc,
+                        s.HourlyRateSnapshot AS HourlyRateSnapshot,
+                        CASE
+                            WHEN OBJECT_ID(N'dbo.fn_CalcPlaytimeAmount', N'FN') IS NOT NULL
+                                 AND dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) IS NOT NULL
+                            THEN dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
+                            WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
+                            ELSE CAST(ROUND(
+                                (CASE WHEN DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) < 1
+                                      THEN 1
+                                      ELSE DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
+                                 END / 60.0) * s.HourlyRateSnapshot, -3) AS decimal(18,2))
+                        END AS PlaytimeAmount,
+                        ISNULL((
+                            SELECT SUM(od.Subtotal)
+                            FROM dbo.Orders o
+                            INNER JOIN dbo.OrderDetails od ON od.OrderId = o.Id
+                            WHERE o.SessionId = s.Id AND o.Status = 'Served'
+                        ), 0) AS FandBAmount,
+                        s.Status AS Status,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY s.TableId
+                            ORDER BY CASE WHEN s.Status IN ('Active', 'Open') THEN 0 ELSE 1 END, s.StartAtUtc DESC, s.Id DESC
+                        ) AS Rn
+                    FROM dbo.PlaySessions s
+                    LEFT JOIN dbo.BilliardTables t ON t.Id = s.TableId
+                    WHERE NOT EXISTS (SELECT 1 FROM dbo.Invoices i WHERE i.SessionId = s.Id AND i.Status = 'Paid')
+                )
                 SELECT TOP 20
-                    s.Id AS SessionId,
-                    ISNULL(t.TableCode, CONCAT(N'Bàn #', s.TableId)) AS TableCode,
-                    s.CustomerId AS CustomerId,
-                    u.FullName AS CustomerName,
-                    s.StartAtUtc AS StartAtUtc,
-                    s.EndAtUtc AS EndAtUtc,
-                    s.HourlyRateSnapshot AS HourlyRateSnapshot,
-                    CASE
-                        WHEN OBJECT_ID(N'dbo.fn_CalcPlaytimeAmount', N'FN') IS NOT NULL
-                             AND dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) IS NOT NULL
-                        THEN dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
-                        WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
-                        ELSE CAST(ROUND(
-                            (CASE WHEN DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) < 1
-                                  THEN 1
-                                  ELSE DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
-                             END / 60.0) * s.HourlyRateSnapshot, -3) AS decimal(18,2))
-                    END AS PlaytimeAmount,
-                    ISNULL((
-                        SELECT SUM(od.Subtotal)
-                        FROM dbo.Orders o
-                        INNER JOIN dbo.OrderDetails od ON od.OrderId = o.Id
-                        WHERE o.SessionId = s.Id AND o.Status <> 'Cancelled'
-                    ), 0) AS FandBAmount,
-                    s.Status AS Status
-                FROM dbo.PlaySessions s
-                LEFT JOIN dbo.BilliardTables t ON t.Id = s.TableId
-                LEFT JOIN dbo.AspNetUsers u ON u.Id = s.CustomerId
-                WHERE NOT EXISTS (SELECT 1 FROM dbo.Invoices i WHERE i.SessionId = s.Id AND i.Status = 'Paid')
-                ORDER BY CASE WHEN s.Status IN ('Active', 'Open') THEN 0 ELSE 1 END, s.StartAtUtc DESC, s.Id DESC
+                    SessionId, TableCode, CustomerId, CustomerName,
+                    StartAtUtc, EndAtUtc, HourlyRateSnapshot,
+                    PlaytimeAmount, FandBAmount, Status
+                FROM RankedSessions
+                WHERE Rn = 1 OR SessionId = {targetId}
+                ORDER BY TableCode ASC, SessionId DESC
             ").ToListAsync();
         }
         catch
@@ -531,7 +623,7 @@ public class LoyaltyTestController : Controller
                 FROM dbo.Orders o
                 INNER JOIN dbo.OrderDetails od ON od.OrderId = o.Id
                 INNER JOIN dbo.Products p ON p.Id = od.ProductId
-                WHERE o.SessionId = {sessionId} AND o.Status <> 'Cancelled'
+                WHERE o.SessionId = {sessionId} AND o.Status = 'Served'
                 GROUP BY p.Name, od.UnitPrice
                 ORDER BY p.Name
             ").ToListAsync();
@@ -542,125 +634,13 @@ public class LoyaltyTestController : Controller
         }
     }
 
-    private async Task RecordInvoiceAndPaymentAsync(
-        int? sessionId,
-        string? customerId,
-        decimal totalPlaytime,
-        decimal totalFandB,
-        decimal discountAmount,
-        decimal finalAmount,
-        string dbPaymentMethod)
-    {
-        try
-        {
-            int resolvedSessionId = sessionId ?? 0;
-            var actorId = CurrentActorId;
-            if (string.IsNullOrEmpty(actorId))
-            {
-                actorId = await _context.Users.AsNoTracking().Select(u => u.Id).FirstOrDefaultAsync();
-            }
-            if (string.IsNullOrEmpty(actorId)) return;
-
-            if (resolvedSessionId <= 0)
-            {
-                var tableId = (await _context.Database
-                    .SqlQuery<int>($"SELECT TOP 1 Id AS [Value] FROM dbo.BilliardTables ORDER BY Id")
-                    .ToListAsync()).FirstOrDefault();
-                if (tableId <= 0) return;
-
-                resolvedSessionId = (await _context.Database.SqlQuery<int>($@"
-                    INSERT INTO dbo.PlaySessions (TableId, CustomerId, OpenedById, ClosedById, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status)
-                    OUTPUT INSERTED.Id AS [Value]
-                    VALUES ({tableId}, {customerId}, {actorId}, {actorId}, DATEADD(hour, -1, SYSUTCDATETIME()), SYSUTCDATETIME(), {totalPlaytime}, {totalPlaytime}, 'Closed');
-                ").ToListAsync()).FirstOrDefault();
-            }
-            else
-            {
-                await _context.Database.ExecuteSqlInterpolatedAsync($@"
-                    IF OBJECT_ID(N'dbo.PlaySessionTableSegments', N'U') IS NOT NULL
-                    BEGIN
-                        UPDATE dbo.PlaySessionTableSegments
-                        SET EndAtUtc = SYSUTCDATETIME()
-                        WHERE SessionId = {resolvedSessionId} AND EndAtUtc IS NULL;
-                    END;
-
-                    UPDATE dbo.PlaySessions
-                    SET Status = 'Closed',
-                        EndAtUtc = ISNULL(EndAtUtc, SYSUTCDATETIME()),
-                        ClosedById = ISNULL(ClosedById, {actorId}),
-                        CustomerId = ISNULL(CustomerId, {customerId}),
-                        PlaytimeAmount = {totalPlaytime}
-                    WHERE Id = {resolvedSessionId};
-
-                    UPDATE t
-                    SET t.Status = 'Available'
-                    FROM dbo.BilliardTables t
-                    INNER JOIN dbo.PlaySessions s ON s.TableId = t.Id
-                    WHERE s.Id = {resolvedSessionId} AND t.Status = 'InUse';
-                ");
-            }
-
-            if (resolvedSessionId <= 0) return;
-
-            var existingInvoiceId = (await _context.Database
-                .SqlQuery<int>($"SELECT TOP 1 Id AS [Value] FROM dbo.Invoices WHERE SessionId = {resolvedSessionId}")
-                .ToListAsync()).FirstOrDefault();
-
-            int invoiceId = existingInvoiceId;
-            if (invoiceId <= 0)
-            {
-                invoiceId = (await _context.Database.SqlQuery<int>($@"
-                    INSERT INTO dbo.Invoices (SessionId, CustomerId, TotalPlaytime, TotalFandB, DiscountAmount, Status, CreatedAtUtc)
-                    OUTPUT INSERTED.Id AS [Value]
-                    VALUES ({resolvedSessionId}, {customerId}, {totalPlaytime}, {totalFandB}, {discountAmount}, 'Paid', SYSUTCDATETIME());
-                ").ToListAsync()).FirstOrDefault();
-            }
-            else
-            {
-                await _context.Database.ExecuteSqlInterpolatedAsync($@"
-                    UPDATE dbo.Invoices
-                    SET CustomerId = {customerId},
-                        TotalPlaytime = {totalPlaytime},
-                        TotalFandB = {totalFandB},
-                        DiscountAmount = {discountAmount},
-                        Status = 'Paid'
-                    WHERE Id = {invoiceId};
-                ");
-            }
-
-            if (invoiceId > 0)
-            {
-                var activeShiftId = await _context.WorkShifts.AsNoTracking()
-                    .Where(s => s.StaffId == actorId && s.Status == WorkShift.StatusActive)
-                    .Select(s => (int?)s.Id)
-                    .FirstOrDefaultAsync();
-
-                await _context.Database.ExecuteSqlInterpolatedAsync($@"
-                    INSERT INTO dbo.PaymentTransactions (InvoiceId, PaymentMethod, AmountPaid, WorkShiftId, ReceivedById, TransactionTimeUtc)
-                    VALUES ({invoiceId}, {dbPaymentMethod}, {finalAmount}, {activeShiftId}, {actorId}, SYSUTCDATETIME());
-                ");
-            }
-        }
-        catch
-        {
-            // Không làm gián đoạn luồng tính điểm nếu DB đang chạy trong ngữ cảnh giả lập thiếu bảng phụ
-        }
-    }
-
     // POST /LoyaltyTest/SimulatePayment (Giữ lại cho tương thích cũ)
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SimulatePayment(string customerId, decimal finalAmount)
     {
-        var result = await _loyaltyService.CommitCheckoutAsync(new CheckoutLoyaltyRequest(
-            CustomerId: customerId,
-            ReferenceCode: $"SIM-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
-            InvoiceId: null,
-            PlaytimeAmount: finalAmount,
-            FandBAmount: 0m,
-            PointsToRedeem: 0,
-            VoucherCode: null,
-            CashierId: CurrentActorId));
+        var result = await _checkout.CompleteCashAsync(new CheckoutCommand(
+            customerId, $"SIM-{Guid.NewGuid():N}", null, finalAmount, 0m, 0, null, CurrentActorId));
 
         if (result.Success) TempData["Success"] = result.Message;
         else TempData["Error"] = result.Message;

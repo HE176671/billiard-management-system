@@ -3,10 +3,15 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Bms.Web.Data.Entities;
 
+/// <summary>
+/// Ánh xạ bảng dbo.Orders.
+/// </summary>
 [Table("Orders")]
 public class Order
 {
     public const string StatusPending = "Pending";
+    public const string StatusPreparing = "Preparing";
+    public const string StatusServed = "Served";
     public const string StatusCompleted = "Completed";
     public const string StatusRejected = "Rejected";
     public const string StatusCancelled = "Cancelled";
@@ -14,22 +19,23 @@ public class Order
     public const string SourceStaff = "Staff";
     public const string SourceQR = "QR";
 
+    [Key]
     public int Id { get; set; }
 
     public int SessionId { get; set; }
 
     [ForeignKey(nameof(SessionId))]
-    public PlaySession? Session { get; set; }
+    public PlaySession Session { get; set; } = null!;
 
     [Column(TypeName = "datetime2(0)")]
     public DateTime OrderTimeUtc { get; set; } = DateTime.UtcNow;
 
-    [Required]
-    [MaxLength(20)]
+    [Required, MaxLength(20)]
+    [Column(TypeName = "varchar(20)")]
     public string Status { get; set; } = StatusPending;
 
-    [Required]
-    [MaxLength(20)]
+    [Required, MaxLength(20)]
+    [Column(TypeName = "varchar(20)")]
     public string OrderSource { get; set; } = SourceStaff;
 
     public int? ClientSessionId { get; set; }

@@ -29,7 +29,7 @@ public interface ICustomerSegmentService
     /// <summary>Tính phân khúc RFM cố định theo thứ tự ưu tiên bảng F6.</summary>
     string ClassifySegment(DateTime createdAtUtc, DateTime? lastPaidDateUtc, int frequency12M, DateTime? nowUtc = null);
 
-    /// <summary>Lấy danh sách RFM cho toàn bộ khách hàng (có cache IMemoryCache 10 phút).</summary>
+    /// <summary>Lấy dữ liệu RFM hiện tại, không dùng bản sao điểm/hạng đã cũ.</summary>
     Task<IReadOnlyList<CustomerRfmProfile>> GetAllProfilesAsync(bool forceRefresh = false, DateTime? nowUtc = null, CancellationToken ct = default);
 
     /// <summary>Lấy thông tin RFM của 1 khách hàng.</summary>
@@ -95,11 +95,7 @@ public class CustomerSegmentService : ICustomerSegmentService
     public async Task<IReadOnlyList<CustomerRfmProfile>> GetAllProfilesAsync(
         bool forceRefresh = false, DateTime? nowUtc = null, CancellationToken ct = default)
     {
-        if (!forceRefresh && nowUtc == null && _cache.TryGetValue(CacheKey, out IReadOnlyList<CustomerRfmProfile>? cached) && cached != null)
-        {
-            return cached;
-        }
-
+        // Read current balances and tiers so CRM matches checkout immediately.
         var now = nowUtc ?? DateTime.UtcNow;
         var since = now.AddDays(-365);
 
@@ -131,7 +127,7 @@ public class CustomerSegmentService : ICustomerSegmentService
         {
             earnStats.TryGetValue(u.Id, out var st);
             int freq = st != null ? (st.Frequency > 0 ? st.Frequency : st.TotalCount) : 0;
-            decimal monetary = Math.Max(u.TotalSpend, st?.Monetary ?? 0m);
+            decimal monetary = st?.Monetary ?? 0m;
             DateTime? lastPaid = u.LastPaidDate ?? st?.MaxDate;
             int? rDays = lastPaid.HasValue ? Math.Max(0, (int)Math.Floor((now - lastPaid.Value).TotalDays)) : null;
 
@@ -157,11 +153,6 @@ public class CustomerSegmentService : ICustomerSegmentService
                 SuggestedAction: action,
                 Email: u.Email != null && u.Email.EndsWith("@noemail.bms.local", StringComparison.OrdinalIgnoreCase) ? null : u.Email,
                 DateOfBirth: u.DateOfBirth));
-        }
-
-        if (nowUtc == null)
-        {
-            _cache.Set(CacheKey, (IReadOnlyList<CustomerRfmProfile>)profiles, TimeSpan.FromMinutes(10));
         }
 
         return profiles;

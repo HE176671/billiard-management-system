@@ -101,7 +101,7 @@ public class PointAdjustmentController : Controller
                     RequestedAtUtc = now,
                     ReviewedById = actorId,
                     ReviewedAtUtc = now,
-                    ReviewNote = $"Tự động duyệt ({actorDisplay} — {actorRoleLabel})"
+                    ReviewNote = "Manager đã phê duyệt"
                 };
                 _db.PointAdjustmentRequests.Add(req);
                 await _db.SaveChangesAsync();

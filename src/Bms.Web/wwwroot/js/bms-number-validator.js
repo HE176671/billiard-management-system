@@ -45,7 +45,28 @@
         }
     }
 
+    function showReadonlyNotice(input) {
+        if (!input.readOnly || !input.dataset.readonlyMessage) return;
+        clearWarning(input);
+        const container = input.parentElement;
+        let notice = container.querySelector('.bms-readonly-notice');
+        if (!notice) {
+            notice = document.createElement('div');
+            notice.className = 'bms-readonly-notice alert alert-warning py-2 px-2 mt-2 mb-0 small';
+            notice.setAttribute('role', 'status');
+            notice.setAttribute('aria-live', 'polite');
+            notice.id = input.id + '-readonly-notice';
+            container.insertBefore(notice, input.nextSibling);
+            input.setAttribute('aria-describedby', [input.getAttribute('aria-describedby'), notice.id].filter(Boolean).join(' '));
+        }
+        notice.textContent = input.dataset.readonlyMessage;
+    }
+
     function validateNumberInput(input, triggeredByBadChar, badCharReason) {
+        if (input.readOnly || input.disabled) {
+            clearWarning(input);
+            return true;
+        }
         const allowSigned = input.getAttribute('data-allow-signed') === 'true';
         const raw = (input.value || '').trim();
         const minAttr = input.getAttribute('min');
@@ -118,7 +139,25 @@
             }
         }
 
+        input.addEventListener('click', () => showReadonlyNotice(input));
+        input.addEventListener('focus', () => showReadonlyNotice(input));
+        input.addEventListener('beforeinput', function (e) {
+            if (input.readOnly) {
+                e.preventDefault();
+                showReadonlyNotice(input);
+            }
+        });
         input.addEventListener('keydown', function (e) {
+            if (input.disabled) return;
+            if (input.readOnly) {
+                const copyOrSelect = (e.ctrlKey || e.metaKey) && ['a', 'c'].includes(e.key.toLowerCase());
+                const navigation = ALLOWED_CONTROL_KEYS.has(e.key) && !['Backspace', 'Delete'].includes(e.key);
+                if (!copyOrSelect && !navigation && (e.key.length === 1 || ['Backspace', 'Delete'].includes(e.key))) {
+                    e.preventDefault();
+                    showReadonlyNotice(input);
+                }
+                return;
+            }
             if (e.ctrlKey || e.metaKey || e.altKey) return;
             if (ALLOWED_CONTROL_KEYS.has(e.key)) return;
 
@@ -142,6 +181,12 @@
         });
 
         input.addEventListener('paste', function (e) {
+            if (input.disabled) return;
+            if (input.readOnly) {
+                e.preventDefault();
+                showReadonlyNotice(input);
+                return;
+            }
             const pasted = (e.clipboardData || window.clipboardData)?.getData('text') || '';
             const trimmed = pasted.trim();
             const pattern = allowSigned ? /^-?\d+(\.\d+)?$/ : /^\d+(\.\d+)?$/;
@@ -176,7 +221,10 @@
                 const numInputs = form.querySelectorAll('input[type="number"], input[data-non-negative="true"]');
                 let firstInvalid = null;
                 numInputs.forEach(inp => {
-                    if (inp.disabled || inp.type === 'hidden') return;
+                    if (inp.disabled || inp.readOnly || inp.type === 'hidden') {
+                        clearWarning(inp);
+                        return;
+                    }
                     const raw = (inp.value || '').trim();
                     if (inp.hasAttribute('required') && raw === '' && !(inp.validity && inp.validity.badInput)) {
                         showWarning(inp, 'Cảnh báo: Vui lòng nhập số hợp lệ (từ 0 trở lên).');

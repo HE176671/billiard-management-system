@@ -1,0 +1,71 @@
+@model Bms.Web.Models.ProfileViewModel
+@{
+    ViewData["Title"] = "Hồ sơ của tôi";
+    Layout = "_Layout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <!-- Stat cards hạng & điểm -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon amber"><i class="bi bi-trophy-fill"></i></div>
+            <div>
+                <div class="stat-value">@Model.TotalPoints</div>
+                <div class="stat-label">Điểm khả dụng</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-icon red"><i class="bi bi-award-fill"></i></div>
+            <div>
+                <div class="stat-value" style="font-size:1.1rem">@Model.RankName</div>
+                <div class="stat-label">Hạng thành viên</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div><div class="stat-value" style="font-size:1.1rem">@Bms.Web.Services.VnFormat.Money(Model.Spend12Months)</div><div class="stat-label">Tích lũy xét hạng 365 ngày</div><small>@(Model.NextTierName == null ? "Đang ở hạng cao nhất" : $"Còn {Bms.Web.Services.VnFormat.Money(Model.AmountToNextTier)} lên {Model.NextTierName}")</small></div></div></div>
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div><div class="stat-value" style="font-size:1.1rem">@Bms.Web.Services.VnFormat.Money(Model.WalletBalance)</div><div class="stat-label">Số dư trả trước</div><a asp-controller="Wallet" asp-action="Index">Xem lịch sử ví</a></div></div></div>
+</div>
+<p class="text-muted mt-3">Nạp tiền và thanh toán bằng tiền mặt, chuyển khoản hoặc ví đều được cộng điểm và tích lũy xét hạng: 20.000đ = 1 điểm × hệ số hạng trước giao dịch. Hóa đơn tích điểm theo số tiền thực trả sau ưu đãi và đổi điểm; chỉ đổi điểm khi khách yêu cầu. Xét giữ hạng hàng tháng, có 30 ngày ân hạn.</p>
+
+<!-- Thông tin hồ sơ -->
+<div class="form-card mt-4">
+    <div class="data-card-header mb-3" style="border-bottom:1px solid #f1f5f9;padding-bottom:0.75rem">
+        <span class="data-card-title"><i class="bi bi-person-circle me-2"></i>Thông tin cá nhân</span>
+        <a asp-action="Edit" class="btn-primary-bms">
+            <i class="bi bi-pencil-square"></i> Chỉnh sửa
+        </a>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Họ và tên</label>
+            <div style="font-weight:600">@Model.FullName</div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Tên đăng nhập</label>
+            <div><code>@(Model.UserName ?? "—")</code></div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Email</label>
+            <div>@(Model.Email ?? "—")</div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Số điện thoại</label>
+            <div>@(Model.PhoneNumber ?? "—")</div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.5px">Ngày tham gia</label>
+            <div>@Model.CreatedAtUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm")</div>
+        </div>
+    </div>
+</div>
