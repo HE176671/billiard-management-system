@@ -15,20 +15,9 @@ namespace Bms.Web.Controllers;
 [Authorize(Roles = "Staff,Manager")]
 public class StaffController : Controller
 {
-    private readonly ApplicationDbContext _db;
-    private readonly IShiftService _shifts;
-    private readonly UserManager<ApplicationUser> _users;
-
-    public StaffController(ApplicationDbContext db, IShiftService shifts, UserManager<ApplicationUser> users)
-    {
-        _db = db;
-        _shifts = shifts;
-        _users = users;
-    }
-
-    // GET /Staff (Đã gộp về trang Ca của tôi /Shift)
+    // GET /Staff → sơ đồ bàn là màn hình làm việc chính của nhân viên quầy
     public IActionResult Index()
     {
-        return RedirectToAction("Index", "Shift");
+        return RedirectToAction("Index", "Table");
     }
 }

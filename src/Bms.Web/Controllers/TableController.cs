@@ -105,7 +105,6 @@ public class TableController : Controller
     // POST: /Table/OpenSession
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [RequireOpenShift] // TV5 - BR-23: quán phải đang mở ca mới được mở bàn
     public async Task<IActionResult> OpenSession([FromForm] OpenSessionRequest request)
     {
         if (!ModelState.IsValid)

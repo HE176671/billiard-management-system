@@ -1,38 +1,9 @@
 @model Bms.Web.Models.StaffHomeViewModel
 @{
     Layout = "_AdminLayout";
-    var s = Model.ActiveShift;
 }
 <partial name="_Alerts" />
 <h5 class="mb-3">Xin chào, @Model.FullName</h5>
-
-<div class="form-card mb-4">
-    @if (s == null)
-    {
-        <div class="d-flex align-items-center gap-3 flex-wrap">
-            <div class="stat-icon amber"><i class="bi bi-exclamation-circle"></i></div>
-            <div>
-                <div style="font-weight:600">Bạn chưa mở ca</div>
-                <div class="text-muted" style="font-size:0.85rem">Mở ca và nhập tiền đầu ca trước khi thu tiền mặt của khách.</div>
-            </div>
-            <a asp-controller="Shift" asp-action="Index" class="btn-primary-bms ms-auto"><i class="bi bi-play-fill"></i> Mở ca</a>
-        </div>
-    }
-    else
-    {
-        <div class="d-flex align-items-center gap-3 flex-wrap">
-            <div class="stat-icon green"><i class="bi bi-cash-coin"></i></div>
-            <div>
-                <div style="font-weight:600">Ca #@s.Shift.Id đang mở từ @s.Shift.StartTimeUtc.ToVn().ToString("HH:mm dd/MM")</div>
-                <div class="text-muted" style="font-size:0.85rem">
-                    Đầu ca @s.Shift.StartingCash.ToString("N0") VND · tiền mặt đã thu @s.CashCollected.ToString("N0") VND ·
-                    kỳ vọng trong két <strong>@s.ExpectedCash.ToString("N0") VND</strong>
-                </div>
-            </div>
-            <a asp-controller="Shift" asp-action="Index" class="btn-outline-bms ms-auto"><i class="bi bi-stop-circle"></i> Xem / đóng ca</a>
-        </div>
-    }
-</div>
 
 <div class="row g-3">
     <div class="col-sm-6 col-xl-3"><div class="stat-card"><div class="stat-icon green"><i class="bi bi-check2-circle"></i></div>

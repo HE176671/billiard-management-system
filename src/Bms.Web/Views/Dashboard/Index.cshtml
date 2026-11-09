@@ -48,14 +48,14 @@
         </div>
     </div>
 
-    <!-- Ca làm việc -->
+    <!-- Phiên chơi -->
     <div class="col-sm-6 col-xl-4">
-        <a asp-controller="Shift" asp-action="Manage" class="text-decoration-none text-reset">
+        <a asp-controller="OperationsReport" asp-action="Index" class="text-decoration-none text-reset">
             <div class="stat-card">
-                <div class="stat-icon amber"><i class="bi bi-clipboard-check"></i></div>
+                <div class="stat-icon amber"><i class="bi bi-stopwatch"></i></div>
                 <div>
-                    <div class="stat-value">@Model.ActiveShiftCount <span style="font-size:0.9rem;font-weight:normal">ca</span></div>
-                    <div class="stat-label">Ca đang mở@(Model.TodayShiftsWithDifference > 0 ? $" · {Model.TodayShiftsWithDifference} ca lệch tiền" : "")</div>
+                    <div class="stat-value">@Model.ActiveSessionCount <span style="font-size:0.9rem;font-weight:normal">phiên</span></div>
+                    <div class="stat-label">Đang chơi · @Model.TodayClosedSessionCount phiên đã kết thúc hôm nay</div>
                 </div>
             </div>
         </a>
@@ -165,8 +165,8 @@
             <a asp-controller="Revenue" asp-action="Index" class="btn-primary-bms" style="font-size:0.8rem">
                 <i class="bi bi-graph-up"></i> Báo cáo doanh thu
             </a>
-            <a asp-controller="Shift" asp-action="Manage" class="btn-outline-bms" style="font-size:0.8rem">
-                <i class="bi bi-clipboard-check"></i> Quản lý ca
+            <a asp-controller="OperationsReport" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
+                <i class="bi bi-clipboard-data"></i> Báo cáo vận hành
             </a>
             <a asp-controller="CustomerManagement" asp-action="Index" class="btn-outline-bms" style="font-size:0.8rem">
                 <i class="bi bi-person-vcard"></i> Quản lý khách hàng

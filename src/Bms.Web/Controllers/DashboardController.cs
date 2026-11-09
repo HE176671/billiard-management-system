@@ -50,9 +50,9 @@ public class DashboardController : Controller
             .Where(p => p.TransactionTimeUtc >= month && p.TransactionTimeUtc < end)
             .SumAsync(p => (decimal?)p.AmountPaid) ?? 0;
 
-        vm.ActiveShiftCount = await _context.WorkShifts.CountAsync(s => s.Status == WorkShift.StatusActive);
-        vm.TodayShiftsWithDifference = await _context.WorkShifts.CountAsync(s => s.Status == WorkShift.StatusClosed
-            && s.EndTimeUtc >= start && s.EndTimeUtc < end && s.EndingCash != s.ExpectedCash);
+        vm.ActiveSessionCount = await _context.PlaySessions.CountAsync(s => s.Status == "Active");
+        vm.TodayClosedSessionCount = await _context.PlaySessions.CountAsync(s => s.Status == "Closed"
+            && s.EndAtUtc >= start && s.EndAtUtc < end);
 
         // ══════════════════════════════════════════════════════════════
         // 2. TV2 (Dung): Khách hàng thành viên & Phân bổ Hạng

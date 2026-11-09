@@ -1,0 +1,368 @@
+@model Bms.Web.Models.OperationsReportViewModel
+@{
+    ViewData["Title"] = "Báo cáo vận hành";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+
+    string HeatColor(decimal pct)
+    {
+        if (pct <= 0) return "#f8fafc";
+        if (pct < 20) return "#dbeafe";
+        if (pct < 40) return "#93c5fd";
+        if (pct < 60) return "#fde68a";
+        if (pct < 80) return "#fdba74";
+        return "#fca5a5";
+    }
+
+    string HeatTextColor(decimal pct) => pct <= 0 ? "#94a3b8" : "#0f172a";
+}
+
+<p class="text-muted mb-3">
+    Phân tích tỷ lệ lấp đầy bàn theo khung giờ mở cửa, biểu đồ nhiệt (heatmap) giờ cao điểm theo thứ trong tuần,
+    hiệu suất từng bàn và top món F&amp;B bán chạy (giờ Việt Nam UTC+7).
+</p>
+
+<!-- Bộ lọc báo cáo -->
+<form method="get" class="form-card mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-sm-6 col-md-2">
+            <label for="from" class="form-label">Từ ngày</label>
+            <input id="from" name="from" type="date" value="@Model.From.ToString("yyyy-MM-dd")" class="form-control" required />
+        </div>
+        <div class="col-sm-6 col-md-2">
+            <label for="to" class="form-label">Đến ngày</label>
+            <input id="to" name="to" type="date" value="@Model.To.ToString("yyyy-MM-dd")" class="form-control" required />
+        </div>
+        <div class="col-6 col-md-2">
+            <label for="openHour" class="form-label">Giờ mở cửa</label>
+            <select id="openHour" name="openHour" class="form-select">
+                @for (int h = 0; h <= 23; h++)
+                {
+                    <option value="@h" selected="@(Model.OpenHour == h)">@($"{h:D2}:00")</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-md-2">
+            <label for="closeHour" class="form-label">Giờ đóng cửa</label>
+            <select id="closeHour" name="closeHour" class="form-select">
+                @for (int h = 1; h <= 24; h++)
+                {
+                    <option value="@h" selected="@(Model.CloseHour == h)">@($"{h:D2}:00")</option>
+                }
+            </select>
+        </div>
+        <div class="col-sm-6 col-md-2">
+            <label for="tableTypeId" class="form-label">Loại bàn</label>
+            <select id="tableTypeId" name="tableTypeId" class="form-select">
+                <option value="">Tất cả loại bàn</option>
+                @foreach (var opt in Model.TableTypeOptions)
+                {
+                    <option value="@opt.Id" selected="@(Model.TableTypeId == opt.Id)">@opt.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-sm-6 col-md-2 d-flex gap-2">
+            <button type="submit" class="btn-primary-bms">
+                <i class="bi bi-funnel"></i> Xem
+            </button>
+            <a asp-action="Export"
+               asp-route-from="@Model.From.ToString("yyyy-MM-dd")"
+               asp-route-to="@Model.To.ToString("yyyy-MM-dd")"
+               asp-route-openHour="@Model.OpenHour"
+               asp-route-closeHour="@Model.CloseHour"
+               asp-route-tableTypeId="@Model.TableTypeId"
+               class="btn-outline-bms" title="Xuất file CSV">
+                <i class="bi bi-download"></i> CSV
+            </a>
+        </div>
+    </div>
+</form>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div asp-validation-summary="All" class="alert alert-danger mb-4"></div>
+}
+else
+{
+    <!-- Hàng thẻ KPI tổng quan -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon blue"><i class="bi bi-pie-chart-fill"></i></div>
+                <div>
+                    <div class="stat-value">@Model.OverallOccupancyPercent%</div>
+                    <div class="stat-label">Tỷ lệ lấp đầy (@($"{Model.OpenHour:D2}:00–{Model.CloseHour:D2}:00"))</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon green"><i class="bi bi-clock-history"></i></div>
+                <div>
+                    <div class="stat-value">@Model.TotalPlayHours <span style="font-size:0.9rem;font-weight:normal">giờ</span></div>
+                    <div class="stat-label">Tổng giờ có khách (@Model.TotalDays ngày · @Model.TotalTables bàn)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon amber"><i class="bi bi-check2-all"></i></div>
+                <div>
+                    <div class="stat-value">@Model.ClosedSessionCount <span style="font-size:0.9rem;font-weight:normal">phiên</span></div>
+                    <div class="stat-label">TB @Model.AvgSessionsPerDay phiên/ngày · @Model.AvgSessionMinutes phút/phiên</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-icon red"><i class="bi bi-fire"></i></div>
+                <div>
+                    <div class="stat-value" style="font-size:1.1rem">@Model.PeakSlotLabel</div>
+                    <div class="stat-label">Khung giờ cao điểm nhất (@Model.PeakSlotPercent%)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. Tỷ lệ lấp đầy & Doanh thu giờ chơi theo Loại bàn -->
+    <div class="data-card mb-4">
+        <div class="data-card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="data-card-title">
+                <i class="bi bi-layers me-1 text-primary"></i> Tỷ lệ lấp đầy &amp; Doanh thu giờ chơi theo loại bàn
+            </span>
+            <span class="text-muted" style="font-size:0.8rem">
+                Tổng doanh thu giờ chơi: <strong>@Model.TotalPlaytimeRevenue.ToString("N0") VND</strong>
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Loại bàn</th>
+                        <th class="text-center">Số bàn</th>
+                        <th class="text-center">Phiên kết thúc</th>
+                        <th class="text-end">Giờ có khách</th>
+                        <th class="text-end">Giờ khả dụng</th>
+                        <th style="min-width:170px">Tỷ lệ lấp đầy</th>
+                        <th class="text-end">Doanh thu giờ chơi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.TableTypeRows)
+                    {
+                        <tr>
+                            <td><strong>@row.TableTypeName</strong></td>
+                            <td class="text-center">@row.TableCount</td>
+                            <td class="text-center">@row.ClosedSessionCount</td>
+                            <td class="text-end">@row.OccupiedHours giờ</td>
+                            <td class="text-end text-muted">@row.AvailableHours giờ</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height:8px">
+                                        <div class="progress-bar bg-danger" role="progressbar" style="width:@Math.Min(100, row.OccupancyPercent)%"></div>
+                                    </div>
+                                    <span style="min-width:48px;font-weight:600;font-size:0.85rem">@row.OccupancyPercent%</span>
+                                </div>
+                            </td>
+                            <td class="text-end fw-semibold">@row.PlaytimeRevenue.ToString("N0") VND</td>
+                        </tr>
+                    }
+                    @if (!Model.TableTypeRows.Any())
+                    {
+                        <tr><td colspan="7" class="text-center py-4 text-muted">Không có bàn nào khớp bộ lọc.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 2. Biểu đồ nhiệt (Heatmap) giờ cao điểm theo Thứ trong tuần -->
+    <div class="data-card mb-4">
+        <div class="data-card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="data-card-title">
+                <i class="bi bi-grid-3x3-gap-fill me-1 text-danger"></i> Biểu đồ nhiệt (Heatmap) mật độ khách theo Thứ &amp; Khung giờ
+            </span>
+            <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:0.75rem">
+                <span class="badge" style="background:#f8fafc;color:#475569;border:1px solid #cbd5e1">0%</span>
+                <span class="badge" style="background:#dbeafe;color:#0f172a">&lt;20%</span>
+                <span class="badge" style="background:#93c5fd;color:#0f172a">20–40%</span>
+                <span class="badge" style="background:#fde68a;color:#0f172a">40–60%</span>
+                <span class="badge" style="background:#fdba74;color:#0f172a">60–80%</span>
+                <span class="badge" style="background:#fca5a5;color:#0f172a">&ge;80%</span>
+            </div>
+        </div>
+        <div class="table-responsive p-3">
+            <table class="table table-bordered table-sm mb-0 text-center align-middle" style="font-size:0.78rem">
+                <thead>
+                    <tr>
+                        <th class="text-start" style="min-width:110px">Thứ (Số ngày)</th>
+                        @foreach (int hr in Model.HeatmapHours)
+                        {
+                            <th style="min-width:52px">@($"{hr:D2}h")</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var dayRow in Model.HeatmapRows)
+                    {
+                        <tr>
+                            <td class="text-start fw-semibold">
+                                @dayRow.DayLabel
+                                <span class="text-muted fw-normal">(@dayRow.DayOccurrencesInRange)</span>
+                            </td>
+                            @foreach (var cell in dayRow.Cells)
+                            {
+                                <td style="background:@HeatColor(cell.OccupancyPercent);color:@HeatTextColor(cell.OccupancyPercent);font-weight:600"
+                                    title="@dayRow.DayLabel @($"{cell.Hour:D2}:00-{cell.Hour + 1:D2}:00"): @cell.OccupiedMinutes phút / @cell.CapacityMinutes phút khả dụng (@cell.OccupancyPercent%)">
+                                    @(cell.OccupancyPercent > 0 ? $"{cell.OccupancyPercent:0.#}%" : "—")
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 3. Gợi ý điều phối bàn (Nhiều khách nhất / Ít khách nhất) & Top món F&B -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="data-card h-100">
+                <div class="data-card-header">
+                    <span class="data-card-title">
+                        <i class="bi bi-arrows-angle-Vertical me-1 text-warning"></i> Bàn khai thác cao nhất &amp; thấp nhất
+                    </span>
+                </div>
+                <div class="p-3">
+                    <div class="mb-2 fw-semibold text-success" style="font-size:0.85rem">
+                        <i class="bi bi-graph-up-arrow me-1"></i> Top 3 bàn đông khách nhất
+                    </div>
+                    <table class="table table-sm mb-3">
+                        <thead>
+                            <tr><th>Mã bàn</th><th>Loại</th><th>Số phiên</th><th>Giờ chơi</th><th class="text-end">Lấp đầy</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in Model.MostUsedTables)
+                            {
+                                <tr>
+                                    <td><strong>@t.TableCode</strong> (Tầng @t.FloorNumber)</td>
+                                    <td>@t.TableTypeName</td>
+                                    <td>@t.SessionCount</td>
+                                    <td>@t.OccupiedHours giờ</td>
+                                    <td class="text-end fw-semibold text-success">@t.OccupancyPercent%</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <div class="mb-2 fw-semibold text-secondary" style="font-size:0.85rem">
+                        <i class="bi bi-graph-down-arrow me-1"></i> Top 3 bàn ít sử dụng nhất (cần ưu tiên xếp khách / kiểm tra vị trí)
+                    </div>
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Mã bàn</th><th>Loại</th><th>Số phiên</th><th>Giờ chơi</th><th class="text-end">Lấp đầy</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in Model.LeastUsedTables)
+                            {
+                                <tr>
+                                    <td><strong>@t.TableCode</strong> (Tầng @t.FloorNumber)</td>
+                                    <td>@t.TableTypeName</td>
+                                    <td>@t.SessionCount</td>
+                                    <td>@t.OccupiedHours giờ</td>
+                                    <td class="text-end fw-semibold text-muted">@t.OccupancyPercent%</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="data-card h-100">
+                <div class="data-card-header d-flex justify-content-between align-items-center">
+                    <span class="data-card-title">
+                        <i class="bi bi-cup-straw me-1 text-success"></i> Top món F&amp;B bán chạy
+                    </span>
+                    <span class="text-muted" style="font-size:0.8rem">
+                        Tổng F&amp;B: <strong>@Model.TotalFandBRevenue.ToString("N0") VND</strong>
+                    </span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Món</th>
+                                <th class="text-center">SL gọi</th>
+                                <th class="text-center">SL hủy</th>
+                                <th class="text-center">Thực bán</th>
+                                <th class="text-end">Doanh thu</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.TopFandBItems)
+                            {
+                                <tr>
+                                    <td><strong>@item.ProductName</strong></td>
+                                    <td class="text-center">@item.GrossQuantity</td>
+                                    <td class="text-center text-muted">@item.CancelledQuantity</td>
+                                    <td class="text-center fw-semibold">@item.NetQuantity</td>
+                                    <td class="text-end fw-semibold">@item.Revenue.ToString("N0") VND</td>
+                                </tr>
+                            }
+                            @if (!Model.TopFandBItems.Any())
+                            {
+                                <tr><td colspan="5" class="text-center py-4 text-muted">Chưa có đơn F&amp;B hoàn tất trong khoảng ngày đã chọn.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Chi tiết từng bàn -->
+    <div class="data-card">
+        <div class="data-card-header">
+            <span class="data-card-title">
+                <i class="bi bi-table me-1"></i> Chi tiết hiệu suất theo từng bàn (@Model.TableRows.Count bàn)
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã bàn</th>
+                        <th>Loại bàn</th>
+                        <th>Tầng</th>
+                        <th>Số phiên kết thúc</th>
+                        <th class="text-end">Giờ có khách</th>
+                        <th>Tỷ lệ lấp đầy</th>
+                        <th class="text-end">Doanh thu giờ chơi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in Model.TableRows)
+                    {
+                        <tr>
+                            <td><strong>@t.TableCode</strong></td>
+                            <td>@t.TableTypeName</td>
+                            <td>Tầng @t.FloorNumber</td>
+                            <td>@t.SessionCount</td>
+                            <td class="text-end">@t.OccupiedHours giờ</td>
+                            <td style="min-width:150px">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height:7px">
+                                        <div class="progress-bar bg-primary" style="width:@Math.Min(100, t.OccupancyPercent)%"></div>
+                                    </div>
+                                    <span style="min-width:44px;font-size:0.82rem;font-weight:600">@t.OccupancyPercent%</span>
+                                </div>
+                            </td>
+                            <td class="text-end">@t.PlaytimeRevenue.ToString("N0") VND</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

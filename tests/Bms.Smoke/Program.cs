@@ -155,6 +155,32 @@ try
     var dashboard = Prepare(new DashboardController(db));
     Check(((ViewResult)await dashboard.Index()).Model is DashboardViewModel { TotalTables: > 0 }, "Dashboard live SQL queries");
 
+    // TV5 — Báo cáo vận hành (OperationsReportController)
+    var opsCtrl = Prepare(new OperationsReportController(db));
+    var todayVnOps = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+    Check(OperationsReportController.CalculateOccupancyPercent(480m, 1, 960, 1) == 50.0m
+        && OperationsReportController.CalculateOccupancyPercent(0m, 5, 960, 7) == 0m
+        && OperationsReportController.CalculateOccupancyPercent(2000m, 1, 960, 1) == 100.0m,
+        "OperationsReport occupancy formula (exact %, zero safe, 100% cap)");
+    var opsBadRange = Prepare(new OperationsReportController(db));
+    await opsBadRange.Index(todayVnOps, todayVnOps.AddDays(-2));
+    var opsTooLong = Prepare(new OperationsReportController(db));
+    await opsTooLong.Index(todayVnOps.AddDays(-100), todayVnOps);
+    var opsFuture = Prepare(new OperationsReportController(db));
+    await opsFuture.Index(todayVnOps, todayVnOps.AddDays(2));
+    var opsBadHours = Prepare(new OperationsReportController(db));
+    await opsBadHours.Index(todayVnOps.AddDays(-3), todayVnOps, openHour: 20, closeHour: 10);
+    var opsBadType = Prepare(new OperationsReportController(db));
+    await opsBadType.Index(todayVnOps.AddDays(-3), todayVnOps, 8, 24, tableTypeId: int.MaxValue);
+    Check(!opsBadRange.ModelState.IsValid && !opsTooLong.ModelState.IsValid && !opsFuture.ModelState.IsValid && !opsBadHours.ModelState.IsValid && !opsBadType.ModelState.IsValid,
+        "OperationsReport server-side filter validation (date range, 92-day limit, future date, hours, tableTypeId)");
+    var opsValidRes = (ViewResult)await opsCtrl.Index(todayVnOps.AddDays(-6), todayVnOps, 8, 24, null);
+    var opsVm = (OperationsReportViewModel)opsValidRes.Model!;
+    var opsCsv = await opsCtrl.Export(todayVnOps.AddDays(-6), todayVnOps, 8, 24, null) as FileContentResult;
+    Check(opsCtrl.ModelState.IsValid && opsVm.TotalDays == 7 && opsVm.HeatmapRows.Count == 7 && opsVm.HeatmapHours.Count == 16
+        && opsCsv != null && opsCsv.FileContents.Length > 3 && opsCsv.FileContents[0] == 0xEF && opsCsv.FileContents[1] == 0xBB && opsCsv.FileContents[2] == 0xBF,
+        "OperationsReport populates heatmap, table occupancy metrics and UTF-8 BOM CSV export");
+
     // TV5 ca làm (cần 08_AddWorkShiftReconciliation.sql). Ngoại tx đang mở nên service dùng chung tx.
     // BR-23: cả quán một ca. Đóng tạm các ca đang mở trong DB thật (transaction sẽ rollback cuối test).
     await db.Database.ExecuteSqlRawAsync(
@@ -731,7 +757,7 @@ try
     var b01Detail = await tableSessionSvc.GetTableDetailAsync(1);
     var loyaltyAuth = typeof(LoyaltyTestController).GetCustomAttribute<AuthorizeAttribute>();
     var quickEnrollAuth = typeof(CustomerManagementController).GetMethod(nameof(CustomerManagementController.QuickEnroll))?.GetCustomAttribute<AuthorizeAttribute>();
-    var staffCtrlRedirect = new StaffController(db, new ShiftService(db, new AuditLogService(db, new HttpContextAccessor())), users).Index() as RedirectToActionResult;
+    var staffCtrlRedirect = new StaffController().Index() as RedirectToActionResult;
     Check(TableSessionService.MapDisplayStatus("Available") == "Còn trống"
         && TableSessionService.MapDisplayStatus("InUse", false) == "Đang sử dụng"
         && TableSessionService.MapDisplayStatus("InUse", true) == "Đã hết giờ Combo (Tính vượt giờ)"
@@ -741,8 +767,8 @@ try
         && b01Detail != null && allowedDisplayStatuses.Contains(b01Detail.DisplayStatus)
         && loyaltyAuth?.Roles == "Staff"
         && quickEnrollAuth?.Roles == "Staff"
-        && staffCtrlRedirect?.ControllerName == "Shift" && staffCtrlRedirect?.ActionName == "Index",
-        "T25: Table statuses strictly standardized to 4 states; Staff redirects to Shift; Manager excluded from POS Checkout & QuickEnroll");
+        && staffCtrlRedirect?.ControllerName == "Table" && staffCtrlRedirect?.ActionName == "Index",
+        "T25: Table statuses strictly standardized to 4 states; Staff redirects to Table; Manager excluded from POS Checkout & QuickEnroll");
 
     // T26: Kiểm tra điểm/tiền từ 0 (chặn số âm), đồng bộ RewardItem -> Voucher và cảnh báo Hạng tối thiểu (MinTier) ở bước Thanh toán
     var rewardCtrl = Prepare(new RewardItemController(db), managerPrincipal);

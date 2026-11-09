@@ -70,8 +70,8 @@
                 <a class="sidebar-link @Active("Revenue")" asp-controller="Revenue" asp-action="Index">
                     <i class="bi bi-graph-up"></i> Báo cáo doanh thu
                 </a>
-                <a class="sidebar-link @Active("Shift", "Manage")" asp-controller="Shift" asp-action="Manage">
-                    <i class="bi bi-clipboard-check"></i> Quản lý ca
+                <a class="sidebar-link @Active("OperationsReport")" asp-controller="OperationsReport" asp-action="Index">
+                    <i class="bi bi-clipboard-data"></i> Báo cáo vận hành
                 </a>
                 <a class="sidebar-link @Active("AuditLog")" asp-controller="AuditLog" asp-action="Index">
                     <i class="bi bi-journal-text"></i> Nhật ký hệ thống
@@ -126,8 +126,7 @@
                     <i class="bi bi-receipt-cutoff"></i> Tính tiền &amp; Tích điểm
                 </a>
 
-                <div class="nav-section-label">Nghiệp vụ ca làm</div>
-                <a class="sidebar-link @(curController == "Shift" && curAction != "Manage" ? "active" : "")" asp-controller="Shift" asp-action="Index"><i class="bi bi-cash-coin"></i> Ca làm của quán</a>
+                <div class="nav-section-label">Vận hành bàn</div>
                 <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
                 <div class="nav-section-label">F&amp;B &amp; Kho hàng</div>
                 <a class="sidebar-link @(curController == "Order" && curAction == "Pending" ? "active" : "")" asp-controller="Order" asp-action="Pending">
