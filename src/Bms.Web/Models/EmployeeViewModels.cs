@@ -1,8 +1,8 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace Bms.Web.Models;
 
-// ── Dùng cho danh sách nhân viên ──
+// ── Dùng cho danh sách người dùng / nhân viên ──
 public class EmployeeListViewModel
 {
     public List<EmployeeRowViewModel> Employees { get; set; } = new();
@@ -21,31 +21,37 @@ public class EmployeeRowViewModel
     public string? UserName { get; set; }
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
+    public string RoleName { get; set; } = "Staff";
     public DateOnly? HireDate { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 }
 
-// ── Dùng cho form tạo nhân viên ──
+// ── Dùng cho form tạo người dùng / nhân viên ──
 public class CreateEmployeeViewModel
 {
     [Required(ErrorMessage = "Vui lòng nhập họ tên.")]
-    [StringLength(100, ErrorMessage = "Tối đa 100 ký tự.")]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "Họ tên từ 2 đến 100 ký tự.")]
+    [RegularExpression(ValidationRules.FullName, ErrorMessage = ValidationRules.FullNameMessage)]
     [Display(Name = "Họ và tên")]
     public string FullName { get; set; } = string.Empty;
 
+    [Display(Name = "Vai trò")]
+    public string Role { get; set; } = "Staff";
+
     [Required(ErrorMessage = "Vui lòng nhập tên đăng nhập.")]
     [StringLength(50, MinimumLength = 3, ErrorMessage = "Từ 3–50 ký tự.")]
+    [RegularExpression(ValidationRules.UserName, ErrorMessage = ValidationRules.UserNameMessage)]
     [Display(Name = "Tên đăng nhập")]
     public string UserName { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Vui lòng nhập email.")]
-    [EmailAddress(ErrorMessage = "Email không hợp lệ.")]
+    [StringLength(256, ErrorMessage = "Tối đa 256 ký tự.")]
+    [RegularExpression(ValidationRules.Email, ErrorMessage = ValidationRules.EmailMessage)]
     [Display(Name = "Email")]
     public string Email { get; set; } = string.Empty;
 
-    [Phone(ErrorMessage = "Số điện thoại không hợp lệ.")]
-    [StringLength(20)]
+    [RegularExpression(ValidationRules.VnPhone, ErrorMessage = ValidationRules.VnPhoneMessage)]
     [Display(Name = "Số điện thoại")]
     public string? PhoneNumber { get; set; }
 
@@ -53,11 +59,14 @@ public class CreateEmployeeViewModel
     [Display(Name = "Mã nhân viên")]
     public string? EmployeeCode { get; set; }
 
+    [HireDate]
+    [DataType(DataType.Date)]
     [Display(Name = "Ngày vào làm")]
     public DateOnly? HireDate { get; set; }
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu.")]
     [StringLength(100, MinimumLength = 8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự.")]
+    [RegularExpression(ValidationRules.Password, ErrorMessage = ValidationRules.PasswordMessage)]
     [DataType(DataType.Password)]
     [Display(Name = "Mật khẩu")]
     public string Password { get; set; } = string.Empty;
@@ -75,12 +84,12 @@ public class EditEmployeeViewModel
     public string Id { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Vui lòng nhập họ tên.")]
-    [StringLength(100, ErrorMessage = "Tối đa 100 ký tự.")]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "Họ tên từ 2 đến 100 ký tự.")]
+    [RegularExpression(ValidationRules.FullName, ErrorMessage = ValidationRules.FullNameMessage)]
     [Display(Name = "Họ và tên")]
     public string FullName { get; set; } = string.Empty;
 
-    [Phone(ErrorMessage = "Số điện thoại không hợp lệ.")]
-    [StringLength(20)]
+    [RegularExpression(ValidationRules.VnPhone, ErrorMessage = ValidationRules.VnPhoneMessage)]
     [Display(Name = "Số điện thoại")]
     public string? PhoneNumber { get; set; }
 
@@ -88,6 +97,8 @@ public class EditEmployeeViewModel
     [Display(Name = "Mã nhân viên")]
     public string? EmployeeCode { get; set; }
 
+    [HireDate]
+    [DataType(DataType.Date)]
     [Display(Name = "Ngày vào làm")]
     public DateOnly? HireDate { get; set; }
 

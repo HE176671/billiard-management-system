@@ -1,0 +1,284 @@
+@model Bms.Web.Models.PointAdjustmentIndexViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = Model.IsManagerRequester ? "Lập phiếu điều chỉnh điểm (Manager)" : "Lập phiếu điều chỉnh điểm (Staff)";
+    Layout = "_AdminLayout";
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" style="font-size:0.875rem">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-3">
+    <!-- Trái: Lập phiếu đề xuất điều chỉnh điểm (Staff / Manager) -->
+    <div class="col-lg-5">
+        <div class="data-card p-4">
+            <h2 class="h6 fw-bold mb-2"><i class="bi bi-sliders me-2 text-danger"></i>Lập phiếu đề xuất điều chỉnh điểm</h2>
+            <p class="text-muted mb-3" style="font-size:0.8rem">
+                @if (Model.IsManagerRequester)
+                {
+                    <span>Phiếu do <strong>Manager</strong> lập sẽ tự động gắn tên Manager yêu cầu và được phê duyệt ghi nhận trực tiếp vào sổ cái điểm hội viên.</span>
+                }
+                else
+                {
+                    <span>Nhân viên tại quầy lập phiếu cộng/trừ điểm cho hội viên. Sau khi gửi, phiếu sẽ gắn tên nhân viên yêu cầu và chuyển sang trạng thái <strong>Chờ Manager phê duyệt</strong>.</span>
+                }
+            </p>
+
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label">Người gửi đơn yêu cầu</label>
+                    <div class="d-flex align-items-center justify-content-between p-2 px-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0">
+                        <div class="fw-semibold" style="color:@(Model.IsManagerRequester ? "#1e40af" : "#15803d");font-size:0.88rem">
+                            <i class="bi bi-person-badge me-1"></i>@Model.CurrentRequesterName
+                        </div>
+                        <span style="background:@(Model.IsManagerRequester ? "#2563eb" : "#16a34a");color:#ffffff;font-size:0.72rem;font-weight:600;padding:3px 9px;border-radius:6px">
+                            @Model.CurrentRequesterRoleLabel
+                        </span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Tìm kiếm &amp; Chọn hội viên <span class="text-danger">*</span></label>
+                    <div class="input-group mb-2">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="adjMemberSearch" class="form-control"
+                               placeholder="Nhập tên hoặc số điện thoại để tìm nhanh hội viên..." autocomplete="off" />
+                    </div>
+                    <select name="customerId" id="adjCustomerSelect" class="form-select" required>
+                        <option value="">-- Chọn hội viên --</option>
+                        @foreach (var c in Model.Customers)
+                        {
+                            <option value="@c.Id"
+                                    data-search="@($"{c.FullName} {c.PhoneNumber} {c.Email}".ToLowerInvariant())"
+                                    selected="@(c.Id == Model.SelectedCustomerId)">
+                                @c.FullName — SĐT: @(c.PhoneNumber ?? "—") (@VnFormat.Number(c.RewardPoints) điểm)
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Số điểm cộng / trừ <span class="text-danger">*</span></label>
+                    <input type="number" name="points" class="form-control" data-allow-signed="true" data-field-label="Số điểm điều chỉnh" placeholder="Số dương để cộng (vd: 50), số âm để trừ (vd: -30)" required />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Lý do điều chỉnh <span class="text-danger">*</span></label>
+                    <select name="reasonCategory" class="form-select" required>
+                        <option value="Bù điểm hóa đơn lỗi">Bù điểm hóa đơn thiếu</option>
+                        <option value="Khiếu nại dịch vụ">Hỗ trợ trải nghiệm khách hàng</option>
+                        <option value="Thu hồi điểm sai">Thu hồi điểm cộng nhầm</option>
+                        <option value="Khác">Lý do khác</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Ghi chú chi tiết <span class="text-danger">*</span></label>
+                    <textarea name="reasonNote" class="form-control" rows="2" maxlength="250"
+                              placeholder="Nhập mã hóa đơn, số bàn hoặc nội dung sự cố để đối chiếu..." required></textarea>
+                </div>
+
+                <button type="submit" class="btn-primary-bms w-100 justify-content-center">
+                    <i class="bi bi-send-check"></i> @(Model.IsManagerRequester ? "Gửi yêu cầu & Điều chỉnh điểm (Manager)" : "Gửi phiếu chờ Manager phê duyệt")
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Phải: Danh sách phiếu đang chờ Manager duyệt + Lịch sử phiếu -->
+    <div class="col-lg-7">
+        <div class="data-card mb-3">
+            <div class="data-card-header">
+                <span class="data-card-title">
+                    <i class="bi bi-hourglass-split me-2 text-warning"></i>Phiếu đang chờ Manager phê duyệt (@Model.PendingRequests.Count)
+                </span>
+            </div>
+            @if (!Model.PendingRequests.Any())
+            {
+                <div class="text-center py-4 text-muted">Hiện không có phiếu nào đang chờ Manager duyệt.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Mã phiếu</th>
+                                <th>Hội viên</th>
+                                <th class="text-end">Số điểm</th>
+                                <th>Lý do đề xuất</th>
+                                <th class="text-nowrap" style="min-width:145px">Người gửi đơn yêu cầu</th>
+                                <th class="text-end">Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.PendingRequests)
+                            {
+                                var reqRoleLabel = Model.RequesterRoleLabels.GetValueOrDefault(r.RequestedById, "Nhân viên yêu cầu");
+                                var isMgrReq = reqRoleLabel.StartsWith("Manager") || reqRoleLabel.StartsWith("Admin");
+                                var reqCode = !string.IsNullOrWhiteSpace(r.RequestedBy?.EmployeeCode) ? $" ({r.RequestedBy.EmployeeCode})" : "";
+                                <tr>
+                                    <td>#@r.Id</td>
+                                    <td>
+                                        <a asp-controller="CustomerManagement" asp-action="Profile" asp-route-id="@r.CustomerId" class="fw-semibold text-dark text-decoration-none">
+                                            @(r.Customer?.FullName ?? r.CustomerId)
+                                        </a>
+                                    </td>
+                                    <td class="text-end fw-bold @(r.Points > 0 ? "text-success" : "text-danger")">
+                                        @(r.Points > 0 ? "+" : "")@VnFormat.Number(r.Points)
+                                    </td>
+                                    <td>@r.Reason</td>
+                                    <td>
+                                        <div class="fw-semibold" style="color:@(isMgrReq ? "#1e40af" : "#15803d")">@(r.RequestedBy?.FullName ?? r.RequestedById)@reqCode</div>
+                                        <div class="mt-1">
+                                            <span style="background:@(isMgrReq ? "#2563eb" : "#16a34a");color:#ffffff;font-size:0.72rem;font-weight:600;padding:3px 9px;border-radius:6px;display:inline-block;white-space:nowrap;">
+                                                @reqRoleLabel
+                                            </span>
+                                        </div>
+                                        <small class="text-muted d-block mt-1">@r.RequestedAtUtc.ToVn().ToString("dd/MM/yyyy HH:mm")</small>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="badge bg-warning text-dark">Chờ Manager duyệt</span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <div class="data-card">
+            <div class="data-card-header">
+                <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>Lịch sử phiếu đã xử lý</span>
+            </div>
+            @if (!Model.RecentHistory.Any())
+            {
+                <div class="text-center py-4 text-muted">Chưa có lịch sử phiếu điều chỉnh điểm.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size:0.875rem">
+                        <thead>
+                            <tr>
+                                <th class="text-nowrap">Phiếu</th>
+                                <th class="text-nowrap">Hội viên</th>
+                                <th class="text-end text-nowrap">Điểm</th>
+                                <th>Lý do</th>
+                                <th class="text-nowrap">Người lập</th>
+                                <th class="text-nowrap">Người duyệt</th>
+                                <th class="text-nowrap">Kết quả</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var h in Model.RecentHistory)
+                            {
+                                var hRoleLabel = Model.RequesterRoleLabels.GetValueOrDefault(h.RequestedById, "Nhân viên yêu cầu");
+                                var isMgrHist = hRoleLabel.StartsWith("Manager") || hRoleLabel.StartsWith("Admin");
+                                var hCode = !string.IsNullOrWhiteSpace(h.RequestedBy?.EmployeeCode) ? $" ({h.RequestedBy.EmployeeCode})" : "";
+                                var hasCustomNote = !string.IsNullOrWhiteSpace(h.ReviewNote)
+                                                    && !h.ReviewNote.StartsWith("Manager đã phê duyệt");
+                                <tr>
+                                    <td class="text-muted text-nowrap">#@h.Id</td>
+                                    <td class="text-nowrap fw-semibold">@(h.Customer?.FullName ?? h.CustomerId)</td>
+                                    <td class="text-end text-nowrap fw-bold @(h.Points > 0 ? "text-success" : "text-danger")">
+                                        @(h.Points > 0 ? "+" : "")@VnFormat.Number(h.Points)
+                                    </td>
+                                    <td style="min-width:160px">
+                                        @h.Reason
+                                        @if (hasCustomNote)
+                                        {
+                                            <div class="text-muted small fst-italic mt-1">“@h.ReviewNote”</div>
+                                        }
+                                    </td>
+                                    <td class="text-nowrap">
+                                        <div>@(h.RequestedBy?.FullName ?? h.RequestedById)<span class="text-muted">@hCode</span></div>
+                                        <div class="text-muted small">@(isMgrHist ? "Manager" : "Nhân viên") · @h.RequestedAtUtc.ToVn().ToString("dd/MM HH:mm")</div>
+                                    </td>
+                                    <td class="text-nowrap">
+                                        <div>@(h.ReviewedBy?.FullName ?? "Manager")</div>
+                                        <div class="text-muted small">@((h.ReviewedAtUtc ?? h.RequestedAtUtc).ToVn().ToString("dd/MM HH:mm"))</div>
+                                    </td>
+                                    <td class="text-nowrap">
+                                        @if (h.Status == Bms.Web.Data.PointAdjustmentRequest.StatusApproved)
+                                        {
+                                            <span class="text-success small fw-semibold"><i class="bi bi-check-circle me-1"></i>Đã duyệt</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-danger small fw-semibold"><i class="bi bi-x-circle me-1"></i>Từ chối</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        const searchBox = document.getElementById('adjMemberSearch');
+        const selectEl = document.getElementById('adjCustomerSelect');
+        if (!searchBox || !selectEl) return;
+
+        const allOptions = Array.from(selectEl.options)
+            .filter(opt => opt.value !== '')
+            .map(opt => ({
+                value: opt.value,
+                text: opt.text,
+                search: (opt.getAttribute('data-search') || opt.text).toLowerCase()
+            }));
+
+        searchBox.addEventListener('input', function () {
+            const term = (searchBox.value || '').trim().toLowerCase();
+            const currentVal = selectEl.value;
+            selectEl.innerHTML = '';
+
+            if (!term) {
+                const defaultOpt = document.createElement('option');
+                defaultOpt.value = '';
+                defaultOpt.text = '-- Chọn hội viên --';
+                selectEl.appendChild(defaultOpt);
+            }
+
+            const matched = allOptions.filter(o => !term || o.search.includes(term));
+            if (matched.length === 0) {
+                const emptyOpt = document.createElement('option');
+                emptyOpt.value = '';
+                emptyOpt.text = `-- Không tìm thấy hội viên khớp với "${searchBox.value}" --`;
+                selectEl.appendChild(emptyOpt);
+                return;
+            }
+
+            matched.forEach((o, idx) => {
+                const opt = document.createElement('option');
+                opt.value = o.value;
+                opt.text = o.text;
+                if ((!term && o.value === currentVal) || (term && idx === 0)) {
+                    opt.selected = true;
+                }
+                selectEl.appendChild(opt);
+            });
+        });
+    })();
+</script>
+}

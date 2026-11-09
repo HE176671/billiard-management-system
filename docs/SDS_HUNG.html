@@ -1,19 +1,21 @@
 <!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SDS BMS — Phần Hùng</title><style>
 *{box-sizing:border-box}body{margin:0;background:#eef2f6;color:#172332;font:16px/1.65 "Segoe UI",Arial,sans-serif}main{max-width:1150px;margin:32px auto;padding:48px 60px;background:white;border:1px solid #dde3e9}h1{font-size:30px;margin:48px 0 20px}h1:first-of-type{margin-top:16px}h2{font-size:24px;margin:34px 0 16px}h3{font-size:19px;margin:28px 0 12px}h1,h2,h3{line-height:1.3;color:#111;break-after:avoid}p{margin:12px 0}code{font:0.89em Consolas,monospace;overflow-wrap:anywhere}a{color:#125694}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.5;margin:16px 0 26px}th,td{border:1px solid #d9d9d9;padding:10px 12px;text-align:left;vertical-align:middle;overflow-wrap:anywhere}th{background:#e8eff6;color:#111}tbody tr:nth-child(even){background:#f8fafc}tr{break-inside:avoid}thead{display:table-header-group}.tablewrap{overflow-x:auto}figure{margin:24px 0;padding:20px 10px;border:1px solid #dae3ec;background:#fff;break-inside:avoid}.diagram{overflow:auto;text-align:center}.mermaid{margin:0}.mermaid svg{max-width:100%;height:auto}details{margin:12px;font-size:13px}details pre{overflow:auto;background:#f3f5f7;padding:14px;text-align:left}.notice{background:#edf4fc;border-left:4px solid #386f9e;padding:14px 18px;font-size:14px}.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}button{border:1px solid #bdccd9;border-radius:4px;background:#fff;padding:8px 14px;cursor:pointer;font:inherit;font-size:14px}.error{color:#a31b16} @media(max-width:800px){main{margin:0;padding:24px 18px}table{font-size:12px}th,td{padding:8px}}@media print{body{background:#fff;font-size:10pt}main{margin:0;padding:0;border:0;max-width:none}.controls,.notice,details{display:none}h1{font-size:20pt}h2{font-size:16pt}h3{font-size:13pt}table{font-size:9pt}.tablewrap,.diagram{overflow:visible}figure{padding:8px;break-inside:avoid}h1:not(:first-of-type){break-before:page}a{color:inherit;text-decoration:none}}@page{size:A4;margin:16mm}
-</style></head><body><main><div class="controls"><button onclick="window.print()">In / Lưu PDF</button><button id="download" disabled>Tải bản HTML offline</button></div><div class="notice" id="status">Đang tải bộ vẽ Mermaid. Lần mở bản này cần Internet để hiển thị 7 sơ đồ. Có thể tải bản HTML offline sau khi các sơ đồ hiện đủ.</div><h1>Billiard Management System</h1>
-<h2>Software Design Specification — Phần của Hùng</h2>
-<p><strong>Ngày cập nhật:</strong> 01/10/2026. <strong>Phiên bản:</strong> 1.0. <strong>Người phụ trách theo phân công:</strong> Hùng.</p>
-<p>Tài liệu cung cấp phần thiết kế kiến trúc, package, bốn bảng dữ liệu và thiết kế chi tiết cho đăng nhập, tạo nhân viên, đổi mật khẩu. Cấu trúc đánh số tương ứng mẫu SDS của nhóm; có thể ghép các mục I, II và III vào báo cáo chung. Nội dung giải thích bằng tiếng Việt; tên lớp, bảng và phương thức giữ nguyên theo C# và SQL Server.</p>
+.schema-table{table-layout:fixed}.schema-table th:first-child{width:23%}.schema-table th:nth-child(2){width:44%}.schema-table th:nth-child(3){width:33%}.database-diagram .diagram{max-height:780px;text-align:left;border:1px solid #e2e8ee}.database-diagram .mermaid svg{height:auto;max-width:none!important}@media print{.database-diagram .diagram{max-height:none;border:0}.database-diagram .mermaid svg{width:100%!important;max-width:100%!important}}
+</style></head><body><main><div class="controls"><button onclick="window.print()">In / Lưu PDF</button><button id="download" disabled>Tải bản HTML offline</button></div><div class="notice" id="status">Đang tải bộ vẽ Mermaid. Lần mở bản này cần Internet để hiển thị 7 sơ đồ. Có thể tải bản HTML offline sau khi các sơ đồ hiện đủ.</div><h1 id="billiard-management-system">Billiard Management System</h1>
+<h2 id="software-design-specification-phan-cua-hung">Software Design Specification — Phần của Hùng</h2>
+<p><strong>Ngày cập nhật:</strong> 01/10/2026. <strong>Phiên bản:</strong> 1.1. <strong>Người phụ trách theo phân công:</strong> Hùng.</p>
+<p>Tài liệu cung cấp phần thiết kế kiến trúc, package, Database Design đầy đủ 24 bảng và thiết kế chi tiết cho đăng nhập, tạo nhân viên, đổi mật khẩu. Phần database được mở rộng theo yêu cầu để ghép vào báo cáo chung; phân công chi tiết chức năng giữa các thành viên vẫn giữ nguyên. Cấu trúc đánh số tương ứng mẫu SDS của nhóm. Nội dung giải thích bằng tiếng Việt; tên lớp, bảng và phương thức giữ nguyên theo C# và SQL Server.</p>
 <p><strong>Cách đọc trạng thái:</strong> “Hiện có” nghĩa là đã thấy trong mã nguồn hoặc script, không đồng nghĩa đã kiểm thử chạy thực tế. “Thiết kế cần bổ sung” là hành vi phải triển khai để đáp ứng SDS. “Dự kiến” là thành phần thuộc phạm vi mở rộng mới được giao. Bản SDS không khẳng định các module VNPay, điểm thưởng và gọi món đã hoạt động.</p>
 <p>Nguồn đối chiếu: <code>BMS_Database_Starter/BilliardDB_Full.sql</code>, <code>src/Bms.Web/Program.cs</code>, <code>Data/ApplicationUser.cs</code>, <code>Data/ApplicationDbContext.cs</code>, ba controller Account/Employee/Profile và các ViewModel tương ứng. Repo hiện nhắm <strong>.NET 8</strong>, dùng <strong>ASP.NET Core MVC, Razor, Bootstrap, Identity và EF Core SQL Server 8.x</strong>; tên database trong phần tạo schema là <strong>BilliardDB</strong>. Các thông tin cũ về chưa có project hoặc chỉ có 13 bảng không còn đại diện cho source hiện tại.</p>
-<h3>Change Log</h3>
+<h3 id="change-log">Change Log</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>Date</th><th>A / M / D</th><th>In charge</th><th>Change Description</th></tr></thead><tbody>
 <tr><td>01/10/2026</td><td>A</td><td>Hùng</td><td>Soạn phần kiến trúc, package, bốn bảng, thiết kế đăng nhập/tạo Staff/đổi mật khẩu và bảo mật; đối chiếu với source hiện tại</td></tr>
+<tr><td>01/10/2026</td><td>M</td><td>Hùng</td><td>Mở rộng Database Design thành 24 bảng, 150 cột, 33 FK theo SQL mới; cập nhật trạng thái verify và seed</td></tr>
 </tbody></table></div>
-<h1>I. High Level Design</h1>
-<h2>1. Software Architecture</h2>
-<h3>1.1 Kiến trúc tổng thể</h3>
+<h1 id="i-high-level-design">I. High Level Design</h1>
+<h2 id="1-software-architecture">1. Software Architecture</h2>
+<h3 id="1-1-kien-truc-tong-the">1.1 Kiến trúc tổng thể</h3>
 <p>BMS sử dụng kiến trúc ứng dụng web MVC triển khai trong một ứng dụng ASP.NET Core. Trình duyệt hiển thị HTML do Razor tạo và gửi yêu cầu HTTP đến controller. Controller tiếp nhận ViewModel, kiểm tra dữ liệu và điều phối xử lý. ASP.NET Core Identity chịu trách nhiệm tài khoản, mật khẩu, vai trò và cookie đăng nhập. EF Core ánh xạ dữ liệu tài khoản vào SQL Server; các nghiệp vụ đặt bàn/phiên chơi dùng procedure có tham số theo thiết kế database.</p>
 <p>Các tầng dưới đây là phân chia trách nhiệm logic; không có nghĩa mỗi tầng là một server hoặc microservice riêng. Các module thanh toán, F&amp;B, ca làm và thành viên được đưa vào kiến trúc đích theo phân công mới, chưa coi là chức năng đã triển khai. Đối với nghiệp vụ phức tạp, nhóm có thể bổ sung service; source của Hùng hiện gọi Identity trực tiếp từ controller.</p>
 <figure><div class="diagram"><pre class="mermaid">flowchart TB
@@ -66,7 +68,7 @@
     VNPay -.-&gt;|&quot;IPN server-to-server&quot;| Payment
     VNPay -.-&gt;|&quot;Return URL qua trình duyệt&quot;| Browser</pre></details></figure>
 <p><strong>Hình I.1 — Kiến trúc logic toàn hệ thống.</strong> Nét đứt biểu thị tích hợp dự kiến. Luồng IPN và Return URL thuộc thiết kế thanh toán của TV3, cần thống nhất trước khi triển khai; không tự công nhận thanh toán chỉ từ thông tin trình duyệt gửi về.</p>
-<h3>1.2 Architecture component descriptions</h3>
+<h3 id="1-2-architecture-component-descriptions">1.2 Architecture component descriptions</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>No</th><th>Component</th><th>Description</th></tr></thead><tbody>
 <tr><td>C01</td><td>Client tier — Web browser</td><td>Hiển thị giao diện, nhập dữ liệu và gửi yêu cầu. Không kết nối trực tiếp database, không tự quyết định quyền hoặc kết quả giao dịch</td></tr>
@@ -79,11 +81,11 @@
 <tr><td>D01</td><td>SQL Server</td><td>Lưu dữ liệu và thực thi PK, FK, UNIQUE, CHECK, transaction. Schema do SQL scripts quản lý theo SQL-first</td></tr>
 <tr><td>E01</td><td>VNPay adapter — dự kiến</td><td>Biên tích hợp bên ngoài, tách khỏi quản lý nhân viên. Xác thực thông báo thanh toán, xử lý lặp và cập nhật trạng thái do TV3 thiết kế</td></tr>
 </tbody></table></div>
-<h3>1.3 Ranh giới trách nhiệm</h3>
+<h3 id="1-3-ranh-gioi-trach-nhiem">1.3 Ranh giới trách nhiệm</h3>
 <p>Hùng phụ trách tài khoản và quyền dùng chung cho các module. Các controller nghiệp vụ nhận định danh người gọi từ <code>HttpContext.User</code>, không tin <code>StaffId</code>, <code>CustomerId</code> hay role do form tùy ý gửi. Membership tier chỉ biểu thị ưu đãi; vai trò Admin/Staff/Customer quyết định quyền. Nâng hạng khách hàng không cấp quyền quản trị.</p>
 <p>Ứng dụng dùng cookie Identity cho website MVC. Kiến trúc này không có JWT Security Filter như ví dụ trong template. SQL scripts là nguồn quản lý schema; ứng dụng không gọi <code>EnsureCreated</code>, <code>Migrate</code> hoặc áp dụng migration khởi tạo lên BilliardDB đã có bảng.</p>
-<h2>2. Package Diagram</h2>
-<h3>2.1 Sơ đồ package</h3>
+<h2 id="2-package-diagram">2. Package Diagram</h2>
+<h3 id="2-1-so-o-package">2.1 Sơ đồ package</h3>
 <p>Trong C#, package được biểu diễn bằng namespace/thư mục và các dependency framework. Sơ đồ sau thể hiện phụ thuộc, không phải thứ tự thực thi. <code>Views</code> và <code>wwwroot</code> là nhóm tài nguyên, không phải namespace C#.</p>
 <figure><div class="diagram"><pre class="mermaid">flowchart LR
     Root[&quot;Bms.Web&lt;br/&gt;Program.cs — composition root&quot;]
@@ -129,7 +131,7 @@
     D -.-&gt;|&quot;kế thừa IdentityDbContext&quot;| EF
     C -.-&gt;|&quot;tích hợp dự kiến&quot;| Future</pre></details></figure>
 <p><strong>Hình I.2 — Package Diagram.</strong> Mũi tên nét đứt biểu thị dependency; riêng namespace VNPay được gắn nhãn dự kiến. Không có dependency từ Data ngược về Controllers/Views.</p>
-<h3>2.2 Package descriptions và quy ước đặt tên</h3>
+<h3 id="2-2-package-descriptions-va-quy-uoc-at-ten">2.2 Package descriptions và quy ước đặt tên</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>Package / thư mục</th><th>Trách nhiệm</th><th>Quy ước và ví dụ</th></tr></thead><tbody>
 <tr><td><code>Bms.Web.Controllers</code></td><td>Tiếp nhận HTTP, kiểm tra quyền, điều phối xử lý</td><td>PascalCase và hậu tố <code>Controller</code>: <code>EmployeeController</code>; action <code>Login</code>, <code>Create</code>, <code>ChangePassword</code></td></tr>
@@ -141,124 +143,715 @@
 <tr><td><code>Bms.Web.Integrations.VNPay</code> — dự kiến</td><td>Adapter giao tiếp VNPay</td><td>Namespace đề xuất cho TV3; tên lớp cần chốt khi triển khai</td></tr>
 </tbody></table></div>
 <p>Kiểu và public member dùng PascalCase; tham số/biến cục bộ dùng camelCase; dependency private dùng <code>_userManager</code>, <code>_signInManager</code>. Phương thức bất đồng bộ mới nên có hậu tố Async; action hiện hữu giữ nguyên tên route đang dùng. Tên bảng và cột giữ đúng PascalCase của SQL script. Các module bổ sung phải dùng cùng <code>ApplicationUser</code> và cùng cấu hình Identity.</p>
-<h2>3. Database Design — Bốn bảng của Hùng</h2>
-<h3>3.0 Mô tả file và quan hệ</h3>
-<p><code>BMS_Database_Starter/BilliardDB_Full.sql</code> khai báo 21 bảng, gồm bộ Identity và các bảng nghiệp vụ mở rộng; cũng chứa procedure, seed và phần truy vấn kiểm tra. Tài liệu dưới đây mô tả <strong>DDL trong file</strong>, chưa xác nhận 21 bảng đó đều đã được triển khai trên SQL Server local. Không chạy nguyên script này lên database đang có dữ liệu.</p>
-<p>Các mục “Constraints” phản ánh đúng SQL hiện có. Những kiểm tra cần làm ở ứng dụng được ghi riêng; không biến yêu cầu nghiệp vụ thành một CHECK/NOT NULL chưa tồn tại trong database.</p>
-<figure><div class="diagram"><pre class="mermaid">erDiagram
-    MembershipTiers o|--o{ AspNetUsers : &quot;TierId optional&quot;
-    AspNetUsers ||--o{ AspNetUserRoles : &quot;UserId&quot;
-    AspNetRoles ||--o{ AspNetUserRoles : &quot;RoleId&quot;
-    MembershipTiers {
-        int Id PK
-        nvarchar TierName UK
-        decimal DiscountPercent
-    }
+<h2 id="3-database-design-toan-bo-billiarddb">3. Database Design — Toàn bộ BilliardDB</h2>
+<p><strong>Ngày cập nhật:</strong> 01/10/2026. <strong>Nguồn:</strong> <code>BMS_Database_Starter/BilliardDB_Full.sql</code> tại commit database <code>4448bb2</code>. <strong>Phạm vi:</strong> 24 bảng nghiệp vụ, 150 cột và 33 khóa ngoại.</p>
+<p>Phần này thay thế mục Database Design bốn bảng trước đây để dùng trong báo cáo SDS chung của nhóm. Nội dung phản ánh DDL hiện có; không tự bổ sung các cột/ràng buộc chưa có. Bộ schema và seed đã được thực thi trên SQL Server; script nâng cấp combo đã áp dụng trên localhost / BilliardDB. Có bảng không có nghĩa mọi luồng nghiệp vụ đã được code.</p>
+<h3 id="3-0-so-o-database-tong-the">3.0 Sơ đồ database tổng thể</h3>
+<p>Sơ đồ có đủ 24 bảng và toàn bộ FK. Mỗi hộp rút gọn chỉ hiện các cột khóa để dễ đọc; các bảng bên dưới mô tả đầy đủ mọi cột. <code>dbo.sysdiagrams</code> do SSMS tạo để lưu sơ đồ, không thuộc 24 bảng nghiệp vụ và không đưa vào SDS.</p>
+<figure class="database-diagram"><div class="diagram"><pre class="mermaid">erDiagram
+    direction LR
     AspNetUsers {
         nvarchar Id PK
-        nvarchar NormalizedUserName UK
-        nvarchar NormalizedEmail UK
-        nvarchar EmployeeCode UK
-        int RewardPoints
         int TierId FK
-        bit IsActive
     }
     AspNetRoles {
         nvarchar Id PK
-        nvarchar Name
-        nvarchar NormalizedName UK
     }
     AspNetUserRoles {
         nvarchar UserId PK,FK
         nvarchar RoleId PK,FK
-    }</pre></div><details><summary>Xem mã sơ đồ</summary><pre>erDiagram
-    MembershipTiers o|--o{ AspNetUsers : &quot;TierId optional&quot;
-    AspNetUsers ||--o{ AspNetUserRoles : &quot;UserId&quot;
-    AspNetRoles ||--o{ AspNetUserRoles : &quot;RoleId&quot;
+    }
+    AspNetUserClaims {
+        int Id PK
+        nvarchar UserId FK
+    }
+    AspNetRoleClaims {
+        int Id PK
+        nvarchar RoleId FK
+    }
+    AspNetUserLogins {
+        nvarchar LoginProvider PK
+        nvarchar ProviderKey PK
+        nvarchar UserId FK
+    }
+    AspNetUserTokens {
+        nvarchar UserId PK,FK
+        nvarchar LoginProvider PK
+        nvarchar Name PK
+    }
     MembershipTiers {
         int Id PK
-        nvarchar TierName UK
-        decimal DiscountPercent
     }
+    TableTypes {
+        int Id PK
+    }
+    BilliardTables {
+        int Id PK
+        int TableTypeId FK
+    }
+    PricingConfigs {
+        int Id PK
+        int TableTypeId FK
+    }
+    Bookings {
+        int Id PK
+        nvarchar CustomerId FK
+        int TableId FK
+        nvarchar CheckedInById FK
+        nvarchar CancelledById FK
+    }
+    PlaySessions {
+        int Id PK
+        int TableId FK
+        int BookingId FK,UK
+        nvarchar CustomerId FK
+        nvarchar OpenedById FK
+        nvarchar ClosedById FK
+    }
+    ProductCategories {
+        int Id PK
+    }
+    Products {
+        int Id PK
+        int CategoryId FK
+    }
+    Orders {
+        int Id PK
+        int SessionId FK
+    }
+    OrderDetails {
+        int Id PK
+        int OrderId FK
+        int ProductId FK
+    }
+    Combos {
+        int Id PK
+    }
+    ComboItems {
+        int ComboId PK,FK
+        int ProductId PK,FK
+    }
+    SessionCombos {
+        int Id PK
+        int SessionId FK
+        int ComboId FK
+        nvarchar CreatedById FK
+    }
+    SessionComboItems {
+        int SessionComboId PK,FK
+        int ProductId PK,FK
+    }
+    Invoices {
+        int Id PK
+        int SessionId FK,UK
+        nvarchar CustomerId FK
+    }
+    PaymentTransactions {
+        int Id PK
+        int InvoiceId FK
+    }
+    WorkShifts {
+        int Id PK
+        nvarchar StaffId FK
+    }
+    MembershipTiers o|..o{ AspNetUsers : &quot;TierId&quot;
+    AspNetUsers ||--o{ AspNetUserRoles : &quot;UserId&quot;
+    AspNetRoles ||--o{ AspNetUserRoles : &quot;RoleId&quot;
+    AspNetUsers ||..o{ AspNetUserClaims : &quot;UserId&quot;
+    AspNetRoles ||..o{ AspNetRoleClaims : &quot;RoleId&quot;
+    AspNetUsers ||..o{ AspNetUserLogins : &quot;UserId&quot;
+    AspNetUsers ||--o{ AspNetUserTokens : &quot;UserId&quot;
+    TableTypes ||..o{ BilliardTables : &quot;TableTypeId&quot;
+    TableTypes ||..o{ PricingConfigs : &quot;TableTypeId&quot;
+    AspNetUsers ||..o{ Bookings : &quot;CustomerId&quot;
+    BilliardTables ||..o{ Bookings : &quot;TableId&quot;
+    AspNetUsers o|..o{ Bookings : &quot;CheckedInById&quot;
+    AspNetUsers o|..o{ Bookings : &quot;CancelledById&quot;
+    BilliardTables ||..o{ PlaySessions : &quot;TableId&quot;
+    Bookings o|..o| PlaySessions : &quot;BookingId&quot;
+    AspNetUsers o|..o{ PlaySessions : &quot;CustomerId&quot;
+    AspNetUsers ||..o{ PlaySessions : &quot;OpenedById&quot;
+    AspNetUsers o|..o{ PlaySessions : &quot;ClosedById&quot;
+    ProductCategories ||..o{ Products : &quot;CategoryId&quot;
+    PlaySessions ||..o{ Orders : &quot;SessionId&quot;
+    Orders ||..o{ OrderDetails : &quot;OrderId&quot;
+    Products ||..o{ OrderDetails : &quot;ProductId&quot;
+    Combos ||--o{ ComboItems : &quot;ComboId&quot;
+    Products ||--o{ ComboItems : &quot;ProductId&quot;
+    PlaySessions ||..o{ SessionCombos : &quot;SessionId&quot;
+    Combos ||..o{ SessionCombos : &quot;ComboId&quot;
+    AspNetUsers ||..o{ SessionCombos : &quot;CreatedById&quot;
+    SessionCombos ||--o{ SessionComboItems : &quot;SessionComboId&quot;
+    Products ||--o{ SessionComboItems : &quot;ProductId&quot;
+    PlaySessions ||..o| Invoices : &quot;SessionId&quot;
+    AspNetUsers o|..o{ Invoices : &quot;CustomerId&quot;
+    Invoices ||..o{ PaymentTransactions : &quot;InvoiceId&quot;
+    AspNetUsers ||..o{ WorkShifts : &quot;StaffId&quot;</pre></div><details><summary>Xem mã sơ đồ</summary><pre>erDiagram
+    direction LR
     AspNetUsers {
         nvarchar Id PK
-        nvarchar NormalizedUserName UK
-        nvarchar NormalizedEmail UK
-        nvarchar EmployeeCode UK
-        int RewardPoints
         int TierId FK
-        bit IsActive
     }
     AspNetRoles {
         nvarchar Id PK
-        nvarchar Name
-        nvarchar NormalizedName UK
     }
     AspNetUserRoles {
         nvarchar UserId PK,FK
         nvarchar RoleId PK,FK
-    }</pre></details></figure>
-<p><strong>Hình I.3 — ERD phần tài khoản và hạng thành viên.</strong> ERD rút gọn cột để dễ đọc; bảng mô tả bên dưới là danh sách đầy đủ. Một user có 0 hoặc 1 tier; một tier có 0 đến nhiều user. User và Role có quan hệ nhiều–nhiều qua AspNetUserRoles. Ứng dụng hiện gán một role khi tạo tài khoản nhưng schema không giới hạn mỗi user chỉ một role.</p>
-<h3>3.1 AspNetUsers</h3>
-<p><strong>Mục đích:</strong> nguồn tài khoản chung của Admin, Staff, Customer; lưu thông tin nhận diện, thông tin nhân viên, trạng thái bảo mật và liên kết hạng thành viên. <strong>PK:</strong> Id. <strong>FK:</strong> TierId → MembershipTiers.Id.</p>
+    }
+    AspNetUserClaims {
+        int Id PK
+        nvarchar UserId FK
+    }
+    AspNetRoleClaims {
+        int Id PK
+        nvarchar RoleId FK
+    }
+    AspNetUserLogins {
+        nvarchar LoginProvider PK
+        nvarchar ProviderKey PK
+        nvarchar UserId FK
+    }
+    AspNetUserTokens {
+        nvarchar UserId PK,FK
+        nvarchar LoginProvider PK
+        nvarchar Name PK
+    }
+    MembershipTiers {
+        int Id PK
+    }
+    TableTypes {
+        int Id PK
+    }
+    BilliardTables {
+        int Id PK
+        int TableTypeId FK
+    }
+    PricingConfigs {
+        int Id PK
+        int TableTypeId FK
+    }
+    Bookings {
+        int Id PK
+        nvarchar CustomerId FK
+        int TableId FK
+        nvarchar CheckedInById FK
+        nvarchar CancelledById FK
+    }
+    PlaySessions {
+        int Id PK
+        int TableId FK
+        int BookingId FK,UK
+        nvarchar CustomerId FK
+        nvarchar OpenedById FK
+        nvarchar ClosedById FK
+    }
+    ProductCategories {
+        int Id PK
+    }
+    Products {
+        int Id PK
+        int CategoryId FK
+    }
+    Orders {
+        int Id PK
+        int SessionId FK
+    }
+    OrderDetails {
+        int Id PK
+        int OrderId FK
+        int ProductId FK
+    }
+    Combos {
+        int Id PK
+    }
+    ComboItems {
+        int ComboId PK,FK
+        int ProductId PK,FK
+    }
+    SessionCombos {
+        int Id PK
+        int SessionId FK
+        int ComboId FK
+        nvarchar CreatedById FK
+    }
+    SessionComboItems {
+        int SessionComboId PK,FK
+        int ProductId PK,FK
+    }
+    Invoices {
+        int Id PK
+        int SessionId FK,UK
+        nvarchar CustomerId FK
+    }
+    PaymentTransactions {
+        int Id PK
+        int InvoiceId FK
+    }
+    WorkShifts {
+        int Id PK
+        nvarchar StaffId FK
+    }
+    MembershipTiers o|..o{ AspNetUsers : &quot;TierId&quot;
+    AspNetUsers ||--o{ AspNetUserRoles : &quot;UserId&quot;
+    AspNetRoles ||--o{ AspNetUserRoles : &quot;RoleId&quot;
+    AspNetUsers ||..o{ AspNetUserClaims : &quot;UserId&quot;
+    AspNetRoles ||..o{ AspNetRoleClaims : &quot;RoleId&quot;
+    AspNetUsers ||..o{ AspNetUserLogins : &quot;UserId&quot;
+    AspNetUsers ||--o{ AspNetUserTokens : &quot;UserId&quot;
+    TableTypes ||..o{ BilliardTables : &quot;TableTypeId&quot;
+    TableTypes ||..o{ PricingConfigs : &quot;TableTypeId&quot;
+    AspNetUsers ||..o{ Bookings : &quot;CustomerId&quot;
+    BilliardTables ||..o{ Bookings : &quot;TableId&quot;
+    AspNetUsers o|..o{ Bookings : &quot;CheckedInById&quot;
+    AspNetUsers o|..o{ Bookings : &quot;CancelledById&quot;
+    BilliardTables ||..o{ PlaySessions : &quot;TableId&quot;
+    Bookings o|..o| PlaySessions : &quot;BookingId&quot;
+    AspNetUsers o|..o{ PlaySessions : &quot;CustomerId&quot;
+    AspNetUsers ||..o{ PlaySessions : &quot;OpenedById&quot;
+    AspNetUsers o|..o{ PlaySessions : &quot;ClosedById&quot;
+    ProductCategories ||..o{ Products : &quot;CategoryId&quot;
+    PlaySessions ||..o{ Orders : &quot;SessionId&quot;
+    Orders ||..o{ OrderDetails : &quot;OrderId&quot;
+    Products ||..o{ OrderDetails : &quot;ProductId&quot;
+    Combos ||--o{ ComboItems : &quot;ComboId&quot;
+    Products ||--o{ ComboItems : &quot;ProductId&quot;
+    PlaySessions ||..o{ SessionCombos : &quot;SessionId&quot;
+    Combos ||..o{ SessionCombos : &quot;ComboId&quot;
+    AspNetUsers ||..o{ SessionCombos : &quot;CreatedById&quot;
+    SessionCombos ||--o{ SessionComboItems : &quot;SessionComboId&quot;
+    Products ||--o{ SessionComboItems : &quot;ProductId&quot;
+    PlaySessions ||..o| Invoices : &quot;SessionId&quot;
+    AspNetUsers o|..o{ Invoices : &quot;CustomerId&quot;
+    Invoices ||..o{ PaymentTransactions : &quot;InvoiceId&quot;
+    AspNetUsers ||..o{ WorkShifts : &quot;StaffId&quot;</pre></details></figure>
+<p><strong>Hình I.3 — Database Diagram toàn hệ thống BMS (24 bảng).</strong> PK là khóa chính; FK là khóa ngoại; UK là tính duy nhất ở cột. Đầu quan hệ 0..1 thể hiện FK có thể NULL hoặc phía con có FK duy nhất; 0..n thể hiện nhiều bản ghi. Nét liền là quan hệ định danh (FK thuộc PK), nét đứt là quan hệ không định danh. Điều kiện chỉ một phiên Active/bàn là unique index có lọc, không biến toàn bộ lịch sử phiên thành quan hệ một–một.</p>
+<p><strong>Danh mục bảng:</strong></p>
 <div class="tablewrap"><table>
-<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>Id</code></td><td>nvarchar(450), NOT NULL, PK</td><td>Khóa chuỗi Identity; không phải số tự tăng</td></tr>
-<tr><td><code>UserName</code></td><td>nvarchar(256), NULL</td><td>Tên đăng nhập gốc; form tạo Staff bắt buộc nhập</td></tr>
-<tr><td><code>NormalizedUserName</code></td><td>nvarchar(256), NULL; unique filtered index <code>UserNameIndex</code> khi khác NULL</td><td>Giá trị chuẩn hóa phục vụ tra cứu; Identity quản lý</td></tr>
-<tr><td><code>Email</code></td><td>nvarchar(256), NULL</td><td>Email gốc; form tạo Staff bắt buộc và kiểm tra định dạng</td></tr>
-<tr><td><code>NormalizedEmail</code></td><td>nvarchar(256), NULL; unique filtered index <code>EmailIndex</code> khi khác NULL</td><td>Không trùng email sau chuẩn hóa; cấu hình RequireUniqueEmail=true</td></tr>
-<tr><td><code>EmailConfirmed</code></td><td>bit, NOT NULL, DEFAULT 0</td><td>Cờ xác nhận email; hiện chưa bắt buộc xác nhận để đăng nhập</td></tr>
-<tr><td><code>PasswordHash</code></td><td>nvarchar(max), NULL</td><td>Hash do Identity tạo; NULL không có nghĩa mật khẩu rỗng hợp lệ</td></tr>
-<tr><td><code>SecurityStamp</code></td><td>nvarchar(max), NULL</td><td>Dấu thay đổi bảo mật để kiểm tra tính hợp lệ của phiên đăng nhập</td></tr>
-<tr><td><code>ConcurrencyStamp</code></td><td>nvarchar(max), NULL</td><td>Token kiểm soát cập nhật đồng thời của Identity; không phải rowversion</td></tr>
-<tr><td><code>PhoneNumber</code></td><td>nvarchar(20), NULL; CHECK khác chuỗi trắng nếu có; unique <code>UX_User_Phone</code> khi khác NULL</td><td>Cần chuẩn hóa thống nhất trước lưu; index chỉ chặn chuỗi trùng</td></tr>
-<tr><td><code>PhoneNumberConfirmed</code></td><td>bit, NOT NULL, DEFAULT 0</td><td>Cờ xác nhận số điện thoại</td></tr>
-<tr><td><code>TwoFactorEnabled</code></td><td>bit, NOT NULL, DEFAULT 0</td><td>Dự phòng 2FA; chưa có luồng giao diện 2FA đầy đủ trong phần này</td></tr>
-<tr><td><code>LockoutEnd</code></td><td>datetimeoffset(7), NULL</td><td>Mốc hết khóa tạm khi đăng nhập sai</td></tr>
-<tr><td><code>LockoutEnabled</code></td><td>bit, NOT NULL, DEFAULT 1</td><td>Cho phép cơ chế khóa tạm áp dụng cho user</td></tr>
-<tr><td><code>AccessFailedCount</code></td><td>int, NOT NULL, DEFAULT 0; CHECK &gt;= 0</td><td>Bộ đếm thất bại do Identity quản lý</td></tr>
-<tr><td><code>FullName</code></td><td>nvarchar(100), NOT NULL; CHECK LEN(LTRIM(RTRIM(FullName))) &gt; 0</td><td>Họ tên hiển thị, không chấp nhận chỉ khoảng trắng</td></tr>
-<tr><td><code>IsActive</code></td><td>bit, NOT NULL, DEFAULT 1</td><td>Khóa quản trị; false phải chặn đăng nhập và truy cập được bảo vệ</td></tr>
-<tr><td><code>CreatedAtUtc</code></td><td>datetime2(0), NOT NULL, DEFAULT SYSUTCDATETIME()</td><td>Thời điểm tạo theo UTC</td></tr>
-<tr><td><code>EmployeeCode</code></td><td>nvarchar(20), NULL; CHECK không trắng nếu có; unique <code>UX_User_EmployeeCode</code> khi khác NULL</td><td>Mã nhân viên; tính duy nhất áp dụng toàn bảng, không chỉ role Staff</td></tr>
-<tr><td><code>RewardPoints</code></td><td>int, NOT NULL, DEFAULT 0</td><td>Script chưa có CHECK &gt;= 0; quy tắc cộng/trừ điểm thuộc TV3/TV4</td></tr>
-<tr><td><code>TierId</code></td><td>int, NULL, FK → MembershipTiers.Id</td><td>NULL nghĩa chưa gán hạng; FK không có ON DELETE CASCADE</td></tr>
-<tr><td><code>HireDate</code></td><td>date, NULL</td><td>Ngày vào làm, không chuyển UTC</td></tr>
+<thead><tr><th>No</th><th>Table</th><th>Description</th></tr></thead><tbody>
+<tr><td>1</td><td><a href="#3-1-aspnetusers">AspNetUsers</a></td><td>Nguồn tài khoản chung cho Admin, Staff, Customer; thông tin nhân viên, bảo mật và hạng thành viên.</td></tr>
+<tr><td>2</td><td><a href="#3-2-aspnetroles">AspNetRoles</a></td><td>Danh mục vai trò và quyền ở mức role: Admin, Staff, Customer.</td></tr>
+<tr><td>3</td><td><a href="#3-3-aspnetuserroles">AspNetUserRoles</a></td><td>Bảng nối nhiều–nhiều giữa tài khoản và vai trò.</td></tr>
+<tr><td>4</td><td><a href="#3-4-aspnetuserclaims">AspNetUserClaims</a></td><td>Các claim bổ sung gắn với từng tài khoản theo cơ chế Identity.</td></tr>
+<tr><td>5</td><td><a href="#3-5-aspnetroleclaims">AspNetRoleClaims</a></td><td>Các claim được cấp thông qua vai trò theo cơ chế Identity.</td></tr>
+<tr><td>6</td><td><a href="#3-6-aspnetuserlogins">AspNetUserLogins</a></td><td>Liên kết tài khoản BMS với định danh của nhà cung cấp đăng nhập ngoài.</td></tr>
+<tr><td>7</td><td><a href="#3-7-aspnetusertokens">AspNetUserTokens</a></td><td>Lưu token theo tài khoản, nhà cung cấp và tên token; không phải bảng phiên chơi.</td></tr>
+<tr><td>8</td><td><a href="#3-8-membershiptiers">MembershipTiers</a></td><td>Danh mục hạng thành viên và phần trăm ưu đãi.</td></tr>
+<tr><td>9</td><td><a href="#3-9-tabletypes">TableTypes</a></td><td>Danh mục loại bàn và đơn giá giờ cơ sở.</td></tr>
+<tr><td>10</td><td><a href="#3-10-billiardtables">BilliardTables</a></td><td>Thông tin bàn bida vật lý, vị trí và trạng thái hiện tại.</td></tr>
+<tr><td>11</td><td><a href="#3-11-pricingconfigs">PricingConfigs</a></td><td>Cấu hình đơn giá theo khoảng giờ cho từng loại bàn.</td></tr>
+<tr><td>12</td><td><a href="#3-12-bookings">Bookings</a></td><td>Lượt đặt bàn, khách đặt, khoảng thời gian, check-in và hủy đặt.</td></tr>
+<tr><td>13</td><td><a href="#3-13-playsessions">PlaySessions</a></td><td>Phiên chơi thực tế, người mở/đóng và giá giờ được ghi nhận lúc mở.</td></tr>
+<tr><td>14</td><td><a href="#3-14-productcategories">ProductCategories</a></td><td>Danh mục nhóm đồ ăn và nước uống.</td></tr>
+<tr><td>15</td><td><a href="#3-15-products">Products</a></td><td>Món đang bán, giá, tồn kho và trạng thái kinh doanh.</td></tr>
+<tr><td>16</td><td><a href="#3-16-orders">Orders</a></td><td>Lượt gọi món F&amp;B gắn với phiên chơi.</td></tr>
+<tr><td>17</td><td><a href="#3-17-orderdetails">OrderDetails</a></td><td>Chi tiết món, số lượng và giá tại thời điểm gọi trong một đơn F&amp;B.</td></tr>
+<tr><td>18</td><td><a href="#3-18-combos">Combos</a></td><td>Danh mục gói gồm giờ chơi và các món đi kèm.</td></tr>
+<tr><td>19</td><td><a href="#3-19-comboitems">ComboItems</a></td><td>Các món và số lượng cho mỗi đơn vị combo trong danh mục hiện tại.</td></tr>
+<tr><td>20</td><td><a href="#3-20-sessioncombos">SessionCombos</a></td><td>Lượt mua combo của phiên chơi, số gói, tên/giá/giờ tại thời điểm mua.</td></tr>
+<tr><td>21</td><td><a href="#3-21-sessioncomboitems">SessionComboItems</a></td><td>Thành phần món được lưu tại thời điểm mua combo để giữ lịch sử.</td></tr>
+<tr><td>22</td><td><a href="#3-22-invoices">Invoices</a></td><td>Hóa đơn của phiên chơi: tiền giờ, F&amp;B, giảm giá và trạng thái thanh toán.</td></tr>
+<tr><td>23</td><td><a href="#3-23-paymenttransactions">PaymentTransactions</a></td><td>Các giao dịch thanh toán của hóa đơn, phương thức và mã tham chiếu.</td></tr>
+<tr><td>24</td><td><a href="#3-24-workshifts">WorkShifts</a></td><td>Ca làm của nhân viên, thời điểm và số tiền đầu/cuối ca.</td></tr>
 </tbody></table></div>
-<p><strong>Liên kết ngoài phần Hùng:</strong> bảng này được các bảng Identity phụ thuộc và các bảng Bookings, PlaySessions, Invoices, WorkShifts tham chiếu. Các FK nghiệp vụ không khai báo cascade delete trong script. Do đó quản lý nhân viên ưu tiên vô hiệu hóa, không xóa tài khoản có lịch sử.</p>
-<p><strong>Mapping cần bổ sung:</strong> <code>ApplicationUser.cs</code> hiện có các trường nhân viên nhưng chưa có RewardPoints/TierId/navigation MembershipTier. Cần mapping rõ nếu module thành viên đọc/ghi qua EF; không tự coi chúng đã có chỉ vì SQL đã khai báo.</p>
-<h3>3.2 AspNetRoles</h3>
-<p><strong>Mục đích:</strong> lưu nhóm quyền Admin, Staff, Customer. Hạng thành viên không lưu tại đây.</p>
-<div class="tablewrap"><table>
+<p>Sơ đồ lớn: kéo thanh cuộn để xem từng vùng, hoặc mở <a href="sds-hung/03-database.svg">ảnh SVG riêng</a> để phóng to. Bấm tên bảng trong danh sách để đến bảng mô tả.</p>
+<p><strong>Quy ước đọc các bảng:</strong></p>
+<ul>
+<li><code>NULL</code>/<code>NOT NULL</code>, <code>DEFAULT</code>, <code>CHECK</code>, PK, FK và UNIQUE dưới đây lấy từ SQL. Một cột NULL ở SQL vẫn có thể bắt buộc ở form theo nghiệp vụ.</li>
+<li>PK ghép yêu cầu duy nhất cả nhóm cột, không phải từng cột riêng. Unique filtered index chỉ áp dụng các dòng thỏa WHERE.</li>
+<li>Cột <code>rowversion</code> do SQL Server sinh, phục vụ kiểm soát đồng thời; không lưu ngày giờ. Các cột có hậu tố Utc lưu UTC; khi hiển thị đổi sang giờ Việt Nam. <code>HireDate</code> là ngày, không đổi múi giờ.</li>
+<li>Các số tiền dùng decimal; đơn vị nghiệp vụ hiện là VND. <code>DiscountPercent</code> là phần trăm; <code>DiscountAmount</code> là số tiền.</li>
+<li>Cột <code>AS (...) PERSISTED</code> do SQL Server tính và lưu; DDL không khai báo riêng kiểu dữ liệu hoặc NOT NULL cho các cột tính toán này.</li>
+<li>FK không ghi ON DELETE CASCADE có hành vi NO ACTION. FK không tự xác minh role, phiên đang mở, tồn kho hoặc chống xử lý yêu cầu lặp.</li>
+</ul>
+<h3 id="3-1-aspnetusers">3.1 AspNetUsers</h3>
+<p><strong>Mục đích:</strong> Nguồn tài khoản chung cho Admin, Staff, Customer; thông tin nhân viên, bảo mật và hạng thành viên. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
 <thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>Id</code></td><td>nvarchar(450), NOT NULL, PK <code>PK_AspNetRoles</code></td><td>ID vai trò, được AspNetUserRoles tham chiếu</td></tr>
-<tr><td><code>Name</code></td><td>nvarchar(256), NULL</td><td>Tên role hiển thị và dùng trong Authorize, ví dụ Admin</td></tr>
-<tr><td><code>NormalizedName</code></td><td>nvarchar(256), NULL; unique <code>RoleNameIndex</code> khi khác NULL</td><td>Tên chuẩn hóa phục vụ tra cứu; ví dụ ADMIN</td></tr>
-<tr><td><code>ConcurrencyStamp</code></td><td>nvarchar(max), NULL</td><td>Kiểm soát sửa role đồng thời qua Identity</td></tr>
+<tr><td><code>Id</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; <code>PK</code></td><td>Khóa chuỗi Identity; không phải số tự tăng.</td></tr>
+<tr><td><code>UserName</code></td><td><code>nvarchar(256)</code>; <code>NULL</code></td><td>Tên đăng nhập gốc.</td></tr>
+<tr><td><code>NormalizedUserName</code></td><td><code>nvarchar(256)</code>; <code>NULL</code>; <code>UNIQUE INDEX UserNameIndex(NormalizedUserName) WHERE NormalizedUserName IS NOT NULL</code></td><td>Tên đăng nhập chuẩn hóa do Identity quản lý.</td></tr>
+<tr><td><code>Email</code></td><td><code>nvarchar(256)</code>; <code>NULL</code></td><td>Địa chỉ email gốc.</td></tr>
+<tr><td><code>NormalizedEmail</code></td><td><code>nvarchar(256)</code>; <code>NULL</code>; <code>UNIQUE INDEX EmailIndex(NormalizedEmail) WHERE NormalizedEmail IS NOT NULL</code></td><td>Email chuẩn hóa; schema BMS yêu cầu không trùng khi có giá trị.</td></tr>
+<tr><td><code>EmailConfirmed</code></td><td><code>bit</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code></td><td>Cờ xác nhận email.</td></tr>
+<tr><td><code>PasswordHash</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Hash mật khẩu do Identity tạo; seed NULL, chưa có mật khẩu để đăng nhập.</td></tr>
+<tr><td><code>SecurityStamp</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Dấu thay đổi bảo mật phục vụ kiểm tra phiên đăng nhập.</td></tr>
+<tr><td><code>ConcurrencyStamp</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Token kiểm soát cập nhật đồng thời của Identity; không phải rowversion.</td></tr>
+<tr><td><code>PhoneNumber</code></td><td><code>nvarchar(20)</code>; <code>NULL</code>; CHECK <code>PhoneNumber IS NULL OR LEN(LTRIM(RTRIM(PhoneNumber))) &gt; 0</code>; <code>UNIQUE INDEX UX_User_Phone(PhoneNumber) WHERE PhoneNumber IS NOT NULL</code></td><td>Số điện thoại; cần chuẩn hóa nhất quán ở ứng dụng.</td></tr>
+<tr><td><code>PhoneNumberConfirmed</code></td><td><code>bit</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code></td><td>Cờ xác nhận số điện thoại.</td></tr>
+<tr><td><code>TwoFactorEnabled</code></td><td><code>bit</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code></td><td>Cờ sử dụng xác thực hai yếu tố; không tự chứng minh đã có luồng 2FA.</td></tr>
+<tr><td><code>LockoutEnd</code></td><td><code>datetimeoffset(7)</code>; <code>NULL</code></td><td>Thời điểm kết thúc khóa tạm; khác khóa quản trị IsActive.</td></tr>
+<tr><td><code>LockoutEnabled</code></td><td><code>bit</code>; <code>NOT NULL</code>; <code>DEFAULT 1</code></td><td>Cho phép áp dụng khóa tạm.</td></tr>
+<tr><td><code>AccessFailedCount</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code>; CHECK <code>AccessFailedCount &gt;= 0</code></td><td>Số lần đăng nhập thất bại.</td></tr>
+<tr><td><code>FullName</code></td><td><code>nvarchar(100)</code>; <code>NOT NULL</code>; CHECK <code>LEN(LTRIM(RTRIM(FullName))) &gt; 0</code></td><td>Họ tên hiển thị.</td></tr>
+<tr><td><code>IsActive</code></td><td><code>bit</code>; <code>NOT NULL</code>; <code>DEFAULT 1</code></td><td>Trạng thái cho phép sử dụng tài khoản; backend/cookie phải kiểm tra.</td></tr>
+<tr><td><code>CreatedAtUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; <code>DEFAULT SYSUTCDATETIME()</code></td><td>Thời điểm tạo tài khoản, lưu UTC.</td></tr>
+<tr><td><code>EmployeeCode</code></td><td><code>nvarchar(20)</code>; <code>NULL</code>; CHECK <code>EmployeeCode IS NULL OR LEN(LTRIM(RTRIM(EmployeeCode))) &gt; 0</code>; <code>UNIQUE INDEX UX_User_EmployeeCode(EmployeeCode) WHERE EmployeeCode IS NOT NULL</code></td><td>Mã nhân viên; tính duy nhất áp dụng toàn bảng.</td></tr>
+<tr><td><code>RewardPoints</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code></td><td>Điểm tích lũy; chưa có CHECK &gt;= 0 hoặc lịch sử điểm.</td></tr>
+<tr><td><code>TierId</code></td><td><code>int</code>; <code>NULL</code>; FK → <code>MembershipTiers.Id</code>; ON DELETE NO ACTION</td><td>Hạng thành viên; NULL nghĩa chưa gán hạng.</td></tr>
+<tr><td><code>HireDate</code></td><td><code>date</code>; <code>NULL</code></td><td>Ngày vào làm; là date, không đổi múi giờ.</td></tr>
 </tbody></table></div>
-<p>Seed trong SQL định nghĩa ba role Admin/Staff/Customer. Code không nhận role Admin từ form đăng ký công khai. SQL cho phép NULL ở một số cột vì theo schema Identity; thao tác tạo role hợp lệ phải đi qua cơ chế kiểm tra của Identity.</p>
-<h3>3.3 AspNetUserRoles</h3>
-<p><strong>Mục đích:</strong> bảng nối tài khoản với vai trò. <strong>PK ghép:</strong> (UserId, RoleId).</p>
-<div class="tablewrap"><table>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>UserNameIndex</code>: <code>UNIQUE (NormalizedUserName) WHERE NormalizedUserName IS NOT NULL</code>.</li>
+<li><code>EmailIndex</code>: <code>UNIQUE (NormalizedEmail) WHERE NormalizedEmail IS NOT NULL</code>.</li>
+<li><code>UX_User_Phone</code>: <code>UNIQUE (PhoneNumber) WHERE PhoneNumber IS NOT NULL</code>.</li>
+<li><code>UX_User_EmployeeCode</code>: <code>UNIQUE (EmployeeCode) WHERE EmployeeCode IS NOT NULL</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Không có bảng Employee tách riêng. Staff được xác định qua role Staff. UserManager quản lý password/normalized fields/security stamp. SQL-first: không áp dụng migration khởi tạo lên bảng đã có. FK đến tier không cấp quyền quản trị.</p>
+<h3 id="3-2-aspnetroles">3.2 AspNetRoles</h3>
+<p><strong>Mục đích:</strong> Danh mục vai trò và quyền ở mức role: Admin, Staff, Customer. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
 <thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>UserId</code></td><td>nvarchar(450), NOT NULL; PK; FK → AspNetUsers.Id, ON DELETE CASCADE</td><td>Tài khoản được gán role</td></tr>
-<tr><td><code>RoleId</code></td><td>nvarchar(450), NOT NULL; PK; FK → AspNetRoles.Id, ON DELETE CASCADE</td><td>Vai trò được cấp; có index <code>IX_AspNetUserRoles_RoleId</code></td></tr>
+<tr><td><code>Id</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; <code>PK</code></td><td>Khóa chuỗi vai trò.</td></tr>
+<tr><td><code>Name</code></td><td><code>nvarchar(256)</code>; <code>NULL</code></td><td>Tên vai trò, ví dụ Admin, Staff, Customer.</td></tr>
+<tr><td><code>NormalizedName</code></td><td><code>nvarchar(256)</code>; <code>NULL</code>; <code>UNIQUE INDEX RoleNameIndex(NormalizedName) WHERE NormalizedName IS NOT NULL</code></td><td>Tên vai trò chuẩn hóa, ví dụ ADMIN.</td></tr>
+<tr><td><code>ConcurrencyStamp</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Token kiểm soát sửa role đồng thời.</td></tr>
 </tbody></table></div>
-<p>PK ghép ngăn cùng một cặp user–role xuất hiện hai lần. Cascade chỉ mô tả việc dọn liên kết khi bản ghi cha được xóa hợp lệ; không cấp quyền cho Admin xóa tài khoản có lịch sử nghiệp vụ. Luồng tạo Staff sử dụng <code>AddToRoleAsync(user, &quot;Staff&quot;)</code>, không tự chèn RoleId từ dữ liệu trình duyệt.</p>
-<h3>3.4 MembershipTiers</h3>
-<p><strong>Mục đích:</strong> danh mục hạng thành viên và phần trăm ưu đãi. Hùng mô tả cấu trúc; TV4 phụ trách thuật toán tính điểm/nâng hạng, phối hợp TV3 về điểm phát sinh sau thanh toán.</p>
-<div class="tablewrap"><table>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>RoleNameIndex</code>: <code>UNIQUE (NormalizedName) WHERE NormalizedName IS NOT NULL</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Vai trò là phân quyền, khác với MembershipTiers. NULL ở DDL không có nghĩa ứng dụng nên tạo role không tên.</p>
+<h3 id="3-3-aspnetuserroles">3.3 AspNetUserRoles</h3>
+<p><strong>Mục đích:</strong> Bảng nối nhiều–nhiều giữa tài khoản và vai trò. <strong>Primary key:</strong> <code>(UserId, RoleId)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
 <thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>Id</code></td><td>int, IDENTITY, NOT NULL, PK <code>PK_MembershipTiers</code></td><td>Khóa hạng tự tăng</td></tr>
-<tr><td><code>TierName</code></td><td>nvarchar(50), NOT NULL; UNIQUE <code>UQ_MembershipTiers_Name</code>; CHECK không trắng</td><td>Tên hạng; chưa chốt tên cụ thể trong seed hiện tại</td></tr>
-<tr><td><code>DiscountPercent</code></td><td>decimal(5,2), NOT NULL, DEFAULT 0; CHECK từ 0 đến 100</td><td>Phần trăm giảm giá; 10.00 biểu diễn 10%, không phải hệ số 0.10</td></tr>
+<tr><td><code>UserId</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE CASCADE</td><td>Tài khoản được gán vai trò.</td></tr>
+<tr><td><code>RoleId</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code>; FK → <code>AspNetRoles.Id</code>; ON DELETE CASCADE</td><td>Vai trò được cấp; PK ghép ngăn trùng một cặp user–role.</td></tr>
 </tbody></table></div>
-<p>Script chưa có MinPoints, MaxPoints, thứ tự hạng, thời hạn hạng hoặc lịch sử điểm. Không tự thêm các cột này vào bảng mô tả. Nếu tự động nâng hạng, TV4 phải chốt nơi lưu ngưỡng và quy tắc trước khi triển khai; thay đổi schema cần script nâng cấp riêng. Tier được tham chiếu không xóa được bằng FK hiện có nếu chưa xử lý user liên quan. Cần thống nhất ưu đãi áp dụng tiền bàn, F&amp;B hay cả hai và thời điểm chụp ưu đãi trên hóa đơn.</p>
-<h1>II. Detailed Code Design</h1>
-<h2>1. Quản lý tài khoản và nhân viên</h2>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_AspNetUserRoles_RoleId</code>: <code>(RoleId)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> SQL hỗ trợ nhiều role/user. Quy tắc một role khi tạo tài khoản là quy tắc ứng dụng, không phải UNIQUE(UserId).</p>
+<h3 id="3-4-aspnetuserclaims">3.4 AspNetUserClaims</h3>
+<p><strong>Mục đích:</strong> Các claim bổ sung gắn với từng tài khoản theo cơ chế Identity. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa của claim.</td></tr>
+<tr><td><code>UserId</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE CASCADE</td><td>Tài khoản sở hữu claim.</td></tr>
+<tr><td><code>ClaimType</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Loại claim.</td></tr>
+<tr><td><code>ClaimValue</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Giá trị claim; Identity quản lý.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_AspNetUserClaims_UserId</code>: <code>(UserId)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Claim không thay thế xác thực danh tính. Cascade chỉ mô tả DDL; không cho phép xóa tài khoản có lịch sử nghiệp vụ.</p>
+<h3 id="3-5-aspnetroleclaims">3.5 AspNetRoleClaims</h3>
+<p><strong>Mục đích:</strong> Các claim được cấp thông qua vai trò theo cơ chế Identity. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa của claim vai trò.</td></tr>
+<tr><td><code>RoleId</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; FK → <code>AspNetRoles.Id</code>; ON DELETE CASCADE</td><td>Vai trò sở hữu claim.</td></tr>
+<tr><td><code>ClaimType</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Loại claim của role.</td></tr>
+<tr><td><code>ClaimValue</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Giá trị claim được cấp qua role.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_AspNetRoleClaims_RoleId</code>: <code>(RoleId)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Bảng này có trong schema nhưng chưa được giao rõ trong phân công 20 bảng ban đầu; cần nhóm chốt người phụ trách.</p>
+<h3 id="3-6-aspnetuserlogins">3.6 AspNetUserLogins</h3>
+<p><strong>Mục đích:</strong> Liên kết tài khoản BMS với định danh của nhà cung cấp đăng nhập ngoài. <strong>Primary key:</strong> <code>(LoginProvider, ProviderKey)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>LoginProvider</code></td><td><code>nvarchar(128)</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code></td><td>Tên nhà cung cấp đăng nhập ngoài.</td></tr>
+<tr><td><code>ProviderKey</code></td><td><code>nvarchar(128)</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code></td><td>Định danh user tại nhà cung cấp; cùng LoginProvider tạo PK.</td></tr>
+<tr><td><code>ProviderDisplayName</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Tên nhà cung cấp để hiển thị.</td></tr>
+<tr><td><code>UserId</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE CASCADE</td><td>Tài khoản BMS được liên kết; có bảng không có nghĩa đã tích hợp Google/Facebook.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_AspNetUserLogins_UserId</code>: <code>(UserId)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> BMS hiện dùng đăng nhập Identity; cần triển khai cấu hình provider trước khi hỗ trợ đăng nhập ngoài.</p>
+<h3 id="3-7-aspnetusertokens">3.7 AspNetUserTokens</h3>
+<p><strong>Mục đích:</strong> Lưu token theo tài khoản, nhà cung cấp và tên token; không phải bảng phiên chơi. <strong>Primary key:</strong> <code>(UserId, LoginProvider, Name)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>UserId</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE CASCADE</td><td>Tài khoản sở hữu token.</td></tr>
+<tr><td><code>LoginProvider</code></td><td><code>nvarchar(128)</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code></td><td>Nhà cung cấp của token.</td></tr>
+<tr><td><code>Name</code></td><td><code>nvarchar(128)</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code></td><td>Tên/loại token; cùng UserId và LoginProvider tạo PK.</td></tr>
+<tr><td><code>Value</code></td><td><code>nvarchar(max)</code>; <code>NULL</code></td><td>Giá trị token; không đưa vào giao diện hoặc log công khai.</td></tr>
+</tbody></table></div>
+<p><strong>Lưu ý nghiệp vụ:</strong> Không lưu mật khẩu rõ vào Value. Quy trình phát hành/thu hồi token thuộc Identity và ứng dụng.</p>
+<h3 id="3-8-membershiptiers">3.8 MembershipTiers</h3>
+<p><strong>Mục đích:</strong> Danh mục hạng thành viên và phần trăm ưu đãi. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa hạng thành viên tự tăng.</td></tr>
+<tr><td><code>TierName</code></td><td><code>nvarchar(50)</code>; <code>NOT NULL</code>; <code>UNIQUE</code>; CHECK <code>LEN(LTRIM(RTRIM(TierName))) &gt; 0</code></td><td>Tên hạng; seed hiện chưa định nghĩa các hạng cụ thể.</td></tr>
+<tr><td><code>DiscountPercent</code></td><td><code>decimal(5,2)</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code>; CHECK <code>DiscountPercent &gt;= 0 AND DiscountPercent &lt;= 100</code></td><td>Phần trăm ưu đãi; 10.00 nghĩa là 10%, không phải hệ số 0.10.</td></tr>
+</tbody></table></div>
+<p><strong>Lưu ý nghiệp vụ:</strong> Chưa có MinPoints, thứ tự hạng hoặc lịch sử điểm. Ngưỡng nâng hạng và phạm vi ưu đãi cần TV3/TV4 thống nhất; không tự ghi các cột chưa có vào SDS.</p>
+<h3 id="3-9-tabletypes">3.9 TableTypes</h3>
+<p><strong>Mục đích:</strong> Danh mục loại bàn và đơn giá giờ cơ sở. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa loại bàn.</td></tr>
+<tr><td><code>Name</code></td><td><code>nvarchar(50)</code>; <code>NOT NULL</code>; <code>UNIQUE</code>; CHECK <code>LEN(LTRIM(RTRIM(Name))) &gt; 0</code></td><td>Tên loại bàn, ví dụ Pool hoặc Carom.</td></tr>
+<tr><td><code>HourlyRate</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; CHECK <code>HourlyRate &gt; 0</code></td><td>Đơn giá cơ sở cho một giờ; số tiền theo VND.</td></tr>
+</tbody></table></div>
+<h3 id="3-10-billiardtables">3.10 BilliardTables</h3>
+<p><strong>Mục đích:</strong> Thông tin bàn bida vật lý, vị trí và trạng thái hiện tại. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa bàn.</td></tr>
+<tr><td><code>TableCode</code></td><td><code>nvarchar(20)</code>; <code>NOT NULL</code>; <code>UNIQUE</code>; CHECK <code>LEN(LTRIM(RTRIM(TableCode))) &gt; 0</code></td><td>Mã bàn duy nhất, ví dụ B01.</td></tr>
+<tr><td><code>TableTypeId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>TableTypes.Id</code>; ON DELETE NO ACTION</td><td>Loại bàn tương ứng.</td></tr>
+<tr><td><code>FloorNumber</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>DEFAULT 1</code>; CHECK <code>FloorNumber &gt;= 0</code></td><td>Tầng/khu vực bàn; schema cho phép 0.</td></tr>
+<tr><td><code>Status</code></td><td><code>varchar(20)</code>; <code>NOT NULL</code>; <code>DEFAULT 'Available'</code>; CHECK <code>Status IN ('Available','InUse','AwaitingPayment','Maintenance','Inactive')</code></td><td>Trạng thái vật lý; đặt lịch tương lai không tự biến bàn thành Reserved.</td></tr>
+<tr><td><code>RowVersion</code></td><td><code>rowversion</code>; <code>NOT NULL</code></td><td>Token SQL Server tự sinh để phát hiện cập nhật đồng thời; không phải ngày giờ.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_BilliardTables_Type_Status</code>: <code>(TableTypeId, Status)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Chỉ cập nhật trạng thái theo vòng đời nghiệp vụ. Đặt bàn theo lịch và trạng thái vật lý là hai thông tin khác nhau.</p>
+<h3 id="3-11-pricingconfigs">3.11 PricingConfigs</h3>
+<p><strong>Mục đích:</strong> Cấu hình đơn giá theo khoảng giờ cho từng loại bàn. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa cấu hình giá.</td></tr>
+<tr><td><code>TableTypeId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>TableTypes.Id</code>; ON DELETE NO ACTION</td><td>Loại bàn áp dụng.</td></tr>
+<tr><td><code>HourlyRate</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; CHECK <code>HourlyRate &gt; 0</code></td><td>Giá giờ cho khoảng thời gian này.</td></tr>
+<tr><td><code>StartHour</code></td><td><code>time</code>; <code>NOT NULL</code>; tham gia <code>CK_PricingConfig_Hours</code> (xem dưới)</td><td>Giờ bắt đầu trong ngày; chưa có quy tắc ngày trong tuần.</td></tr>
+<tr><td><code>EndHour</code></td><td><code>time</code>; <code>NOT NULL</code>; tham gia <code>CK_PricingConfig_Hours</code> (xem dưới)</td><td>Giờ kết thúc; CHECK hiện không cho khoảng qua nửa đêm.</td></tr>
+</tbody></table></div>
+<p><strong>CHECK phối hợp nhiều cột:</strong></p>
+<ul>
+<li><code>CK_PricingConfig_Hours</code>: <code>StartHour &lt; EndHour</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Chưa có constraint chặn các khoảng cấu hình giá chồng nhau. usp_OpenSession hiện đọc TableTypes.HourlyRate, chưa áp dụng PricingConfigs; không mô tả giá theo khung giờ là đã chạy.</p>
+<h3 id="3-12-bookings">3.12 Bookings</h3>
+<p><strong>Mục đích:</strong> Lượt đặt bàn, khách đặt, khoảng thời gian, check-in và hủy đặt. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa lượt đặt.</td></tr>
+<tr><td><code>CustomerId</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION</td><td>Khách đặt; FK chỉ kiểm tra tồn tại, role Customer do procedure/backend kiểm tra.</td></tr>
+<tr><td><code>TableId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>BilliardTables.Id</code>; ON DELETE NO ACTION</td><td>Bàn được đặt.</td></tr>
+<tr><td><code>StartAtUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; tham gia <code>CK_Booking_Times</code> (xem dưới)</td><td>Thời điểm bắt đầu dự kiến, UTC.</td></tr>
+<tr><td><code>EndAtUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; tham gia <code>CK_Booking_Times</code> (xem dưới)</td><td>Thời điểm kết thúc dự kiến, UTC; phải sau giờ bắt đầu.</td></tr>
+<tr><td><code>Status</code></td><td><code>varchar(20)</code>; <code>NOT NULL</code>; <code>DEFAULT 'Confirmed'</code>; CHECK <code>Status IN ('Confirmed','CheckedIn','Completed','Cancelled','NoShow')</code>; tham gia <code>CK_Booking_Cancel</code> (xem dưới)</td><td>Trạng thái lượt đặt theo danh sách CHECK.</td></tr>
+<tr><td><code>CreatedAtUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; <code>DEFAULT SYSUTCDATETIME()</code></td><td>Thời điểm tạo lượt đặt, UTC.</td></tr>
+<tr><td><code>CheckedInAtUtc</code></td><td><code>datetime2(0)</code>; <code>NULL</code>; tham gia <code>CK_Booking_Checkin</code> (xem dưới)</td><td>Thời điểm xác nhận khách đến; phải có cùng CheckedInById.</td></tr>
+<tr><td><code>CheckedInById</code></td><td><code>nvarchar(450)</code>; <code>NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION; tham gia <code>CK_Booking_Checkin</code> (xem dưới)</td><td>Người xác nhận check-in; quyền Staff/Admin do nghiệp vụ kiểm tra.</td></tr>
+<tr><td><code>CancelledAtUtc</code></td><td><code>datetime2(0)</code>; <code>NULL</code>; tham gia <code>CK_Booking_Cancel</code> (xem dưới)</td><td>Thời điểm hủy; phải có khi Status=Cancelled.</td></tr>
+<tr><td><code>CancelledById</code></td><td><code>nvarchar(450)</code>; <code>NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION; tham gia <code>CK_Booking_Cancel</code> (xem dưới)</td><td>Người hủy; phải có khi Status=Cancelled.</td></tr>
+<tr><td><code>CancellationReason</code></td><td><code>nvarchar(300)</code>; <code>NULL</code></td><td>Lý do hủy, có thể NULL theo DDL.</td></tr>
+<tr><td><code>Notes</code></td><td><code>nvarchar(300)</code>; <code>NULL</code></td><td>Ghi chú lượt đặt.</td></tr>
+<tr><td><code>RowVersion</code></td><td><code>rowversion</code>; <code>NOT NULL</code></td><td>Token phát hiện cập nhật đồng thời.</td></tr>
+</tbody></table></div>
+<p><strong>CHECK phối hợp nhiều cột:</strong></p>
+<ul>
+<li><code>CK_Booking_Times</code>: <code>EndAtUtc &gt; StartAtUtc</code>.</li>
+<li><code>CK_Booking_Checkin</code>: <code> (CheckedInAtUtc IS NULL AND CheckedInById IS NULL) OR (CheckedInAtUtc IS NOT NULL AND CheckedInById IS NOT NULL)</code>.</li>
+<li><code>CK_Booking_Cancel</code>: <code> (Status = 'Cancelled' AND CancelledAtUtc IS NOT NULL AND CancelledById IS NOT NULL) OR (Status &lt;&gt; 'Cancelled' AND CancelledAtUtc IS NULL AND CancelledById IS NULL)</code>.</li>
+</ul>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_Bookings_Table_Time</code>: <code>(TableId, StartAtUtc, EndAtUtc) INCLUDE (Status)</code>.</li>
+<li><code>IX_Bookings_Customer</code>: <code>(CustomerId, StartAtUtc)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> CHECK thời gian không chặn các booking trùng lịch. Procedure serialize theo bàn và kiểm tra khoảng [StartAtUtc, EndAtUtc); không bỏ qua bằng cách ghi EF trực tiếp mà thiếu kiểm tra tương đương. Check-in chưa tự mở phiên.</p>
+<h3 id="3-13-playsessions">3.13 PlaySessions</h3>
+<p><strong>Mục đích:</strong> Phiên chơi thực tế, người mở/đóng và giá giờ được ghi nhận lúc mở. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa phiên chơi.</td></tr>
+<tr><td><code>TableId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>BilliardTables.Id</code>; ON DELETE NO ACTION; <code>UNIQUE INDEX UX_PlaySessions_ActiveTable(TableId) WHERE Status = 'Active'</code></td><td>Bàn được sử dụng; mỗi bàn tối đa một phiên Active.</td></tr>
+<tr><td><code>BookingId</code></td><td><code>int</code>; <code>NULL</code>; FK → <code>Bookings.Id</code>; ON DELETE NO ACTION; <code>UNIQUE INDEX UX_PlaySessions_Booking(BookingId) WHERE BookingId IS NOT NULL</code></td><td>Lượt đặt tương ứng, có thể NULL cho walk-in; một booking tối đa một phiên.</td></tr>
+<tr><td><code>CustomerId</code></td><td><code>nvarchar(450)</code>; <code>NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION</td><td>Khách chơi; schema cho phép khách vãng lai chưa gắn tài khoản.</td></tr>
+<tr><td><code>OpenedById</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION</td><td>Người mở phiên; lấy định danh đã xác thực.</td></tr>
+<tr><td><code>ClosedById</code></td><td><code>nvarchar(450)</code>; <code>NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION; tham gia <code>CK_Session_Lifecycle</code> (xem dưới)</td><td>Người đóng phiên; NULL khi Active, bắt buộc khi Closed.</td></tr>
+<tr><td><code>StartAtUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; tham gia <code>CK_Session_Lifecycle</code> (xem dưới)</td><td>Thời điểm bắt đầu thực tế, UTC.</td></tr>
+<tr><td><code>EndAtUtc</code></td><td><code>datetime2(0)</code>; <code>NULL</code>; tham gia <code>CK_Session_Lifecycle</code> (xem dưới)</td><td>Thời điểm kết thúc thực tế, UTC; trạng thái Closed mới có.</td></tr>
+<tr><td><code>HourlyRateSnapshot</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; CHECK <code>HourlyRateSnapshot &gt; 0</code></td><td>Giá giờ tại lúc mở; đổi giá danh mục không làm đổi phiên cũ.</td></tr>
+<tr><td><code>PlaytimeAmount</code></td><td><code>decimal(18,2)</code>; <code>NULL</code>; tham gia <code>CK_Session_Lifecycle</code> (xem dưới)</td><td>Tiền giờ khi đóng phiên; Active để NULL.</td></tr>
+<tr><td><code>Status</code></td><td><code>varchar(20)</code>; <code>NOT NULL</code>; <code>DEFAULT 'Active'</code>; CHECK <code>Status IN ('Active','Closed')</code>; tham gia <code>CK_Session_Lifecycle</code> (xem dưới)</td><td>Active hoặc Closed; phải khớp điều kiện vòng đời.</td></tr>
+<tr><td><code>RowVersion</code></td><td><code>rowversion</code>; <code>NOT NULL</code></td><td>Token phát hiện cập nhật đồng thời.</td></tr>
+</tbody></table></div>
+<p><strong>CHECK phối hợp nhiều cột:</strong></p>
+<ul>
+<li><code>CK_Session_Lifecycle</code>: <code> (Status = 'Active' AND EndAtUtc IS NULL AND ClosedById IS NULL AND PlaytimeAmount IS NULL) OR (Status = 'Closed' AND EndAtUtc IS NOT NULL AND EndAtUtc &gt;= StartAtUtc AND ClosedById IS NOT NULL AND PlaytimeAmount IS NOT NULL AND PlaytimeAmount &gt;= 0)</code>.</li>
+</ul>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>UX_PlaySessions_ActiveTable</code>: <code>UNIQUE (TableId) WHERE Status = 'Active'</code>.</li>
+<li><code>UX_PlaySessions_Booking</code>: <code>UNIQUE (BookingId) WHERE BookingId IS NOT NULL</code>.</li>
+<li><code>IX_PlaySessions_Table_Start</code>: <code>(TableId, StartAtUtc)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> usp_CloseSession hiện tính toàn bộ giờ theo giá snapshot và chuyển bàn sang AwaitingPayment. Chưa trừ giờ combo, thanh toán hoặc trả bàn về Available.</p>
+<h3 id="3-14-productcategories">3.14 ProductCategories</h3>
+<p><strong>Mục đích:</strong> Danh mục nhóm đồ ăn và nước uống. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa danh mục món.</td></tr>
+<tr><td><code>Name</code></td><td><code>nvarchar(60)</code>; <code>NOT NULL</code>; <code>UNIQUE</code>; CHECK <code>LEN(LTRIM(RTRIM(Name))) &gt; 0</code></td><td>Tên nhóm, ví dụ Đồ uống hoặc Đồ ăn.</td></tr>
+</tbody></table></div>
+<h3 id="3-15-products">3.15 Products</h3>
+<p><strong>Mục đích:</strong> Món đang bán, giá, tồn kho và trạng thái kinh doanh. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa sản phẩm.</td></tr>
+<tr><td><code>CategoryId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>ProductCategories.Id</code>; ON DELETE NO ACTION</td><td>Danh mục sản phẩm.</td></tr>
+<tr><td><code>Name</code></td><td><code>nvarchar(100)</code>; <code>NOT NULL</code>; <code>UNIQUE</code>; CHECK <code>LEN(LTRIM(RTRIM(Name))) &gt; 0</code></td><td>Tên món duy nhất.</td></tr>
+<tr><td><code>Price</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; CHECK <code>Price &gt; 0</code></td><td>Giá món lẻ theo VND; phải lớn hơn 0.</td></tr>
+<tr><td><code>StockQuantity</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code>; CHECK <code>StockQuantity &gt;= 0</code></td><td>Tồn kho không âm; thao tác bán cần transaction để chống bán vượt tồn.</td></tr>
+<tr><td><code>IsActive</code></td><td><code>bit</code>; <code>NOT NULL</code>; <code>DEFAULT 1</code></td><td>Còn kinh doanh hay đã ngừng bán; khác với còn/hết hàng.</td></tr>
+<tr><td><code>RowVersion</code></td><td><code>rowversion</code>; <code>NOT NULL</code></td><td>Token phát hiện cập nhật đồng thời.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_Products_Category_Active</code>: <code>(CategoryId, IsActive)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Món đã có lịch sử nên ngừng bán bằng IsActive. Phân quyền và đồng bộ trừ tồn không được FK/CHECK này tự thực hiện.</p>
+<h3 id="3-16-orders">3.16 Orders</h3>
+<p><strong>Mục đích:</strong> Lượt gọi món F&amp;B gắn với phiên chơi. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa đơn gọi món.</td></tr>
+<tr><td><code>SessionId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>PlaySessions.Id</code>; ON DELETE NO ACTION</td><td>Phiên chơi phát sinh đơn.</td></tr>
+<tr><td><code>OrderTimeUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; <code>DEFAULT SYSUTCDATETIME()</code></td><td>Thời điểm gọi món, UTC.</td></tr>
+<tr><td><code>Status</code></td><td><code>varchar(20)</code>; <code>NOT NULL</code>; <code>DEFAULT 'Pending'</code>; CHECK <code>Status IN ('Pending', 'Preparing', 'Served', 'Cancelled')</code></td><td>Pending, Preparing, Served hoặc Cancelled.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_Orders_Session</code>: <code>(SessionId)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Chưa có nhân viên ghi nhận hoặc liên kết nguồn combo trong bảng Orders hiện tại. Chưa có constraint bắt buộc phiên đang Active khi gọi món.</p>
+<h3 id="3-17-orderdetails">3.17 OrderDetails</h3>
+<p><strong>Mục đích:</strong> Chi tiết món, số lượng và giá tại thời điểm gọi trong một đơn F&amp;B. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa dòng món.</td></tr>
+<tr><td><code>OrderId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>Orders.Id</code>; ON DELETE CASCADE</td><td>Đơn chứa dòng món; FK hiện có cascade khi xóa đơn.</td></tr>
+<tr><td><code>ProductId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>Products.Id</code>; ON DELETE NO ACTION</td><td>Sản phẩm được gọi; không cascade xóa sản phẩm.</td></tr>
+<tr><td><code>Quantity</code></td><td><code>int</code>; <code>NOT NULL</code>; CHECK <code>Quantity &gt; 0</code></td><td>Số lượng món, phải lớn hơn 0.</td></tr>
+<tr><td><code>UnitPrice</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; CHECK <code>UnitPrice &gt;= 0</code></td><td>Giá một món tại thời điểm gọi; DDL cho phép 0.</td></tr>
+<tr><td><code>Subtotal</code></td><td><code>AS (Quantity * UnitPrice) PERSISTED</code>; cột tính toán, không nhập trực tiếp</td><td>Thành tiền SQL tự tính bằng Quantity × UnitPrice; không nhập trực tiếp.</td></tr>
+</tbody></table></div>
+<p><strong>Lưu ý nghiệp vụ:</strong> DDL chưa UNIQUE(OrderId, ProductId), nên có thể có nhiều dòng cùng món. Dòng món combo chưa có liên kết nguồn; không tính các quyền lợi combo như món lẻ để thu tiền/trừ tồn hai lần.</p>
+<h3 id="3-18-combos">3.18 Combos</h3>
+<p><strong>Mục đích:</strong> Danh mục gói gồm giờ chơi và các món đi kèm. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa combo.</td></tr>
+<tr><td><code>Name</code></td><td><code>nvarchar(100)</code>; <code>NOT NULL</code>; <code>UNIQUE</code>; CHECK <code>LEN(LTRIM(RTRIM(Name))) &gt; 0</code></td><td>Tên gói duy nhất.</td></tr>
+<tr><td><code>Price</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; CHECK <code>Price &gt;= 0</code></td><td>Giá một gói; DDL cho phép 0.</td></tr>
+<tr><td><code>PlaytimeHours</code></td><td><code>decimal(5,2)</code>; <code>NOT NULL</code>; CHECK <code>PlaytimeHours &gt; 0</code></td><td>Số giờ chơi trong một gói.</td></tr>
+<tr><td><code>IsActive</code></td><td><code>bit</code>; <code>NOT NULL</code>; <code>DEFAULT 1</code></td><td>Gói đang bán hay đã ngừng bán.</td></tr>
+</tbody></table></div>
+<p><strong>Lưu ý nghiệp vụ:</strong> Một gói gồm giờ và các món tại ComboItems. Schema không tự bắt buộc gói có ít nhất một món; chưa có loại bàn/khung giờ áp dụng.</p>
+<h3 id="3-19-comboitems">3.19 ComboItems</h3>
+<p><strong>Mục đích:</strong> Các món và số lượng cho mỗi đơn vị combo trong danh mục hiện tại. <strong>Primary key:</strong> <code>(ComboId, ProductId)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>ComboId</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code>; FK → <code>Combos.Id</code>; ON DELETE NO ACTION</td><td>Combo trong danh mục.</td></tr>
+<tr><td><code>ProductId</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code>; FK → <code>Products.Id</code>; ON DELETE NO ACTION</td><td>Món đi kèm; PK ghép ngăn lặp một món trong cùng combo.</td></tr>
+<tr><td><code>Quantity</code></td><td><code>int</code>; <code>NOT NULL</code>; CHECK <code>Quantity &gt; 0</code></td><td>Số lượng món cho MỘT gói; chưa phải tổng số lượng phiên mua.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_ComboItems_ProductId</code>: <code>(ProductId)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Danh mục có thể thay đổi; thông tin đã mua phải đọc từ SessionCombos/SessionComboItems. FK đều NO ACTION khi xóa.</p>
+<h3 id="3-20-sessioncombos">3.20 SessionCombos</h3>
+<p><strong>Mục đích:</strong> Lượt mua combo của phiên chơi, số gói, tên/giá/giờ tại thời điểm mua. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa lượt mua combo.</td></tr>
+<tr><td><code>SessionId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>PlaySessions.Id</code>; ON DELETE NO ACTION</td><td>Phiên mua gói; schema cho phép nhiều lượt mua trong một phiên.</td></tr>
+<tr><td><code>ComboId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>Combos.Id</code>; ON DELETE NO ACTION</td><td>Combo nguồn; không tự cập nhật thông tin đã mua theo danh mục mới.</td></tr>
+<tr><td><code>Quantity</code></td><td><code>int</code>; <code>NOT NULL</code>; CHECK <code>Quantity &gt; 0</code></td><td>Số gói trong lượt mua.</td></tr>
+<tr><td><code>ComboNameSnapshot</code></td><td><code>nvarchar(100)</code>; <code>NOT NULL</code>; CHECK <code>LEN(LTRIM(RTRIM(ComboNameSnapshot))) &gt; 0</code></td><td>Tên combo tại lúc mua.</td></tr>
+<tr><td><code>UnitPriceSnapshot</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; CHECK <code>UnitPriceSnapshot &gt;= 0</code></td><td>Giá MỘT gói tại lúc mua; tổng giá gói = Quantity × UnitPriceSnapshot.</td></tr>
+<tr><td><code>PlaytimeHoursSnapshot</code></td><td><code>decimal(5,2)</code>; <code>NOT NULL</code>; CHECK <code>PlaytimeHoursSnapshot &gt; 0</code></td><td>Giờ chơi MỘT gói tại lúc mua; tổng giờ = Quantity × PlaytimeHoursSnapshot.</td></tr>
+<tr><td><code>PurchasedAtUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; <code>DEFAULT SYSUTCDATETIME()</code></td><td>Thời điểm ghi nhận mua, UTC.</td></tr>
+<tr><td><code>CreatedById</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION</td><td>Người ghi nhận; backend kiểm tra quyền và lấy ID từ phiên đăng nhập.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_SessionCombos_SessionId</code>: <code>(SessionId)</code>.</li>
+<li><code>IX_SessionCombos_ComboId</code>: <code>(ComboId)</code>.</li>
+<li><code>IX_SessionCombos_CreatedById</code>: <code>(CreatedById)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Backend sao chép giá/tên/giờ từ database trong cùng transaction với các món; không tin giá từ form. Schema chưa có idempotency key, hủy/hoàn hoặc trạng thái giao món.</p>
+<h3 id="3-21-sessioncomboitems">3.21 SessionComboItems</h3>
+<p><strong>Mục đích:</strong> Thành phần món được lưu tại thời điểm mua combo để giữ lịch sử. <strong>Primary key:</strong> <code>(SessionComboId, ProductId)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>SessionComboId</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code>; FK → <code>SessionCombos.Id</code>; ON DELETE NO ACTION</td><td>Lượt mua combo chứa quyền lợi món.</td></tr>
+<tr><td><code>ProductId</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>thuộc PK ghép</code>; FK → <code>Products.Id</code>; ON DELETE NO ACTION</td><td>Sản phẩm đi kèm.</td></tr>
+<tr><td><code>ProductNameSnapshot</code></td><td><code>nvarchar(100)</code>; <code>NOT NULL</code>; CHECK <code>LEN(LTRIM(RTRIM(ProductNameSnapshot))) &gt; 0</code></td><td>Tên món tại lúc mua, giữ nguyên khi đổi tên danh mục.</td></tr>
+<tr><td><code>QuantityPerCombo</code></td><td><code>int</code>; <code>NOT NULL</code>; CHECK <code>QuantityPerCombo &gt; 0</code></td><td>Số món cho MỘT gói tại lúc mua; tổng món = QuantityPerCombo × SessionCombos.Quantity.</td></tr>
+</tbody></table></div>
+<p><strong>Indexes khai báo riêng:</strong></p>
+<ul>
+<li><code>IX_SessionComboItems_ProductId</code>: <code>(ProductId)</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Lưu quyền lợi đã mua, chưa mô tả món đã giao. Snapshot còn cần service bảo vệ khỏi UPDATE trực tiếp. FK đều NO ACTION khi xóa.</p>
+<h3 id="3-22-invoices">3.22 Invoices</h3>
+<p><strong>Mục đích:</strong> Hóa đơn của phiên chơi: tiền giờ, F&amp;B, giảm giá và trạng thái thanh toán. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa hóa đơn.</td></tr>
+<tr><td><code>SessionId</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>UNIQUE</code>; FK → <code>PlaySessions.Id</code>; ON DELETE NO ACTION</td><td>Phiên được lập hóa đơn; UNIQUE quy định tối đa một hóa đơn/phiên.</td></tr>
+<tr><td><code>CustomerId</code></td><td><code>nvarchar(450)</code>; <code>NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION</td><td>Khách gắn với hóa đơn; có thể NULL.</td></tr>
+<tr><td><code>TotalPlaytime</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code></td><td>Tổng tiền giờ; DDL chưa CHECK không âm.</td></tr>
+<tr><td><code>TotalFandB</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code></td><td>Tổng tiền món; DDL chưa CHECK không âm.</td></tr>
+<tr><td><code>DiscountAmount</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code></td><td>Số tiền giảm, không phải phần trăm; chưa có CHECK giới hạn mức giảm.</td></tr>
+<tr><td><code>FinalAmount</code></td><td><code>AS (TotalPlaytime + TotalFandB - DiscountAmount) PERSISTED</code>; cột tính toán, không nhập trực tiếp</td><td>SQL tự tính TotalPlaytime + TotalFandB − DiscountAmount; schema chưa chặn kết quả âm.</td></tr>
+<tr><td><code>Status</code></td><td><code>varchar(20)</code>; <code>NOT NULL</code>; <code>DEFAULT 'Unpaid'</code>; CHECK <code>Status IN ('Unpaid', 'Paid')</code></td><td>Unpaid hoặc Paid; nghiệp vụ phải đối chiếu giao dịch để cập nhật.</td></tr>
+<tr><td><code>CreatedAtUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; <code>DEFAULT SYSUTCDATETIME()</code></td><td>Thời điểm tạo hóa đơn, UTC.</td></tr>
+</tbody></table></div>
+<p><strong>Lưu ý nghiệp vụ:</strong> Chưa có thành phần tiền combo riêng, hóa đơn âm chưa bị CHECK chặn. Công thức kết hợp combo/giờ vượt/F&amp;B cần thống nhất trước khi bán; không suy ra tổng đúng từ việc schema có bảng.</p>
+<h3 id="3-23-paymenttransactions">3.23 PaymentTransactions</h3>
+<p><strong>Mục đích:</strong> Các giao dịch thanh toán của hóa đơn, phương thức và mã tham chiếu. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa giao dịch.</td></tr>
+<tr><td><code>InvoiceId</code></td><td><code>int</code>; <code>NOT NULL</code>; FK → <code>Invoices.Id</code>; ON DELETE CASCADE</td><td>Hóa đơn nhận thanh toán; FK hiện có cascade khi xóa hóa đơn.</td></tr>
+<tr><td><code>PaymentMethod</code></td><td><code>varchar(20)</code>; <code>NOT NULL</code>; CHECK <code>PaymentMethod IN ('Cash', 'VNPay', 'SePay', 'Transfer')</code></td><td>Cash, VNPay, SePay hoặc Transfer theo CHECK; enum không có nghĩa đã tích hợp các cổng.</td></tr>
+<tr><td><code>AmountPaid</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; CHECK <code>AmountPaid &gt; 0</code></td><td>Số tiền giao dịch theo VND, lớn hơn 0.</td></tr>
+<tr><td><code>GatewayRefCode</code></td><td><code>nvarchar(100)</code>; <code>NULL</code></td><td>Mã tham chiếu cổng/ngân hàng; có thể NULL và chưa có UNIQUE.</td></tr>
+<tr><td><code>TransactionTimeUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; <code>DEFAULT SYSUTCDATETIME()</code></td><td>Thời điểm ghi nhận giao dịch, UTC.</td></tr>
+</tbody></table></div>
+<p><strong>Lưu ý nghiệp vụ:</strong> Chưa có UNIQUE cho mã cổng hoặc xử lý IPN lặp trong schema. DDL có cascade nhưng nghiệp vụ cần giữ lịch sử thanh toán, không xóa hóa đơn đã thanh toán tùy ý.</p>
+<h3 id="3-24-workshifts">3.24 WorkShifts</h3>
+<p><strong>Mục đích:</strong> Ca làm của nhân viên, thời điểm và số tiền đầu/cuối ca. <strong>Primary key:</strong> <code>(Id)</code>.</p>
+<div class="tablewrap"><table class="schema-table">
+<thead><tr><th>Column</th><th>Constraints</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>Id</code></td><td><code>int</code>; <code>NOT NULL</code>; <code>IDENTITY</code>; <code>PK</code></td><td>Khóa ca làm.</td></tr>
+<tr><td><code>StaffId</code></td><td><code>nvarchar(450)</code>; <code>NOT NULL</code>; FK → <code>AspNetUsers.Id</code>; ON DELETE NO ACTION</td><td>Tài khoản nhân viên; FK không tự kiểm tra role Staff.</td></tr>
+<tr><td><code>StartTimeUtc</code></td><td><code>datetime2(0)</code>; <code>NOT NULL</code>; <code>DEFAULT SYSUTCDATETIME()</code>; tham gia <code>CK_Shift_Time</code> (xem dưới)</td><td>Thời điểm mở ca, UTC.</td></tr>
+<tr><td><code>EndTimeUtc</code></td><td><code>datetime2(0)</code>; <code>NULL</code>; tham gia <code>CK_Shift_Time</code> (xem dưới)</td><td>Thời điểm đóng ca, UTC; có thể NULL.</td></tr>
+<tr><td><code>StartingCash</code></td><td><code>decimal(18,2)</code>; <code>NOT NULL</code>; <code>DEFAULT 0</code></td><td>Tiền đầu ca; chưa có CHECK không âm.</td></tr>
+<tr><td><code>EndingCash</code></td><td><code>decimal(18,2)</code>; <code>NULL</code></td><td>Tiền cuối ca; NULL nếu chưa ghi nhận, chưa có CHECK không âm.</td></tr>
+<tr><td><code>Status</code></td><td><code>varchar(20)</code>; <code>NOT NULL</code>; <code>DEFAULT 'Active'</code>; CHECK <code>Status IN ('Active', 'Closed')</code></td><td>Active hoặc Closed; DDL chưa bắt buộc Closed có EndTimeUtc.</td></tr>
+<tr><td><code>Notes</code></td><td><code>nvarchar(500)</code>; <code>NULL</code></td><td>Ghi chú ca làm.</td></tr>
+</tbody></table></div>
+<p><strong>CHECK phối hợp nhiều cột:</strong></p>
+<ul>
+<li><code>CK_Shift_Time</code>: <code>EndTimeUtc IS NULL OR EndTimeUtc &gt;= StartTimeUtc</code>.</li>
+</ul>
+<p><strong>Lưu ý nghiệp vụ:</strong> Chưa có unique filtered index giới hạn một ca Active/nhân viên, chưa có liên kết ca với Orders/Invoices/PaymentTransactions; chưa có CHECK ràng buộc trạng thái với thời điểm đóng.</p>
+<h3 id="3-25-cac-quan-he-va-gioi-han-can-thong-nhat">3.25 Các quan hệ và giới hạn cần thống nhất</h3>
+<ul>
+<li>Tài khoản → role là nhiều–nhiều qua AspNetUserRoles. MembershipTiers là hạng ưu đãi, không phải role bảo mật.</li>
+<li>Một bàn có nhiều lượt đặt và nhiều phiên trong lịch sử. Mỗi booking tối đa một phiên; mỗi phiên tối đa một hóa đơn. Phiên walk-in có thể không có booking/tài khoản khách.</li>
+<li>Một phiên có nhiều đơn F&amp;B, nhiều lượt mua combo; một hóa đơn có nhiều giao dịch. Những quan hệ này lấy từ FK/UNIQUE, không tự xác nhận luồng thanh toán đã triển khai.</li>
+<li>ComboItems là danh mục hiện tại; SessionCombos và SessionComboItems là thông tin lúc mua. Tổng giá gói = số gói × giá một gói; tổng giờ/món nhân theo số gói. Chưa có liên kết nguồn giao món combo trong OrderDetails hoặc thành phần tiền combo riêng trong Invoices.</li>
+<li>Những điểm chưa có ràng buộc SQL: tiền hóa đơn/tiền ca không âm, GatewayRefCode duy nhất, một ca Active/nhân viên, khoảng cấu hình giá không trùng, ngưỡng nâng hạng và lịch sử điểm. Đây là phần cần thiết kế tiếp, không mô tả là đã tồn tại.</li>
+<li>Tổng hợp CASCADE hiện có: AspNetUserRoles từ User/Role; AspNetUserClaims, AspNetUserLogins, AspNetUserTokens từ User; AspNetRoleClaims từ Role; OrderDetails từ Orders; PaymentTransactions từ Invoices. Các FK còn lại dùng NO ACTION. Không dùng khả năng cascade để xóa lịch sử nhân viên/hóa đơn trái quy tắc ứng dụng.</li>
+</ul>
+<p><strong>Cài đặt/kiểm tra:</strong> xem <code>BMS_Database_Starter/README_VI.md</code>. Không chạy Full hoặc seed lại trên database đang có dữ liệu. Phần này là tài liệu thiết kế, không phải script thay đổi database.</p>
+<h1 id="ii-detailed-code-design">II. Detailed Code Design</h1>
+<h2 id="1-quan-ly-tai-khoan-va-nhan-vien">1. Quản lý tài khoản và nhân viên</h2>
 <p>Phần này gồm ba chức năng được giao cho Hùng: Login, Tạo nhân viên và Đổi mật khẩu. GET trả form; POST nhận dữ liệu và thực hiện thao tác. Các sequence mô tả thiết kế đích; chỗ khác với code đã được đánh dấu ngay dưới sơ đồ và tổng hợp ở phụ lục.</p>
-<h3>1.1 Class Diagram</h3>
+<h3 id="1-1-class-diagram">1.1 Class Diagram</h3>
 <figure><div class="diagram"><pre class="mermaid">classDiagram
     class IdentityUser {
         +string Id
@@ -442,7 +1035,7 @@
 <tr><td>ApplicationDbContext</td><td>Mapping Identity đến schema SQL, cung cấp transaction và EF tracking</td></tr>
 <tr><td>UserManager / SignInManager</td><td>API framework cho vòng đời tài khoản, mật khẩu, role và đăng nhập</td></tr>
 </tbody></table></div>
-<h3>1.2 Sequence Diagram — Login</h3>
+<h3 id="1-2-sequence-diagram-login">1.2 Sequence Diagram — Login</h3>
 <p><strong>Actor:</strong> Admin, Staff hoặc Customer. <strong>Route:</strong> GET/POST <code>/Account/Login</code>. <strong>Đầu vào:</strong> Username, Password, RememberMe, returnUrl tùy chọn. <strong>Điều kiện:</strong> tài khoản tồn tại, IsActive=true, có mật khẩu hợp lệ, không bị khóa tạm. <strong>Đầu ra thành công:</strong> cookie đăng nhập và điều hướng đến URL local hợp lệ hoặc trang theo role.</p>
 <figure><div class="diagram"><pre class="mermaid">sequenceDiagram
     autonumber
@@ -527,7 +1120,7 @@
     end</pre></details></figure>
 <p><strong>Hình II.2 — Đăng nhập bằng Identity.</strong> Luồng kiểm tra bên trong manager được rút gọn; Identity tự quản lý hash, failed count và lockout. RememberMe quyết định cookie có được lưu lâu dài hay chỉ trong phiên trình duyệt, không bỏ qua các kiểm tra bảo mật.</p>
 <p>Quy tắc hiện có: tối đa 5 lần sai trước khóa tạm 5 phút với tài khoản có LockoutEnabled=true. AccountController kiểm tra <code>Url.IsLocalUrl(returnUrl)</code> trước khi redirect. Nếu không có returnUrl hợp lệ, ưu tiên Admin → Employee, Staff → Staff, Customer → Customer; không có role phù hợp → Home. Việc redirect không thay cho Authorize ở trang đích. Form chưa triển khai luồng 2FA, nên không bật TwoFactorEnabled cho user nếu chưa bổ sung luồng tương ứng.</p>
-<h3>1.3 Sequence Diagram — Tạo nhân viên</h3>
+<h3 id="1-3-sequence-diagram-tao-nhan-vien">1.3 Sequence Diagram — Tạo nhân viên</h3>
 <p><strong>Actor:</strong> Admin. <strong>Route:</strong> GET/POST <code>/Employee/Create</code>. <strong>Đầu vào:</strong> FullName, UserName, Email, PhoneNumber tùy chọn, EmployeeCode tùy chọn, HireDate tùy chọn, Password, ConfirmPassword. <strong>Điều kiện:</strong> phiên Admin hợp lệ và role Staff đã tồn tại. <strong>Hậu điều kiện:</strong> có một user hoạt động kèm role Staff; hoặc không có thay đổi dữ liệu khi thất bại.</p>
 <figure><div class="diagram"><pre class="mermaid">sequenceDiagram
     autonumber
@@ -610,7 +1203,7 @@
 <p><strong>Khác biệt hiện tại:</strong> EmployeeController mới chỉ nhận UserManager, tạo user rồi gán Staff; nếu gán role lỗi thì gọi DeleteAsync để bù. Đây không phải transaction nguyên tử, dù comment trong code nói “cùng transaction”. Sơ đồ trên là yêu cầu cần bổ sung, không phải mô tả tính năng đã kiểm chứng.</p>
 <p>Validation: FullName tối đa 100 ký tự và không toàn khoảng trắng; UserName 3–50 ký tự theo ViewModel; email đúng định dạng và không trùng sau chuẩn hóa; mật khẩu và xác nhận phải khớp. Số điện thoại/mã nhân viên rỗng chuyển thành NULL hoặc sinh mã theo quy tắc, không lưu chuỗi trắng. Password tối thiểu 8 ký tự, theo chính sách Identity của ứng dụng.</p>
 <p>Mã tự sinh hiện dựa trên mã NV lớn nhất cộng một, có thể trùng khi hai Admin tạo đồng thời. Unique index là lớp bảo vệ cuối; thiết kế cần bắt lỗi trùng và yêu cầu thử lại hoặc bổ sung cơ chế sinh mã an toàn. Không đổi Role từ input; luôn gán Staff tại backend. Việc tạo Staff không cấp lại cookie để tránh thay phiên Admin bằng tài khoản vừa tạo.</p>
-<h3>1.4 Sequence Diagram — Đổi mật khẩu</h3>
+<h3 id="1-4-sequence-diagram-oi-mat-khau">1.4 Sequence Diagram — Đổi mật khẩu</h3>
 <p><strong>Actor:</strong> tài khoản đã đăng nhập, gồm Admin, Staff, Customer. <strong>Route:</strong> GET/POST <code>/Profile/ChangePassword</code>. <strong>Đầu vào:</strong> CurrentPassword, NewPassword, ConfirmPassword. <strong>Điều kiện:</strong> phiên đăng nhập hợp lệ, tài khoản hoạt động và biết mật khẩu hiện tại. <strong>Hậu điều kiện:</strong> hash mật khẩu được cập nhật, phiên hiện tại được làm mới; thất bại thì giữ mật khẩu cũ.</p>
 <figure><div class="diagram"><pre class="mermaid">sequenceDiagram
     autonumber
@@ -689,12 +1282,12 @@
     end</pre></details></figure>
 <p><strong>Hình II.4 — Người dùng tự đổi mật khẩu.</strong> Lấy user từ principal, không nhận UserId để chọn tài khoản khác. Đây là luồng đổi mật khẩu có kiểm tra mật khẩu cũ, khác chức năng Admin đặt lại mật khẩu Staff. Các phiên khác bị từ chối khi security stamp được kiểm tra; không khẳng định chúng bị đăng xuất tức thì với cấu hình hiện tại.</p>
 <p>Code ProfileController hiện đã dùng ChangePasswordAsync và RefreshSignInAsync. Kiểm tra active cho cookie và cách hiển thị lỗi database không dự kiến vẫn cần hoàn thiện theo phần III.</p>
-<h1>III. Other Design Specifications</h1>
-<h2>1. Cơ chế phân quyền và bảo mật</h2>
-<h3>1.1 Xác thực và quản lý phiên</h3>
+<h1 id="iii-other-design-specifications">III. Other Design Specifications</h1>
+<h2 id="1-co-che-phan-quyen-va-bao-mat">1. Cơ chế phân quyền và bảo mật</h2>
+<h3 id="1-1-xac-thuc-va-quan-ly-phien">1.1 Xác thực và quản lý phiên</h3>
 <p>BMS dùng ASP.NET Core Identity với cookie authentication. Mật khẩu được xử lý bởi password hasher của Identity, không tự lưu plaintext, không tự viết hash MD5/SHA256 và không giả định ứng dụng dùng BCrypt như mẫu SDS. Cookie chứa ticket được framework bảo vệ; request được chuyển thành ClaimsPrincipal trước khi kiểm tra Authorize. Chính sách hiện có trong Program.cs đặt độ dài tối thiểu 8, khóa tạm sau 5 lần sai trong 5 phút; các yêu cầu chữ hoa/chữ thường/chữ số/ký tự đặc biệt theo cấu hình mặc định chưa bị ghi đè. <a href="https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity-configuration?view=aspnetcore-8.0">Cấu hình Identity</a>.</p>
 <p>Logout chỉ qua POST có token và gọi SignOutAsync. Các POST Login/Create/ChangePassword cũng yêu cầu anti-forgery. Mật khẩu, hash, cookie và token không được ghi vào log. Cookie triển khai thật cần HttpOnly và Secure qua HTTPS; thời hạn phiên và SameSite phải chốt trước triển khai, tránh tự ghi một thời hạn chưa được cấu hình vào SDS. Demo hiện không yêu cầu xác nhận email; không tuyên bố có email verification hoặc 2FA đã hoàn thiện.</p>
-<h3>1.2 Ma trận quyền cho phạm vi Hùng</h3>
+<h3 id="1-2-ma-tran-quyen-cho-pham-vi-hung">1.2 Ma trận quyền cho phạm vi Hùng</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>Chức năng</th><th>Chưa đăng nhập</th><th>Admin</th><th>Staff</th><th>Customer</th></tr></thead><tbody>
 <tr><td>Gửi đăng nhập</td><td>Có</td><td>Có endpoint; UI thường điều hướng khi đã đăng nhập</td><td>Tương tự Admin</td><td>Tương tự Admin</td></tr>
@@ -708,7 +1301,7 @@
 </tbody></table></div>
 <p><code>EmployeeController</code> dùng <code>[Authorize(Roles = &quot;Admin&quot;)]</code>; <code>ProfileController</code> dùng <code>[Authorize]</code>. Admin không tự động được vào mọi endpoint Customer: quyền cụ thể phụ thuộc attribute/policy, không suy ra từ tên vai trò. Khi mở rộng quyền, nhóm cập nhật code và ma trận đồng thời.</p>
 <p>Ẩn nút/menu chỉ giúp giao diện dễ dùng. Server vẫn phải từ chối truy cập trực tiếp bằng URL hoặc POST giả. Hàm lấy Staff phải kiểm tra role thật trước sửa/khóa; backend không dùng role trong hidden input để quyết định quyền. Với booking/lịch sử chơi, Customer chỉ được truy cập bản ghi của mình; TV2/TV3 triển khai kiểm tra ownership ở phía server.</p>
-<h3>1.3 Phân biệt hai loại khóa tài khoản</h3>
+<h3 id="1-3-phan-biet-hai-loai-khoa-tai-khoan">1.3 Phân biệt hai loại khóa tài khoản</h3>
 <div class="tablewrap"><table>
 <thead><tr><th>Cơ chế</th><th>Dữ liệu</th><th>Ai quyết định</th><th>Điều kiện mở lại</th></tr></thead><tbody>
 <tr><td>Khóa quản trị</td><td>IsActive=false</td><td>Admin quản lý nhân viên</td><td>Admin đặt lại IsActive=true</td></tr>
@@ -717,14 +1310,14 @@
 <p>Điều kiện đăng nhập phải đồng thời thỏa active và chính sách lockout. Mở khóa quản trị không tự xóa khóa tạm. Đổi SecurityStamp chỉ có hiệu lực khi cookie được kiểm tra, không tự đẩy thông báo logout ngay vào mọi trình duyệt.</p>
 <p><strong>Thiết kế cần bổ sung:</strong> kiểm tra user còn tồn tại và IsActive tại mỗi request được bảo vệ. Nếu có custom OnValidatePrincipal, vẫn gọi bộ kiểm tra SecurityStamp mặc định; nếu principal bị từ chối thì dừng xử lý. Với user bị khóa hoặc đã xóa, RejectPrincipal và SignOut. Tần suất kiểm tra stamp quyết định độ trễ thu hồi phiên khác sau đổi mật khẩu; phải mô tả đúng cấu hình thực tế. <a href="https://source.dot.net/Microsoft.AspNetCore.Identity/SecurityStampValidator.cs.html">Cơ chế xác thực SecurityStamp</a>.</p>
 <p>Code hiện chưa đăng ký kiểm tra IsActive trong cookie event. ToggleLock cập nhật stamp và user nhưng chưa kiểm tra đầy đủ IdentityResult; cần chỉ báo thành công sau khi lưu thành công. Không coi comment “mất hiệu lực ngay” là bằng chứng đã đáp ứng yêu cầu.</p>
-<h3>1.4 Bảo vệ dữ liệu và transaction</h3>
+<h3 id="1-4-bao-ve-du-lieu-va-transaction">1.4 Bảo vệ dữ liệu và transaction</h3>
 <p>Các form nhận ViewModel có tập trường cho phép, tránh người gọi gửi thêm IsActive/role/RewardPoints/TierId để tự tăng quyền hoặc điểm. Razor hiển thị dữ liệu người dùng dưới dạng đã encode; không dùng Html.Raw với tên hoặc nội dung do user nhập. Truy vấn database dùng EF hoặc SQL có tham số; không nối chuỗi SQL với input.</p>
 <p>Tạo Staff phải nguyên tử: tạo user và liên kết role cùng commit hoặc cùng rollback. Bắt lỗi unique constraint cho username/email/phone/mã nhân viên và trả thông báo phù hợp; không đưa SQL stack trace ra UI. Khi sửa dữ liệu, kiểm tra concurrency bằng IdentityResult và giá trị phiên bản phù hợp với thời điểm tải form, tránh ghi đè thay đổi của người khác mà không báo.</p>
 <p>Tài khoản có lịch sử nghiệp vụ được giữ lại bằng khóa IsActive. Chính sách xóa vĩnh viễn tài khoản chưa có lịch sử cần nhóm chốt riêng; source hiện có action Delete nên không mô tả rằng mọi thao tác xóa đều đã bị cấm. Connection string và mật khẩu khởi tạo lấy từ cấu hình local/user-secrets/biến môi trường. Initializer mật khẩu chỉ chạy Development, không reset mật khẩu đã có.</p>
-<h3>1.5 Ranh giới với điểm thưởng và VNPay</h3>
+<h3 id="1-5-ranh-gioi-voi-iem-thuong-va-vnpay">1.5 Ranh giới với điểm thưởng và VNPay</h3>
 <p>MembershipTiers không có quyền cấp role; RewardPoints và TierId phải do backend có thẩm quyền cập nhật. Hùng bàn giao tên bảng/cột và mapping; không tự chốt tỷ lệ điểm, ngưỡng hạng hoặc mức ưu đãi thay TV3/TV4. Theo phân công mới, TV3 phụ trách sự kiện điểm sau thanh toán và TV4 phụ trách công thức/nâng hạng; nhóm phải chọn một luồng cập nhật để một giao dịch không cộng điểm hai lần.</p>
 <p>Endpoint VNPay IPN dự kiến không sử dụng phiên cookie của khách làm bằng chứng giao dịch; TV3 phải thiết kế xác thực thông báo riêng. Hùng cung cấp quyền truy cập trang thanh toán/quản trị, không tự nhận rằng chỉ có Authorize là đủ bảo vệ callback bên ngoài.</p>
-<h2>2. Tiêu chí kiểm tra phần Hùng</h2>
+<h2 id="2-tieu-chi-kiem-tra-phan-hung">2. Tiêu chí kiểm tra phần Hùng</h2>
 <p>Các dòng dưới đây là tiêu chí nghiệm thu, chưa phải kết quả kiểm thử đã chạy trong lần soạn tài liệu này.</p>
 <div class="tablewrap"><table>
 <thead><tr><th>ID</th><th>Tình huống</th><th>Kết quả mong đợi</th></tr></thead><tbody>
@@ -743,23 +1336,23 @@
 <tr><td>H13</td><td>Đổi ID nhân viên thành ID Admin/Customer</td><td>Không được sửa/khóa đối tượng ngoài Staff</td></tr>
 <tr><td>H14</td><td>Gửi role Admin hoặc điểm/hạng trong form tạo Staff</td><td>Dữ liệu ngoài ViewModel không tạo thay đổi quyền/điểm trái phép</td></tr>
 </tbody></table></div>
-<h1>Phụ lục bàn giao cho nhóm</h1>
-<h2>A. Chênh lệch cần xử lý trước khi coi SDS khớp hoàn toàn với code</h2>
+<h1 id="phu-luc-ban-giao-cho-nhom">Phụ lục bàn giao cho nhóm</h1>
+<h2 id="a-chenh-lech-can-xu-ly-truoc-khi-coi-sds-khop-hoan-toan-voi-code">A. Chênh lệch cần xử lý trước khi coi SDS khớp hoàn toàn với code</h2>
 <div class="tablewrap"><table>
 <thead><tr><th>Vấn đề</th><th>Bằng chứng hiện tại</th><th>Việc cần làm</th></tr></thead><tbody>
 <tr><td>Tạo Staff chưa nguyên tử</td><td>EmployeeController chỉ dùng UserManager và DeleteAsync bù khi gán role lỗi</td><td>Thêm transaction cùng context theo Hình II.3</td></tr>
 <tr><td>Thu hồi phiên sau khóa chưa tức thời</td><td>Program.cs chưa kiểm tra IsActive trong cookie validation</td><td>Bổ sung active check và giữ stamp validation</td></tr>
 <tr><td>Thiếu mapping thành viên</td><td>SQL có RewardPoints/TierId/MembershipTiers; ApplicationUser chưa khai báo</td><td>Bổ sung khi triển khai thành viên; không khởi tạo lại database</td></tr>
 <tr><td>Chưa có ngưỡng nâng hạng</td><td>MembershipTiers chỉ có Id/TierName/DiscountPercent</td><td>TV4 chốt thuật toán và cấu hình; Hùng phối hợp schema</td></tr>
-<tr><td>Chưa phân công hết bảng</td><td>Phân công mới liệt kê 20 bảng, SQL khai báo 21 bảng</td><td>Còn AspNetRoleClaims; đề xuất TV2 nhận cùng bộ bảng Identity phụ, chờ nhóm chốt</td></tr>
-<tr><td>Script dùng sai DB ở đoạn kiểm tra cuối</td><td>BilliardDB_Full.sql cuối file còn USE BMS_Starter</td><td>Sửa ở tác vụ database riêng sau kiểm tra; lần soạn SDS này không chạy/sửa SQL</td></tr>
-<tr><td>Một số seed tiếng Việt có dấu hiệu lỗi mã hóa</td><td>Chuỗi tên/mô tả trong file SQL hiện tại bị lỗi ký tự</td><td>Kiểm tra encoding và dữ liệu thực tế trước khi seed máy mới</td></tr>
-<tr><td>Schema/runtime chưa được xác minh lại</td><td>DDL có bảng mới; tài liệu cũ chỉ xác nhận 13 bảng</td><td>Kiểm tra chỉ đọc trên database khi đến bước triển khai, không giả định đã nâng cấp</td></tr>
+<tr><td>Phân công bảng cần chốt bổ sung</td><td>Schema mới có 24 bảng; phân công ban đầu liệt kê 20 bảng</td><td>Còn AspNetRoleClaims (đề xuất TV2); 3 bảng liên kết combo đề xuất TV4 phối hợp TV1/TV3</td></tr>
+<tr><td>Dữ liệu live cũ có tên tiếng Việt lỗi mã hóa</td><td>Nguồn seed đã sửa ở commit 4448bb2; các dòng cũ không được reseed</td><td>Sửa dữ liệu live bằng tác vụ riêng khi cần; không chạy seed lại lên database có dữ liệu</td></tr>
+<tr><td>Chưa có nghiệp vụ combo hoàn chỉnh</td><td>Có 3 bảng liên kết, nhưng đóng phiên vẫn tính giờ thường, hóa đơn chưa tách tiền combo</td><td>TV1/TV3/TV4 chốt giờ vượt, trừ tồn, giao món và tổng tiền trước khi bán combo</td></tr>
 </tbody></table></div>
-<h2>B. Cách ghép vào báo cáo nhóm</h2>
-<p>Đưa mục I.1 và I.2 vào phần High Level Design chung. Đưa bốn bảng ở I.3 vào Database Design, đánh lại số thứ tự cùng bảng của các bạn. Đưa mục II.1 và bốn tiểu mục vào Section 1 của Detailed Code Design. Đưa phần III.1 vào Other Design Specifications. Giữ ma trận quyền và tiêu chí nghiệm thu nếu mẫu báo cáo cho phép. Phụ lục A phục vụ rà soát nội bộ; xử lý từng điểm rồi cập nhật SDS cho đúng trước bản nộp cuối.</p>
+<p>Đã xử lý: phần verify dùng đúng BilliardDB; schema 24 bảng/5 procedure được thực thi và kiểm tra, kể cả trên database thử tạo mới; nguồn seed tiếng Việt đã sửa. Xem <code>docs/PROJECT_CONTEXT.md</code> và <code>BMS_Database_Starter/VALIDATION.txt</code> để phân biệt kết quả kiểm tra schema với các chức năng C# còn phải làm.</p>
+<h2 id="b-cach-ghep-vao-bao-cao-nhom">B. Cách ghép vào báo cáo nhóm</h2>
+<p>Đưa mục I.1 và I.2 vào phần High Level Design chung. Mục I.3 hiện có đầy đủ sơ đồ và mô tả 24 bảng, dùng làm Database Design chung; không ghép thêm bản mô tả cũ trùng bảng. Bản riêng để sao chép nằm trong <code>docs/DATABASE_DESIGN.md</code> và <code>docs/DATABASE_DESIGN.html</code>. Đưa mục II.1 và bốn tiểu mục vào Section 1 của Detailed Code Design. Đưa phần III.1 vào Other Design Specifications. Giữ ma trận quyền và tiêu chí nghiệm thu nếu mẫu báo cáo cho phép. Phụ lục A phục vụ rà soát nội bộ; xử lý từng điểm rồi cập nhật SDS cho đúng trước bản nộp cuối.</p>
 <p>Các khối Mermaid là file nguồn sơ đồ có thể sửa. Khi ghép Word/Google Docs, xuất chúng thành SVG/PNG bằng công cụ Mermaid, chèn ảnh kèm caption; không dán nguyên mã Mermaid vào báo cáo nộp. Giữ đồng nhất tên lớp trong diagram, bảng mô tả và code.</p>
-<h2>C. Nguồn tham khảo</h2>
+<h2 id="c-nguon-tham-khao">C. Nguồn tham khảo</h2>
 <ul>
 <li>Mẫu SDS của nhóm: https://docs.google.com/document/d/1ejRL6IrQYX4LTo6PDh2O4T5BMTfdGo2p/edit</li>
 <li>Schema: <code>BMS_Database_Starter/BilliardDB_Full.sql</code>.</li>
@@ -774,6 +1367,7 @@ try {
  await mermaid.run({querySelector:'.mermaid'});
  const rendered=document.querySelectorAll('.mermaid svg').length;
  if(rendered!==7) throw new Error('Chỉ vẽ được '+rendered+'/7 sơ đồ');
+ document.querySelectorAll('.database-diagram svg').forEach(svg=>{svg.style.width=svg.viewBox.baseVal.width+'px';svg.style.maxWidth='none';});
  document.getElementById('status').textContent='Đã hiển thị đủ 7 sơ đồ. Dùng nút bên dưới mỗi sơ đồ để lưu SVG, hoặc tải bản HTML offline.';
  document.querySelectorAll('figure').forEach((fig,i)=>{
   const button=document.createElement('button');button.className='controls';button.textContent='Tải sơ đồ '+(i+1)+' dạng SVG';

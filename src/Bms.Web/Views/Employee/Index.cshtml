@@ -1,6 +1,6 @@
 @model Bms.Web.Models.EmployeeListViewModel
 @{
-    ViewData["Title"] = "Quản lý nhân viên";
+    ViewData["Title"] = "Quản lý người dùng";
     Layout = "_AdminLayout";
 }
 
@@ -26,7 +26,7 @@
             <div class="stat-icon red"><i class="bi bi-people-fill"></i></div>
             <div>
                 <div class="stat-value">@Model.TotalCount</div>
-                <div class="stat-label">Tổng nhân viên</div>
+                <div class="stat-label">Tổng người dùng</div>
             </div>
         </div>
     </div>
@@ -44,7 +44,7 @@
 <!-- Data table -->
 <div class="data-card">
     <div class="data-card-header">
-        <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách nhân viên</span>
+        <span class="data-card-title"><i class="bi bi-people me-2"></i>Danh sách người dùng</span>
         <div class="d-flex gap-2 flex-wrap align-items-center">
             <!-- Search & filter form -->
             <form method="get" class="d-flex gap-2 flex-wrap" id="searchForm">
@@ -63,7 +63,7 @@
                 }
             </form>
             <a asp-action="Create" class="btn-primary-bms ms-auto">
-                <i class="bi bi-plus-lg"></i> Thêm nhân viên
+                <i class="bi bi-plus-lg"></i> Thêm người dùng
             </a>
         </div>
     </div>
@@ -72,7 +72,7 @@
     {
         <div class="text-center py-5 text-muted">
             <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-            Không tìm thấy nhân viên nào.
+            Không tìm thấy người dùng nào.
         </div>
     }
     else
@@ -81,8 +81,9 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        <th>Mã NV</th>
+                        <th>Mã</th>
                         <th>Họ và tên</th>
+                        <th>Vai trò</th>
                         <th>Tài khoản</th>
                         <th>Số điện thoại</th>
                         <th>Ngày vào làm</th>
@@ -96,6 +97,16 @@
                         <tr>
                             <td><code style="font-size:0.8rem">@(emp.EmployeeCode ?? "—")</code></td>
                             <td><strong>@emp.FullName</strong></td>
+                            <td>
+                                @if (emp.RoleName == "Manager")
+                                {
+                                    <span class="badge rounded-pill" style="background:#dbeafe;color:#1d4ed8;font-weight:600;font-size:0.72rem">Manager</span>
+                                }
+                                else
+                                {
+                                    <span class="badge rounded-pill" style="background:#f1f5f9;color:#475569;font-weight:600;font-size:0.72rem">Staff</span>
+                                }
+                            </td>
                             <td>
                                 <span style="font-size:0.8rem;color:#64748b">@emp.UserName</span>
                             </td>
@@ -129,9 +140,9 @@
                                     </a>
                                     <form asp-action="Delete" asp-route-id="@emp.Id"
                                           method="post" class="d-inline"
-                                          onsubmit="return confirm('Bạn có chắc chắn muốn xóa vĩnh viễn nhân viên @emp.FullName không?\n\nCảnh báo: Hành động này không thể hoàn tác!')">
+                                          onsubmit="return confirm('Bạn có chắc chắn muốn xóa vĩnh viễn người dùng @emp.FullName không?\n\nCảnh báo: Hành động này không thể hoàn tác!')">
                                         @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn-sm-icon text-danger" title="Xóa nhân viên">
+                                        <button type="submit" class="btn-sm-icon text-danger" title="Xóa người dùng">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </form>

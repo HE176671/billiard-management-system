@@ -1,0 +1,630 @@
+{
+  "source": "BMS_Database_Starter/BilliardDB_Full.sql",
+  "tableCount": 24,
+  "columnCount": 150,
+  "foreignKeyCount": 33,
+  "tables": [
+    {
+      "name": "AspNetUsers",
+      "columns": [
+        "Id",
+        "UserName",
+        "NormalizedUserName",
+        "Email",
+        "NormalizedEmail",
+        "EmailConfirmed",
+        "PasswordHash",
+        "SecurityStamp",
+        "ConcurrencyStamp",
+        "PhoneNumber",
+        "PhoneNumberConfirmed",
+        "TwoFactorEnabled",
+        "LockoutEnd",
+        "LockoutEnabled",
+        "AccessFailedCount",
+        "FullName",
+        "IsActive",
+        "CreatedAtUtc",
+        "EmployeeCode",
+        "RewardPoints",
+        "TierId",
+        "HireDate"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_User_MembershipTier",
+          "column": "TierId",
+          "parent": "MembershipTiers",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "AspNetRoles",
+      "columns": [
+        "Id",
+        "Name",
+        "NormalizedName",
+        "ConcurrencyStamp"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": []
+    },
+    {
+      "name": "AspNetUserRoles",
+      "columns": [
+        "UserId",
+        "RoleId"
+      ],
+      "primaryKey": [
+        "UserId",
+        "RoleId"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_UserRoles_User",
+          "column": "UserId",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": true
+        },
+        {
+          "name": "FK_UserRoles_Role",
+          "column": "RoleId",
+          "parent": "AspNetRoles",
+          "parentColumn": "Id",
+          "cascade": true
+        }
+      ]
+    },
+    {
+      "name": "AspNetUserClaims",
+      "columns": [
+        "Id",
+        "UserId",
+        "ClaimType",
+        "ClaimValue"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_UserClaims_User",
+          "column": "UserId",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": true
+        }
+      ]
+    },
+    {
+      "name": "AspNetRoleClaims",
+      "columns": [
+        "Id",
+        "RoleId",
+        "ClaimType",
+        "ClaimValue"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_RoleClaims_Role",
+          "column": "RoleId",
+          "parent": "AspNetRoles",
+          "parentColumn": "Id",
+          "cascade": true
+        }
+      ]
+    },
+    {
+      "name": "AspNetUserLogins",
+      "columns": [
+        "LoginProvider",
+        "ProviderKey",
+        "ProviderDisplayName",
+        "UserId"
+      ],
+      "primaryKey": [
+        "LoginProvider",
+        "ProviderKey"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_UserLogins_User",
+          "column": "UserId",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": true
+        }
+      ]
+    },
+    {
+      "name": "AspNetUserTokens",
+      "columns": [
+        "UserId",
+        "LoginProvider",
+        "Name",
+        "Value"
+      ],
+      "primaryKey": [
+        "UserId",
+        "LoginProvider",
+        "Name"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_UserTokens_User",
+          "column": "UserId",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": true
+        }
+      ]
+    },
+    {
+      "name": "MembershipTiers",
+      "columns": [
+        "Id",
+        "TierName",
+        "DiscountPercent"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": []
+    },
+    {
+      "name": "TableTypes",
+      "columns": [
+        "Id",
+        "Name",
+        "HourlyRate"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": []
+    },
+    {
+      "name": "BilliardTables",
+      "columns": [
+        "Id",
+        "TableCode",
+        "TableTypeId",
+        "FloorNumber",
+        "Status",
+        "RowVersion"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Table_Type",
+          "column": "TableTypeId",
+          "parent": "TableTypes",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "PricingConfigs",
+      "columns": [
+        "Id",
+        "TableTypeId",
+        "HourlyRate",
+        "StartHour",
+        "EndHour"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_PricingConfig_TableType",
+          "column": "TableTypeId",
+          "parent": "TableTypes",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "columns": [
+        "Id",
+        "CustomerId",
+        "TableId",
+        "StartAtUtc",
+        "EndAtUtc",
+        "Status",
+        "CreatedAtUtc",
+        "CheckedInAtUtc",
+        "CheckedInById",
+        "CancelledAtUtc",
+        "CancelledById",
+        "CancellationReason",
+        "Notes",
+        "RowVersion"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Booking_Customer",
+          "column": "CustomerId",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_Booking_Table",
+          "column": "TableId",
+          "parent": "BilliardTables",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_Booking_CheckinStaff",
+          "column": "CheckedInById",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_Booking_CancelledBy",
+          "column": "CancelledById",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "PlaySessions",
+      "columns": [
+        "Id",
+        "TableId",
+        "BookingId",
+        "CustomerId",
+        "OpenedById",
+        "ClosedById",
+        "StartAtUtc",
+        "EndAtUtc",
+        "HourlyRateSnapshot",
+        "PlaytimeAmount",
+        "Status",
+        "RowVersion"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Session_Table",
+          "column": "TableId",
+          "parent": "BilliardTables",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_Session_Booking",
+          "column": "BookingId",
+          "parent": "Bookings",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_Session_Customer",
+          "column": "CustomerId",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_Session_OpenedBy",
+          "column": "OpenedById",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_Session_ClosedBy",
+          "column": "ClosedById",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "ProductCategories",
+      "columns": [
+        "Id",
+        "Name"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": []
+    },
+    {
+      "name": "Products",
+      "columns": [
+        "Id",
+        "CategoryId",
+        "Name",
+        "Price",
+        "StockQuantity",
+        "IsActive",
+        "RowVersion"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Product_Category",
+          "column": "CategoryId",
+          "parent": "ProductCategories",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "columns": [
+        "Id",
+        "SessionId",
+        "OrderTimeUtc",
+        "Status"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Order_Session",
+          "column": "SessionId",
+          "parent": "PlaySessions",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "OrderDetails",
+      "columns": [
+        "Id",
+        "OrderId",
+        "ProductId",
+        "Quantity",
+        "UnitPrice",
+        "Subtotal"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_OrderDetail_Order",
+          "column": "OrderId",
+          "parent": "Orders",
+          "parentColumn": "Id",
+          "cascade": true
+        },
+        {
+          "name": "FK_OrderDetail_Product",
+          "column": "ProductId",
+          "parent": "Products",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "Combos",
+      "columns": [
+        "Id",
+        "Name",
+        "Price",
+        "PlaytimeHours",
+        "IsActive"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": []
+    },
+    {
+      "name": "ComboItems",
+      "columns": [
+        "ComboId",
+        "ProductId",
+        "Quantity"
+      ],
+      "primaryKey": [
+        "ComboId",
+        "ProductId"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_ComboItems_Combo",
+          "column": "ComboId",
+          "parent": "Combos",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_ComboItems_Product",
+          "column": "ProductId",
+          "parent": "Products",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "SessionCombos",
+      "columns": [
+        "Id",
+        "SessionId",
+        "ComboId",
+        "Quantity",
+        "ComboNameSnapshot",
+        "UnitPriceSnapshot",
+        "PlaytimeHoursSnapshot",
+        "PurchasedAtUtc",
+        "CreatedById"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_SessionCombos_Session",
+          "column": "SessionId",
+          "parent": "PlaySessions",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_SessionCombos_Combo",
+          "column": "ComboId",
+          "parent": "Combos",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_SessionCombos_CreatedBy",
+          "column": "CreatedById",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "SessionComboItems",
+      "columns": [
+        "SessionComboId",
+        "ProductId",
+        "ProductNameSnapshot",
+        "QuantityPerCombo"
+      ],
+      "primaryKey": [
+        "SessionComboId",
+        "ProductId"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_SessionComboItems_Purchase",
+          "column": "SessionComboId",
+          "parent": "SessionCombos",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_SessionComboItems_Product",
+          "column": "ProductId",
+          "parent": "Products",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "columns": [
+        "Id",
+        "SessionId",
+        "CustomerId",
+        "TotalPlaytime",
+        "TotalFandB",
+        "DiscountAmount",
+        "FinalAmount",
+        "Status",
+        "CreatedAtUtc"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Invoice_Session",
+          "column": "SessionId",
+          "parent": "PlaySessions",
+          "parentColumn": "Id",
+          "cascade": false
+        },
+        {
+          "name": "FK_Invoice_Customer",
+          "column": "CustomerId",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    },
+    {
+      "name": "PaymentTransactions",
+      "columns": [
+        "Id",
+        "InvoiceId",
+        "PaymentMethod",
+        "AmountPaid",
+        "GatewayRefCode",
+        "TransactionTimeUtc"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Payment_Invoice",
+          "column": "InvoiceId",
+          "parent": "Invoices",
+          "parentColumn": "Id",
+          "cascade": true
+        }
+      ]
+    },
+    {
+      "name": "WorkShifts",
+      "columns": [
+        "Id",
+        "StaffId",
+        "StartTimeUtc",
+        "EndTimeUtc",
+        "StartingCash",
+        "EndingCash",
+        "Status",
+        "Notes"
+      ],
+      "primaryKey": [
+        "Id"
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Shift_Staff",
+          "column": "StaffId",
+          "parent": "AspNetUsers",
+          "parentColumn": "Id",
+          "cascade": false
+        }
+      ]
+    }
+  ]
+}

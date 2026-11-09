@@ -1,0 +1,45 @@
+@model List<Bms.Web.Models.ShiftRowViewModel>
+@{ var showStaff = (bool)(ViewData["ShowStaff"] ?? false); }
+@if (!Model.Any())
+{
+    <div class="text-center py-4 text-muted"><i class="bi bi-inbox fs-3 d-block mb-1"></i>Chưa có ca nào.</div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Ca</th>
+                    @if (showStaff) { <th>Nhân viên</th> }
+                    <th>Bắt đầu</th><th>Kết thúc</th>
+                    <th class="text-end">Đầu ca</th><th class="text-end">Tiền mặt thu</th>
+                    <th class="text-end">Kỳ vọng</th><th class="text-end">Thực tế</th><th class="text-end">Chênh lệch</th>
+                    <th>Trạng thái</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var r in Model)
+            {
+                <tr>
+                    <td>#@r.Id</td>
+                    @if (showStaff) { <td><div style="font-weight:600">@r.StaffName</div><div style="font-size:0.75rem;color:#64748b">@r.EmployeeCode</div></td> }
+                    <td style="font-size:0.82rem">@r.StartTimeUtc.ToVn().ToString("HH:mm dd/MM/yyyy")</td>
+                    <td style="font-size:0.82rem">@(r.EndTimeUtc.ToVn()?.ToString("HH:mm dd/MM/yyyy") ?? "—")</td>
+                    <td class="text-end">@r.StartingCash.ToString("N0")</td>
+                    <td class="text-end">@r.CashCollected.ToString("N0")</td>
+                    <td class="text-end">@r.ExpectedCash.ToString("N0")</td>
+                    <td class="text-end">@(r.EndingCash?.ToString("N0") ?? "—")</td>
+                    <td class="text-end">
+                        @if (r.Difference is null) { <span class="text-muted">—</span> }
+                        else if (r.Difference == 0) { <span style="color:#16a34a">0</span> }
+                        else { <strong style="color:#dc2626">@(r.Difference > 0 ? "+" : "")@r.Difference.Value.ToString("N0")</strong> }
+                    </td>
+                    <td>@if (r.Status == "Active") { <span class="badge-active">Đang mở</span> } else { <span class="badge bg-secondary">Đã đóng</span> }</td>
+                    <td><a asp-controller="Shift" asp-action="Details" asp-route-id="@r.Id" class="btn-sm-icon" title="Chi tiết"><i class="bi bi-eye"></i></a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

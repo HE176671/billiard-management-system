@@ -1,0 +1,634 @@
+@model Bms.Web.Models.PricingListViewModel
+@{
+    ViewData["Title"] = "Bảng giá & Combo dịch vụ";
+    Layout = "_AdminLayout";
+    var editCue = Model.EditCue;
+    var editCombo = Model.EditCombo;
+    var editTable = Model.EditTable;
+    int mgrTotalTables = Model.Tables.Count;
+    int mgrInUseTables = Model.Tables.Count(t => t.Status == "InUse" && !t.IsComboOverdue);
+    int mgrOverdueTables = Model.Tables.Count(t => t.IsComboOverdue);
+    int mgrAvailableTables = Model.Tables.Count(t => t.Status == "Available");
+    int mgrMaintenanceTables = Model.Tables.Count(t => t.Status == "Maintenance");
+}
+
+<style>
+    .pricing-section-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0;
+    }
+    .mgr-table-filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 10px 16px;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+        flex-wrap: wrap;
+    }
+    .mgr-filter-radio {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+        user-select: none;
+        font-size: 0.84rem;
+        color: #334155;
+        font-weight: 500;
+        margin: 0;
+    }
+    .mgr-filter-radio input[type="radio"] {
+        display: none;
+    }
+    .mgr-filter-radio .radio-ring {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid #64748b;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        transition: all 0.15s ease;
+    }
+    .mgr-filter-radio .radio-ring::after {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: transparent;
+        transition: all 0.15s ease;
+    }
+    .mgr-filter-radio input[type="radio"]:checked + .radio-ring {
+        border-color: #0b57d0;
+    }
+    .mgr-filter-radio input[type="radio"]:checked + .radio-ring::after {
+        background: #0b57d0;
+    }
+    .mgr-filter-radio input[type="radio"]:checked ~ .radio-text {
+        color: #0f172a;
+        font-weight: 600;
+    }
+</style>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        @TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3 rounded-3" role="alert" style="font-size:0.875rem">
+        @TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- 1. QUẢN LÝ BÀN & TRẠNG THÁI BÀN -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="data-card p-4 h-100">
+            <h2 class="pricing-section-title mb-3">
+                @(editTable != null ? $"Cập nhật bàn {editTable.TableCode}" : "Thêm bàn mới")
+            </h2>
+
+            <form asp-action="SaveTable" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@(editTable?.Id ?? 0)" />
+
+                <div class="row g-2 mb-3">
+                    <div class="@(editTable == null ? "col-7" : "col-12")">
+                        <label class="form-label">Mã bàn <span class="text-danger">*</span></label>
+                        <input type="text" name="tableCode" value="@(editTable?.TableCode ?? "")" class="form-control"
+                               placeholder="VD: B07, P-09..." required maxlength="20" />
+                    </div>
+                    @if (editTable == null)
+                    {
+                        <div class="col-5">
+                            <label class="form-label">Số lượng bàn</label>
+                            <input type="number" name="quantity" value="1" min="1" max="50" step="1" class="form-control" required />
+                        </div>
+                    }
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-7">
+                        <label class="form-label">Loại bàn <span class="text-danger">*</span></label>
+                        <select name="tableTypeId" class="form-select" required>
+                            @foreach (var tt in Model.TableTypeRates)
+                            {
+                                <option value="@tt.Id" selected="@(editTable?.TableTypeId == tt.Id)">
+                                    @tt.Name (@tt.HourlyRate.ToString("N0") VND/h)
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-5">
+                        <label class="form-label">Tầng <span class="text-danger">*</span></label>
+                        <input type="number" name="floorNumber" value="@(editTable?.FloorNumber ?? 1)"
+                               min="1" max="20" step="1" class="form-control" required />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Trạng thái ban đầu</label>
+                    <select name="status" class="form-select">
+                        <option value="Available" selected="@(editTable == null || editTable.Status == "Available")">Còn trống</option>
+                        <option value="Maintenance" selected="@(editTable?.Status == "Maintenance")">Bảo trì</option>
+                    </select>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn-primary-bms flex-grow-1 justify-content-center">
+                        @(editTable != null ? "Lưu thay đổi" : "Thêm bàn")
+                    </button>
+                    @if (editTable != null)
+                    {
+                        <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="pricing-section-title">Danh sách bàn (@Model.Tables.Count bàn)</span>
+                <a asp-controller="Table" asp-action="Index" class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
+                    Mở sơ đồ bàn
+                </a>
+            </div>
+            <div class="mgr-table-filter-bar" role="radiogroup" aria-label="Bộ lọc trạng thái bàn">
+                <label class="mgr-filter-radio" for="mgr-filter-all">
+                    <input type="radio" name="mgrTableQuickFilter" id="mgr-filter-all" value="all" checked />
+                    <span class="radio-ring" aria-hidden="true"></span>
+                    <span class="radio-text">Tất cả (@mgrTotalTables)</span>
+                </label>
+                <label class="mgr-filter-radio" for="mgr-filter-inuse">
+                    <input type="radio" name="mgrTableQuickFilter" id="mgr-filter-inuse" value="inuse" />
+                    <span class="radio-ring" aria-hidden="true"></span>
+                    <span class="radio-text">Đang sử dụng (@mgrInUseTables)</span>
+                </label>
+                <label class="mgr-filter-radio" for="mgr-filter-available">
+                    <input type="radio" name="mgrTableQuickFilter" id="mgr-filter-available" value="available" />
+                    <span class="radio-ring" aria-hidden="true"></span>
+                    <span class="radio-text">Còn trống (@mgrAvailableTables)</span>
+                </label>
+                <label class="mgr-filter-radio" for="mgr-filter-overdue">
+                    <input type="radio" name="mgrTableQuickFilter" id="mgr-filter-overdue" value="overdue" />
+                    <span class="radio-ring" aria-hidden="true"></span>
+                    <span class="radio-text">Đã hết giờ Combo (Tính vượt giờ) (@mgrOverdueTables)</span>
+                </label>
+                <label class="mgr-filter-radio" for="mgr-filter-maintenance">
+                    <input type="radio" name="mgrTableQuickFilter" id="mgr-filter-maintenance" value="maintenance" />
+                    <span class="radio-ring" aria-hidden="true"></span>
+                    <span class="radio-text">Bảo trì (@mgrMaintenanceTables)</span>
+                </label>
+            </div>
+            <div class="table-responsive" style="max-height: 360px; overflow-y: auto;">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="sticky-top">
+                        <tr>
+                            <th>Mã bàn</th>
+                            <th>Loại bàn</th>
+                            <th class="text-center">Tầng</th>
+                            <th class="text-end">Giá giờ chuẩn</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mgr-table-tbody">
+                        @foreach (var tb in Model.Tables)
+                        {
+                            var rowFilterState = tb.IsComboOverdue
+                                ? "overdue"
+                                : tb.Status == "InUse"
+                                    ? "inuse"
+                                    : tb.Status == "Maintenance"
+                                        ? "maintenance"
+                                        : "available";
+                            <tr class="mgr-table-row" data-filter-state="@rowFilterState">
+                                <td class="fw-bold">@tb.TableCode</td>
+                                <td>@tb.TableTypeName</td>
+                                <td class="text-center">Tầng @tb.FloorNumber</td>
+                                <td class="text-end fw-semibold">@tb.HourlyRate.ToString("N0") VND/h</td>
+                                <td>
+                                    @if (tb.IsComboOverdue)
+                                    {
+                                        <span class="badge bg-danger text-white">Đã hết giờ Combo (Tính vượt giờ)</span>
+                                    }
+                                    else if (tb.Status == "InUse")
+                                    {
+                                        <span class="badge bg-primary text-white">Đang sử dụng</span>
+                                    }
+                                    else if (tb.Status == "Maintenance")
+                                    {
+                                        <span class="badge bg-secondary text-white">Bảo trì</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge-active">Còn trống</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    @if (tb.CanModifyStatus)
+                                    {
+                                        <form asp-action="UpdateTableStatus" method="post" class="d-inline-flex align-items-center gap-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@tb.Id" />
+                                            <select name="status" class="form-select form-select-sm py-0 px-2" style="width:auto;font-size:0.78rem;height:28px" onchange="this.form.submit()">
+                                                <option value="Available" selected="@(tb.Status == "Available")">Còn trống</option>
+                                                <option value="Maintenance" selected="@(tb.Status == "Maintenance")">Bảo trì</option>
+                                            </select>
+                                        </form>
+                                        <a asp-action="Index" asp-route-editTableId="@tb.Id" class="btn-outline-bms py-1 px-2 ms-1" style="font-size:0.75rem">
+                                            Sửa
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">Đang có khách</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (!Model.Tables.Any())
+                        {
+                            <tr><td colspan="6" class="text-center py-4 text-muted">Chưa có bàn nào trong hệ thống.</td></tr>
+                        }
+                        <tr id="mgr-table-filter-empty" class="d-none">
+                            <td colspan="6" class="text-center py-4 text-muted">Không có bàn nào thuộc trạng thái này.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. BẢNG GIÁ GIỜ CHƠI -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-5">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="pricing-section-title">Đơn giá bàn mặc định theo giờ</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Loại bàn</th>
+                            <th class="text-end">Đơn giá (VND/giờ)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var tt in Model.TableTypeRates)
+                        {
+                            <tr>
+                                <td class="fw-bold">@tt.Name</td>
+                                <td>
+                                    <form asp-action="UpdateTableBaseRate" method="post" class="d-flex gap-2 justify-content-end align-items-center">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@tt.Id" />
+                                        <div class="input-group input-group-sm" style="max-width:175px">
+                                            <input type="number" name="hourlyRate" value="@tt.HourlyRate.ToString("0")" min="0" step="1000" class="form-control fw-semibold text-end" required />
+                                            <span class="input-group-text">VND/h</span>
+                                        </div>
+                                        <button type="submit" class="btn-primary-bms py-1 px-2" style="font-size:0.75rem">
+                                            Lưu
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="pricing-section-title">Giá theo khung giờ trong ngày</span>
+                <a asp-action="Create" class="btn-primary-bms py-1 px-3" style="font-size:0.8rem">
+                    Thêm khung giờ
+                </a>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Loại bàn</th>
+                            <th>Bắt đầu</th>
+                            <th>Kết thúc</th>
+                            <th>Đơn giá</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model.Configs)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@p.TableTypeName</td>
+                                <td>@p.StartHour</td>
+                                <td>@p.EndHour</td>
+                                <td class="fw-bold text-danger">@p.HourlyRate.ToString("N0") VND/giờ</td>
+                                <td class="text-end">
+                                    <a asp-action="Edit" asp-route-id="@p.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
+                                        Sửa
+                                    </a>
+                                    <form asp-action="Delete" asp-route-id="@p.Id" method="post" class="d-inline ms-1">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn-sm-icon danger" title="Xóa"
+                                                onclick="return confirm('Xóa mức giá khung giờ này?')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        @if (!Model.Configs.Any())
+                        {
+                            <tr><td colspan="5" class="text-center py-4 text-muted">Đang áp dụng đơn giá mặc định theo loại bàn.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 3. GÓI COMBO GIỜ CHƠI -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="data-card p-4 h-100">
+            <h2 class="pricing-section-title mb-3">
+                @(editCombo != null ? $"Cập nhật gói Combo #{editCombo.Id}" : "Thêm gói Combo giờ chơi")
+            </h2>
+
+            <form asp-action="SaveCombo" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@(editCombo?.Id ?? 0)" />
+
+                <div class="mb-3">
+                    <label class="form-label">Tên gói Combo <span class="text-danger">*</span></label>
+                    <input type="text" name="name" value="@(editCombo?.Name ?? "")" class="form-control"
+                           placeholder="VD: Combo 2 giờ + 2 Trà đào" required maxlength="100" />
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Thời lượng (giờ) <span class="text-danger">*</span></label>
+                        <input type="number" name="playtimeHours" value="@((editCombo?.PlaytimeHours ?? 2.0m).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))"
+                               min="0.5" max="24" step="0.5" class="form-control" required />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Giá trọn gói (VND) <span class="text-danger">*</span></label>
+                        <input type="number" name="price" value="@((editCombo?.Price ?? 190000m).ToString("0"))"
+                               min="0" step="5000" class="form-control" required />
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-8">
+                        <label class="form-label">Món đi kèm (nếu có)</label>
+                        <select name="bonusProductId" class="form-select">
+                            <option value="">-- Không kèm món --</option>
+                            @foreach (var prod in Model.AvailableBonusProducts)
+                            {
+                                <option value="@prod.Id" selected="@(editCombo?.BonusProductId == prod.Id)">
+                                    @prod.Name (@prod.Price.ToString("N0") VND)
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">Số lượng</label>
+                        <input type="number" name="bonusQuantity" value="@(editCombo?.BonusQuantity ?? 2)"
+                               min="1" max="20" step="1" class="form-control" />
+                    </div>
+                </div>
+
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" name="isActive" value="true" id="comboActiveSwitch"
+                           checked="@(editCombo?.IsActive ?? true)" />
+                    <label class="form-check-label" for="comboActiveSwitch" style="font-size:0.85rem">Đang mở bán</label>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn-primary-bms flex-grow-1 justify-content-center">
+                        @(editCombo != null ? "Lưu thay đổi" : "Thêm gói Combo")
+                    </button>
+                    @if (editCombo != null)
+                    {
+                        <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="pricing-section-title">Danh sách gói Combo giờ chơi (@Model.Combos.Count)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Tên gói Combo</th>
+                            <th class="text-center">Số giờ</th>
+                            <th>Món đi kèm</th>
+                            <th class="text-end">Giá trọn gói</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in Model.Combos)
+                        {
+                            <tr>
+                                <td class="fw-bold">@c.Name</td>
+                                <td class="text-center">@c.PlaytimeHours.ToString("0.#") giờ</td>
+                                <td>@c.IncludedItemsSummary</td>
+                                <td class="text-end fw-bold text-danger">@c.Price.ToString("N0") VND</td>
+                                <td>
+                                    @if (c.IsActive)
+                                    {
+                                        <span class="badge-active">Đang mở</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge-inactive">Tạm ngưng</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <a asp-action="Index" asp-route-editComboId="@c.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
+                                        Sửa
+                                    </a>
+                                    <form asp-action="ToggleComboStatus" method="post" class="d-inline ms-1">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@c.Id" />
+                                        <button type="submit" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
+                                            @(c.IsActive ? "Đóng" : "Mở")
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        @if (!Model.Combos.Any())
+                        {
+                            <tr><td colspan="6" class="text-center py-4 text-muted">Chưa có gói Combo nào.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 4. GẬY CHO THUÊ THEO LƯỢT -->
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="data-card p-4 h-100">
+            <h2 class="pricing-section-title mb-3">
+                @(editCue != null ? $"Cập nhật gậy thuê #{editCue.Id}" : "Thêm gậy cho thuê")
+            </h2>
+
+            <form asp-action="SaveRentalCue" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@(editCue?.Id ?? 0)" />
+
+                <div class="mb-3">
+                    <label class="form-label">Tên loại gậy <span class="text-danger">*</span></label>
+                    <input type="text" name="name" value="@(editCue?.Name ?? "")" class="form-control"
+                           placeholder="VD: Gậy Carbon Predator" required maxlength="100" />
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-7">
+                        <label class="form-label">Giá thuê / lượt (VND) <span class="text-danger">*</span></label>
+                        <input type="number" name="price" value="@(editCue != null ? editCue.Price.ToString("0") : "40000")"
+                               min="0" step="1000" class="form-control" required />
+                    </div>
+                    <div class="col-5">
+                        <label class="form-label">Số lượng</label>
+                        <input type="number" name="stockQuantity" value="@(editCue?.StockQuantity ?? 10)"
+                               min="0" step="1" class="form-control" required />
+                    </div>
+                </div>
+
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" name="isActive" value="true" id="cueActiveSwitch"
+                           checked="@(editCue?.IsActive ?? true)" />
+                    <label class="form-check-label" for="cueActiveSwitch" style="font-size:0.85rem">Mở cho thuê tại quầy</label>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn-primary-bms flex-grow-1 justify-content-center">
+                        @(editCue != null ? "Lưu thay đổi" : "Thêm gậy thuê")
+                    </button>
+                    @if (editCue != null)
+                    {
+                        <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="data-card h-100">
+            <div class="data-card-header">
+                <span class="pricing-section-title">Danh mục gậy cho thuê (@Model.RentalCues.Count)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>Tên gậy</th>
+                            <th class="text-end">Giá / lượt</th>
+                            <th class="text-center">Số lượng</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var cue in Model.RentalCues)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@cue.Name</td>
+                                <td class="text-end fw-bold">@cue.Price.ToString("N0") VND/lượt</td>
+                                <td class="text-center">@cue.StockQuantity cây</td>
+                                <td>
+                                    @if (cue.IsActive)
+                                    {
+                                        <span class="badge-active">Đang cho thuê</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge-inactive">Tạm ngưng</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <a asp-action="Index" asp-route-editCueId="@cue.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
+                                        Sửa
+                                    </a>
+                                    <form asp-action="ToggleCueStatus" method="post" class="d-inline ms-1">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@cue.Id" />
+                                        <button type="submit" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
+                                            @(cue.IsActive ? "Đóng" : "Mở")
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        @if (!Model.RentalCues.Any())
+                        {
+                            <tr><td colspan="5" class="text-center py-4 text-muted">Chưa có danh mục gậy cho thuê.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const radios = document.querySelectorAll('input[name="mgrTableQuickFilter"]');
+            const rows = document.querySelectorAll('#mgr-table-tbody .mgr-table-row');
+            const emptyRow = document.getElementById('mgr-table-filter-empty');
+            if (!radios.length || !rows.length) return;
+
+            function applyMgrFilter(val) {
+                let visible = 0;
+                rows.forEach(r => {
+                    const state = r.getAttribute('data-filter-state');
+                    const match = val === 'all' || state === val;
+                    r.classList.toggle('d-none', !match);
+                    if (match) visible++;
+                });
+                if (emptyRow) {
+                    emptyRow.classList.toggle('d-none', visible > 0);
+                }
+            }
+
+            radios.forEach(radio => {
+                radio.addEventListener('change', () => {
+                    if (radio.checked) applyMgrFilter(radio.value);
+                });
+            });
+        })();
+    </script>
+}

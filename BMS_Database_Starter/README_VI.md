@@ -43,6 +43,8 @@ Trong SSMS chọn **File → Open → File** và mở file SQL tải từ repo. 
 | Chưa có BilliardDB, hoặc database hoàn toàn trống | `BilliardDB_Full.sql` một lần | Tạo 24 bảng, 5 procedure, dữ liệu mẫu và chạy verify |
 | Đã có schema mở rộng 21 bảng, có Combos nhưng chưa có 3 bảng liên kết | `05_AddComboRelations.sql` một lần, sau đó `Verify_BilliardDB.sql` | Thêm 3 bảng trống, giữ dữ liệu cũ |
 | Đã có cả ComboItems, SessionCombos, SessionComboItems | Chỉ `Verify_BilliardDB.sql` | Kiểm tra chỉ đọc; không tạo/seed lại |
+| Có MembershipTiers nhưng thiếu MinPoints | `06_AddMembershipMinPoints.sql` | Thêm ngưỡng điểm mặc định 0, giữ dữ liệu; Admin chỉnh ngưỡng riêng cho từng hạng |
+| Cần dữ liệu để trình bày, đã có schema mở rộng và MinPoints | `07_AddPresentationDemoData.sql` | Thêm hạng/khách/bảng giá/hóa đơn/thanh toán giả lập cho 13/10/2026; giữ dữ liệu cũ, dừng và rollback nếu xung đột |
 | Bản 13 bảng cũ hoặc schema không xác định | Dừng và kiểm tra schema, báo người phụ trách database | Chưa có script nâng từ bản 13 lên bản 24; không chạy Full/05 để thay thế |
 
 Nếu một file báo lỗi, dừng và sửa lỗi trước khi chạy file tiếp theo. Không tiếp tục chỉ vì thấy vài thông báo “completed”.

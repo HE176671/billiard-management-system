@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Manager,Admin")]
 public class EmployeeController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;
@@ -20,15 +20,27 @@ public class EmployeeController : Controller
         _context = context;
     }
 
+    #region UC43 - Danh sach, tim kiem, loc va phan trang
+
     // GET /Employee
     public async Task<IActionResult> Index(string? search, string? status, int page = 1)
     {
-        // Lấy tất cả user có role Staff
-        var staffIds = (await _userManager.GetUsersInRoleAsync("Staff"))
+        bool isAdmin = User.IsInRole("Admin");
+
+        // Lấy tất cả user có role Staff; nếu là Admin thì lấy cả Manager
+        var targetIds = (await _userManager.GetUsersInRoleAsync("Staff"))
                         .Select(u => u.Id).ToHashSet();
+        var managerIds = new HashSet<string>();
+
+        if (isAdmin)
+        {
+            managerIds = (await _userManager.GetUsersInRoleAsync("Manager"))
+                         .Select(u => u.Id).ToHashSet();
+            targetIds.UnionWith(managerIds);
+        }
 
         var query = _userManager.Users
-            .Where(u => staffIds.Contains(u.Id));
+            .Where(u => targetIds.Contains(u.Id));
 
         // Tìm kiếm
         if (!string.IsNullOrWhiteSpace(search))
@@ -49,23 +61,25 @@ public class EmployeeController : Controller
         var totalPages = (int)Math.Ceiling(total / (double)PageSize);
         page = Math.Max(1, Math.Min(page, Math.Max(1, totalPages)));
 
-        var rows = await query
+        var users = await query
             .OrderBy(u => u.FullName)
             .Skip((page - 1) * PageSize)
             .Take(PageSize)
-            .Select(u => new EmployeeRowViewModel
-            {
-                Id           = u.Id,
-                FullName     = u.FullName,
-                EmployeeCode = u.EmployeeCode,
-                UserName     = u.UserName,
-                Email        = u.Email,
-                PhoneNumber  = u.PhoneNumber,
-                HireDate     = u.HireDate,
-                IsActive     = u.IsActive,
-                CreatedAtUtc = u.CreatedAtUtc
-            })
             .ToListAsync();
+
+        var rows = users.Select(u => new EmployeeRowViewModel
+        {
+            Id           = u.Id,
+            FullName     = u.FullName,
+            EmployeeCode = u.EmployeeCode,
+            UserName     = u.UserName,
+            Email        = u.Email,
+            PhoneNumber  = u.PhoneNumber,
+            RoleName     = managerIds.Contains(u.Id) ? "Manager" : "Staff",
+            HireDate     = u.HireDate,
+            IsActive     = u.IsActive,
+            CreatedAtUtc = u.CreatedAtUtc
+        }).ToList();
 
         var vm = new EmployeeListViewModel
         {
@@ -79,7 +93,10 @@ public class EmployeeController : Controller
         return View(vm);
     }
 
-    // GET /Employee/Create
+    #endregion
+
+    #region UC43 - Tao nhan vien va gan role Staff
+ 
     public async Task<IActionResult> Create()
     {
         var vm = new CreateEmployeeViewModel();
@@ -87,22 +104,28 @@ public class EmployeeController : Controller
         return View(vm);
     }
 
-    // POST /Employee/Create
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(CreateEmployeeViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
 
-        string empCode = string.IsNullOrWhiteSpace(model.EmployeeCode)
-            ? await GenerateNextEmployeeCodeAsync()
-            : model.EmployeeCode.Trim().ToUpper();
+        bool isAdmin = User.IsInRole("Admin");
+        string targetRole = isAdmin && model.Role == "Manager" ? "Manager" : "Staff";
+        string prefix = targetRole == "Manager" ? "MG" : "NV";
+
+        // Mã do hệ thống cấp (ô nhập là readonly), không tin giá trị gửi lên từ form.
+        string empCode = await GenerateNextEmployeeCodeAsync(prefix);
+
+        await ValidateUniqueAsync(model.PhoneNumber, empCode, excludeUserId: null,
+            nameof(model.PhoneNumber), nameof(model.EmployeeCode));
+        if (!ModelState.IsValid) return View(model);
 
         var user = new ApplicationUser
         {
             UserName     = model.UserName.Trim(),
             Email        = model.Email.Trim(),
-            FullName     = model.FullName.Trim(),
+            FullName     = ValidationRules.CollapseSpaces(model.FullName),
             PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim(),
             EmployeeCode = empCode,
             HireDate     = model.HireDate,
@@ -110,7 +133,6 @@ public class EmployeeController : Controller
             CreatedAtUtc = DateTime.UtcNow
         };
 
-        // Dùng DB transaction thực sự: CreateAsync + AddToRoleAsync phải thành công cùng nhau
         await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -123,11 +145,11 @@ public class EmployeeController : Controller
                 return View(model);
             }
 
-            var roleResult = await _userManager.AddToRoleAsync(user, "Staff");
+            var roleResult = await _userManager.AddToRoleAsync(user, targetRole);
             if (!roleResult.Succeeded)
             {
                 await tx.RollbackAsync();
-                ModelState.AddModelError(string.Empty, "Gán quyền Staff thất bại. Vui lòng thử lại.");
+                ModelState.AddModelError(string.Empty, $"Gán quyền {targetRole} thất bại. Vui lòng thử lại.");
                 return View(model);
             }
 
@@ -140,11 +162,14 @@ public class EmployeeController : Controller
             return View(model);
         }
 
-        TempData["Success"] = $"Đã tạo tài khoản nhân viên {user.FullName} thành công.";
+        TempData["Success"] = $"Đã tạo tài khoản người dùng {user.FullName} ({targetRole}) thành công.";
         return RedirectToAction(nameof(Index));
     }
 
-    // GET /Employee/Edit/id
+    #endregion
+
+    #region UC43 - Sua thong tin nhan vien
+
     public async Task<IActionResult> Edit(string id)
     {
         var user = await GetStaffOrNull(id);
@@ -163,7 +188,6 @@ public class EmployeeController : Controller
         return View(vm);
     }
 
-    // POST /Employee/Edit
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(EditEmployeeViewModel model)
@@ -173,14 +197,32 @@ public class EmployeeController : Controller
         var user = await GetStaffOrNull(model.Id);
         if (user == null) return NotFound();
 
-        user.FullName     = model.FullName.Trim();
+        // Mã người dùng không sửa được trên form; chỉ cấp mới nếu tài khoản cũ còn thiếu.
+        string prefix = await _userManager.IsInRoleAsync(user, "Manager") ? "MG" : "NV";
+        var newCode = string.IsNullOrWhiteSpace(user.EmployeeCode)
+            ? await GenerateNextEmployeeCodeAsync(prefix)
+            : user.EmployeeCode;
+        await ValidateUniqueAsync(model.PhoneNumber, newCode, user.Id,
+            nameof(model.PhoneNumber), nameof(model.EmployeeCode));
+        if (!ModelState.IsValid)
+        {
+            model.UserName = user.UserName;
+            model.Email    = user.Email;
+            return View(model);
+        }
+
+        user.FullName     = ValidationRules.CollapseSpaces(model.FullName);
         user.PhoneNumber  = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
-        user.EmployeeCode = string.IsNullOrWhiteSpace(model.EmployeeCode) 
-            ? await GenerateNextEmployeeCodeAsync() 
-            : model.EmployeeCode.Trim().ToUpper();
+        user.EmployeeCode = newCode;
         user.HireDate     = model.HireDate;
 
-        var result = await _userManager.UpdateAsync(user);
+        IdentityResult result;
+        try { result = await _userManager.UpdateAsync(user); }
+        catch (DbUpdateException)
+        {
+            // Request đồng thời lấy cùng SĐT/mã: unique index SQL chặn, không để lỗi 500.
+            result = IdentityResult.Failed(new IdentityError { Description = "Số điện thoại hoặc mã nhân viên vừa được người khác sử dụng." });
+        }
         if (!result.Succeeded)
         {
             foreach (var err in result.Errors)
@@ -194,7 +236,10 @@ public class EmployeeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // POST /Employee/ToggleLock
+    #endregion
+
+    #region UC43 - Khoa va mo khoa nhan vien
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ToggleLock(string id)
@@ -204,15 +249,22 @@ public class EmployeeController : Controller
 
         user.IsActive = !user.IsActive;
         // Đổi SecurityStamp để cookie phiên hiện tại mất hiệu lực ngay
-        await _userManager.UpdateSecurityStampAsync(user);
-        await _userManager.UpdateAsync(user);
+        var result = await _userManager.UpdateSecurityStampAsync(user);
+        if (!result.Succeeded)
+        {
+            TempData["Error"] = "Không lưu được trạng thái tài khoản. Vui lòng thử lại.";
+            return RedirectToAction(nameof(Index));
+        }
 
         var action = user.IsActive ? "mở khóa" : "khóa";
         TempData["Success"] = $"Đã {action} tài khoản {user.FullName}.";
         return RedirectToAction(nameof(Index));
     }
 
-    // POST /Employee/Delete
+    #endregion
+
+    #region UC43 - Xoa nhan vien
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(string id)
@@ -244,7 +296,10 @@ public class EmployeeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // GET /Employee/ResetPassword/id
+    #endregion
+
+    #region UC44 - Reset mat khau nhan vien
+
     public async Task<IActionResult> ResetPassword(string id)
     {
         var user = await GetStaffOrNull(id);
@@ -257,7 +312,6 @@ public class EmployeeController : Controller
         });
     }
 
-    // POST /Employee/ResetPassword
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ResetPassword(ResetStaffPasswordViewModel model)
@@ -267,11 +321,9 @@ public class EmployeeController : Controller
         var user = await GetStaffOrNull(model.UserId);
         if (user == null) return NotFound();
 
-        // Xóa mật khẩu cũ (nếu có) rồi đặt mới
-        if (await _userManager.HasPasswordAsync(user))
-            await _userManager.RemovePasswordAsync(user);
-
-        var result = await _userManager.AddPasswordAsync(user, model.NewPassword);
+        // Validate and replace atomically: a rejected password must preserve the old one.
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await _userManager.ResetPasswordAsync(user, token, model.NewPassword);
         if (!result.Succeeded)
         {
             foreach (var err in result.Errors)
@@ -283,14 +335,20 @@ public class EmployeeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    #endregion
+
+    #region Ham ho tro: kiem tra Staff, dich loi, sinh ma
+
     // ── Helpers ──
 
-    /// <summary>Lấy user theo ID, chỉ trả về nếu đúng là Staff.</summary>
+    /// <summary>Lấy user theo ID, trả về nếu là Staff (hoặc Manager khi người thao tác là Admin).</summary>
     private async Task<ApplicationUser?> GetStaffOrNull(string id)
     {
         var user = await _userManager.FindByIdAsync(id);
         if (user == null) return null;
-        return await _userManager.IsInRoleAsync(user, "Staff") ? user : null;
+        if (await _userManager.IsInRoleAsync(user, "Staff")) return user;
+        if (User.IsInRole("Admin") && await _userManager.IsInRoleAsync(user, "Manager")) return user;
+        return null;
     }
 
     /// <summary>Dịch lỗi Identity sang tiếng Việt dễ hiểu.</summary>
@@ -302,25 +360,40 @@ public class EmployeeController : Controller
         "PasswordRequiresNonAlphanumeric" => "Mật khẩu phải có ít nhất 1 ký tự đặc biệt (vd: @, #, !).",
         "PasswordRequiresDigit"           => "Mật khẩu phải có ít nhất 1 chữ số.",
         "PasswordRequiresUpper"           => "Mật khẩu phải có ít nhất 1 chữ hoa.",
+        "PasswordRequiresLower"           => "Mật khẩu phải có ít nhất 1 chữ thường.",
+        "InvalidUserName"    => "Tên đăng nhập chứa ký tự không hợp lệ.",
+        "InvalidEmail"       => "Email không hợp lệ.",
         _ => err.Description
     };
 
-    /// <summary>Tự động sinh mã nhân viên tiếp theo (NV001, NV002...)</summary>
-    private async Task<string> GenerateNextEmployeeCodeAsync()
+    /// <summary>Kiểm tra trước unique index UX_User_Phone / UX_User_EmployeeCode để báo lỗi rõ ràng.</summary>
+    private async Task ValidateUniqueAsync(string? phone, string? code, string? excludeUserId,
+        string phoneField, string codeField)
+    {
+        phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
+        if (phone != null && await _userManager.Users.AnyAsync(u => u.PhoneNumber == phone && u.Id != excludeUserId))
+            ModelState.AddModelError(phoneField, "Số điện thoại đã được tài khoản khác sử dụng.");
+        if (!string.IsNullOrEmpty(code) && await _userManager.Users.AnyAsync(u => u.EmployeeCode == code && u.Id != excludeUserId))
+            ModelState.AddModelError(codeField, "Mã nhân viên đã tồn tại.");
+    }
+
+    /// <summary>Tự động sinh mã người dùng tiếp theo (NV001, MG001...)</summary>
+    private async Task<string> GenerateNextEmployeeCodeAsync(string prefix = "NV")
     {
         var existingCodes = await _userManager.Users
-            .Where(u => u.EmployeeCode != null && u.EmployeeCode.StartsWith("NV"))
+            .Where(u => u.EmployeeCode != null && u.EmployeeCode.StartsWith(prefix))
             .Select(u => u.EmployeeCode)
             .ToListAsync();
 
         int maxNumber = 0;
         foreach (var code in existingCodes)
         {
-            if (code != null && int.TryParse(code.AsSpan(2), out int number))
+            if (code != null && code.Length > prefix.Length && int.TryParse(code.AsSpan(prefix.Length), out int number))
             {
                 if (number > maxNumber) maxNumber = number;
             }
         }
-        return $"NV{(maxNumber + 1).ToString("D3")}";
+        return $"{prefix}{(maxNumber + 1).ToString("D3")}";
     }
+    #endregion
 }

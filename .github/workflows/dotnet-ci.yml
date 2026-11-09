@@ -1,0 +1,30 @@
+name: .NET 8 CI Pipeline
+
+on:
+  push:
+    branches: [ "main", "develops", "develop", "dung" ]
+  pull_request:
+    branches: [ "main", "develops", "develop" ]
+
+jobs:
+  build-and-test:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK 8.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore src/Bms.Web/Bms.Web.csproj
+
+    - name: Build project (Release)
+      run: dotnet build src/Bms.Web/Bms.Web.csproj --no-restore --configuration Release
+
+    - name: Run Tests
+      run: dotnet test src/Bms.Tests/Bms.Tests.csproj --configuration Release --verbosity normal

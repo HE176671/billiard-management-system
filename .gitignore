@@ -1,4 +1,4 @@
-﻿## Build outputs
+## Build outputs
 bin/
 obj/
 
@@ -21,3 +21,10 @@ logs/
 ## OS
 .DS_Store
 Thumbs.db
+
+## Temp credentials
+customer*.txt
+## Khong day docs va file markdown moi (file da tracked van giu nguyen)
+docs/
+*.md
+
