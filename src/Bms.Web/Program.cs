@@ -31,7 +31,12 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     options.Stores.SchemaVersion = IdentitySchemaVersions.Version1;
     options.Stores.MaxLengthForKeys = 128;
     options.User.RequireUniqueEmail = true;
-    options.Password.RequiredLength = 8;
+    // Yêu cầu của nhóm: mật khẩu chỉ cần tối thiểu 6 ký tự (vd: 123456).
+    options.Password.RequiredLength = 6;
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
     // Demo local chưa có email sender
@@ -121,7 +126,7 @@ using (var upgradeScope = app.Services.CreateScope())
 #endregion
 
 #region Mat khau admin demo chi trong Development
-// Đặt mật khẩu admin.demo chỉ trong môi trường Development
+// Development: đặt mật khẩu tài khoản mẫu và nạp dữ liệu ca mẫu
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
@@ -129,6 +134,15 @@ if (app.Environment.IsDevelopment())
     var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DbInitializer.SeedDevelopmentPasswordsAsync(userManager, config, logger);
+    try
+    {
+        await DbInitializer.SeedShiftDemoDataAsync(
+            scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(), app.Environment.ContentRootPath, logger);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Không nạp được dữ liệu ca mẫu. Có thể chạy tay BMS_Database_Starter/09_AddShiftDemoData.sql.");
+    }
 }
 
 #endregion
