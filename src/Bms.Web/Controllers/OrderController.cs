@@ -19,19 +19,22 @@ public class OrderController : Controller
     private readonly ILogger<OrderController> _logger;
     private readonly IOrderService? _orderService;
     private readonly IProductService? _productService;
+    private readonly IInventoryService? _inventoryService;
 
     public OrderController(
         ApplicationDbContext db,
         UserManager<ApplicationUser> userManager,
         ILogger<OrderController> logger,
         IOrderService? orderService = null,
-        IProductService? productService = null)
+        IProductService? productService = null,
+        IInventoryService? inventoryService = null)
     {
         _db = db;
         _userManager = userManager;
         _logger = logger;
         _orderService = orderService;
         _productService = productService;
+        _inventoryService = inventoryService;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -307,11 +310,14 @@ public class OrderController : Controller
             {
                 SessionId = session.Id,
                 OrderTimeUtc = DateTime.UtcNow,
-                Status = OrderConstants.StatusServed
+                Status = OrderConstants.StatusServed,
+                OrderSource = "Staff",
+                CreatedById = _userManager.GetUserId(User) ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
             };
             _db.Orders.Add(order);
             await _db.SaveChangesAsync();
 
+            var staffId = order.CreatedById;
             foreach (var item in aggregatedItems)
             {
                 var prod = products[item.ProductId];
@@ -322,7 +328,22 @@ public class OrderController : Controller
                     Quantity = item.Quantity,
                     UnitPrice = prod.Price
                 });
-                prod.StockQuantity -= item.Quantity; // Trừ tồn kho
+
+                if (_inventoryService != null)
+                {
+                    await _inventoryService.ChangeStockAsync(
+                        prod.Id,
+                        -item.Quantity,
+                        StockMovement.TypeOrderDeduct,
+                        "Order",
+                        order.Id,
+                        $"Gọi món tại quầy cho bàn {session.BilliardTable.TableCode}",
+                        staffId);
+                }
+                else
+                {
+                    prod.StockQuantity -= item.Quantity; // Trừ tồn kho
+                }
             }
 
             await _db.SaveChangesAsync();
@@ -335,20 +356,26 @@ public class OrderController : Controller
         {
             await tx.RollbackAsync();
             _logger.LogError(ex, "Lỗi khi staff đặt món cho phiên {SessionId}", sessionId);
-            TempData["Error"] = "Có lỗi xảy ra khi tạo đơn.";
+            TempData["Error"] = "Có lỗi xảy ra khi tạo đơn: " + (ex.InnerException?.Message ?? ex.Message);
             return RedirectToAction(nameof(Service), new { sessionId, tab = "table" });
         }
     }
 
     // POST /Order/SubmitCounterTakeaway (Khách mua lẻ tại quầy / Mang về không vào bàn)
-    [Authorize(Roles = "Staff")]
+    [Authorize(Roles = "Staff,Admin")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SubmitCounterTakeaway(SubmitOrderInputModel input)
     {
         var staffId = _userManager.GetUserId(User) 
-            ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
-            ?? "demo-staff-01";
+            ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(staffId) || !await _db.Users.AnyAsync(u => u.Id == staffId))
+        {
+            var staffRoleIds = await _db.Roles.Where(r => r.Name == "Staff" || r.Name == "Admin").Select(r => r.Id).ToListAsync();
+            staffId = await _db.UserRoles.Where(ur => staffRoleIds.Contains(ur.RoleId)).Select(ur => ur.UserId).FirstOrDefaultAsync() 
+                ?? await _db.Users.Select(u => u.Id).FirstOrDefaultAsync();
+        }
 
         var validItems = input.Items?.Where(i => i.Quantity > 0).ToList() ?? new List<OrderItemInputModel>();
         if (!validItems.Any())
@@ -380,19 +407,27 @@ public class OrderController : Controller
                 totalAmount += prod.Price * item.Quantity;
             }
 
-            // 1. Lấy 1 TableId hợp lệ trong DB để gắn session "Closed" (tiền giờ = 0)
-            var defaultTableId = await _db.BilliardTables.Select(t => t.Id).FirstOrDefaultAsync();
+            // 1. Lấy 1 Table hợp lệ trong DB để gắn session "Closed" (tiền giờ = 0)
+            var defaultTable = await _db.BilliardTables.Include(t => t.TableType).FirstOrDefaultAsync();
+            if (defaultTable == null)
+            {
+                await tx.RollbackAsync();
+                TempData["Error"] = "Chưa có dữ liệu bàn trong hệ thống.";
+                return RedirectToAction(nameof(Service), new { tab = "takeaway" });
+            }
+
+            var hourlyRate = defaultTable.TableType?.HourlyRate > 0 ? defaultTable.TableType.HourlyRate : 1000m;
 
             var counterSession = new PlaySession
             {
-                TableId = defaultTableId,
+                TableId = defaultTable.Id,
                 CustomerId = null,
-                OpenedById = staffId,
-                ClosedById = staffId,
+                OpenedById = staffId!,
+                ClosedById = staffId!,
                 StartAtUtc = DateTime.UtcNow,
                 EndAtUtc = DateTime.UtcNow,
-                HourlyRateSnapshot = 0,
-                PlaytimeAmount = 0,
+                HourlyRateSnapshot = hourlyRate,
+                PlaytimeAmount = 0m,
                 Status = "Closed" // Đóng ngay lập tức, hoàn toàn không chiếm bàn
             };
             _db.PlaySessions.Add(counterSession);
@@ -403,12 +438,14 @@ public class OrderController : Controller
             {
                 SessionId = counterSession.Id,
                 OrderTimeUtc = DateTime.UtcNow,
-                Status = OrderConstants.StatusServed
+                Status = OrderConstants.StatusServed,
+                OrderSource = "Takeaway",
+                CreatedById = staffId
             };
             _db.Orders.Add(order);
             await _db.SaveChangesAsync();
 
-            // 3. Thêm chi tiết món & trừ tồn kho
+            // 3. Thêm chi tiết món & trừ tồn kho kèm ghi thẻ kho
             foreach (var item in aggregatedItems)
             {
                 var prod = products[item.ProductId];
@@ -419,19 +456,40 @@ public class OrderController : Controller
                     Quantity = item.Quantity,
                     UnitPrice = prod.Price
                 });
-                prod.StockQuantity -= item.Quantity; // Trừ tồn kho
+
+                if (_inventoryService != null)
+                {
+                    await _inventoryService.ChangeStockAsync(
+                        prod.Id,
+                        -item.Quantity,
+                        StockMovement.TypeOrderDeduct,
+                        "Order",
+                        order.Id,
+                        $"Bán lẻ mang về tại quầy (Đơn #{order.Id})",
+                        staffId);
+                }
+                else
+                {
+                    prod.StockQuantity -= item.Quantity;
+                }
             }
             await _db.SaveChangesAsync();
             await tx.CommitAsync();
 
-            TempData["Success"] = $"Đã tạo đơn bán mang về thành công! Tổng tiền: {totalAmount:#,##0 ₫}.";
-            return RedirectToAction(nameof(Service), new { tab = "takeaway" });
+            TempData["Success"] = $"Đã tạo đơn bán mang về #{order.Id} ({totalAmount:#,##0 ₫}). Đang chuyển sang màn hình thu ngân...";
+            return RedirectToAction("Index", "LoyaltyTest", new
+            {
+                sessionId = counterSession.Id,
+                customerMode = "guest",
+                playtimeAmount = 0m,
+                fandBAmount = totalAmount
+            });
         }
         catch (Exception ex)
         {
             await tx.RollbackAsync();
             _logger.LogError(ex, "Lỗi khi xử lý đơn khách mua tại quầy");
-            TempData["Error"] = "Có lỗi xảy ra: " + ex.Message;
+            TempData["Error"] = "Có lỗi xảy ra: " + (ex.InnerException?.Message ?? ex.Message);
             return RedirectToAction(nameof(Service), new { tab = "takeaway" });
         }
     }

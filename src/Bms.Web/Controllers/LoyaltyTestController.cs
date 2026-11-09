@@ -563,7 +563,11 @@ public class LoyaltyTestController : Controller
                 ;WITH RankedSessions AS (
                     SELECT
                         s.Id AS SessionId,
-                        ISNULL(t.TableCode, CONCAT(N'Bàn #', s.TableId)) AS TableCode,
+                        CASE 
+                            WHEN s.Status = 'Closed' AND s.PlaytimeAmount = 0 
+                            THEN CONCAT(N'[Mang về] ', ISNULL(t.TableCode, CONCAT(N'Bàn #', s.TableId)))
+                            ELSE ISNULL(t.TableCode, CONCAT(N'Bàn #', s.TableId)) 
+                        END AS TableCode,
                         CAST(NULL AS nvarchar(450)) AS CustomerId,
                         CAST(NULL AS nvarchar(256)) AS CustomerName,
                         s.StartAtUtc AS StartAtUtc,
@@ -573,6 +577,7 @@ public class LoyaltyTestController : Controller
                             WHEN OBJECT_ID(N'dbo.fn_CalcPlaytimeAmount', N'FN') IS NOT NULL
                                  AND dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) IS NOT NULL
                             THEN dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
+                            WHEN s.Status = 'Closed' AND s.PlaytimeAmount IS NOT NULL THEN s.PlaytimeAmount
                             WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
                             ELSE CAST(ROUND(
                                 (CASE WHEN DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) < 1
