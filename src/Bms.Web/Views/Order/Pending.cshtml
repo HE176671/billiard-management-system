@@ -1,8 +1,48 @@
 @model List<Bms.Web.Models.OrderViewModel>
 @{
     ViewData["Title"] = "Duyệt đơn gọi món QR Realtime";
-    Layout = "_AdminLayout";
+    Layout = User.IsInRole("Admin") || User.IsInRole("Manager") ? "_AdminLayout" : "_StaffLayout";
 }
+
+<style>
+    .stat-card {
+        background: #fff; border-radius: 12px;
+        padding: 1.15rem 1.35rem;
+        border: 1px solid #e2e8f0;
+        display: flex; align-items: center; gap: 1rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    .stat-icon {
+        width: 44px; height: 44px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.25rem; flex-shrink: 0;
+    }
+    .stat-val { font-size: 1.35rem; font-weight: 700; line-height: 1.2; color: #1e293b; }
+    .stat-lbl { font-size: 0.78rem; color: #64748b; margin-top: 2px; }
+    .data-card {
+        background: #fff; border-radius: 12px;
+        border: 1px solid #e2e8f0; overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    .card-header-flex {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #f1f5f9;
+        display: flex; align-items: center; justify-content: space-between;
+    }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th {
+        background: #f8fafc; font-size: 0.75rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.03em;
+        color: #64748b; padding: 0.75rem 1rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .data-table td {
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.875rem;
+    }
+    .data-table tbody tr:hover { background: #fafafa; }
+</style>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>

@@ -8,7 +8,7 @@ public interface IOrderService
 
     Task<OrderOperationResult> CreateQrOrderAsync(QrOrderRequest request);
 
-    Task<OrderOperationResult> ConfirmQrOrderAsync(int orderId, string staffId);
+    Task<OrderOperationResult> ConfirmQrOrderAsync(int orderId, string staffId, string targetStatus = "Completed");
 
     Task<OrderOperationResult> RejectQrOrderAsync(int orderId, string reason, string staffId);
 

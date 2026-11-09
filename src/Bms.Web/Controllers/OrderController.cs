@@ -430,30 +430,44 @@ public class OrderController : Controller
         }
     }
 
-    // GET /Order/Manage (Quản lý các đơn Pending từ khách quét QR)
-    [Authorize(Roles = "Staff")]
+    // GET /Order/Manage (Chuyển tiếp đến màn hình duyệt đơn Pending chuẩn của Staff)
+    [Authorize(Roles = "Staff,Manager,Admin")]
     [HttpGet]
-    public async Task<IActionResult> Manage()
+    public IActionResult Manage()
     {
-        var pendingOrders = await _db.Orders
-            .Include(o => o.Session).ThenInclude(s => s.BilliardTable)
-            .Include(o => o.OrderDetails).ThenInclude(d => d.Product)
-            .Where(o => o.Status == OrderConstants.StatusPending)
-            .OrderBy(o => o.OrderTimeUtc)
-            .ToListAsync();
-
-        ViewData["Title"] = "Duyệt đơn gọi món từ bàn";
-        return View("ManageOrders", pendingOrders);
+        return RedirectToAction(nameof(Pending));
     }
 
-    // POST /Order/ApproveOrder (Staff duyệt đơn Pending -> Served và trừ tồn kho)
+    // POST /Order/ApproveOrder (Staff duyệt đơn: Hợp nhất logic Concurrency, PaymentLock, Trừ kho & Thẻ kho)
     [Authorize(Roles = "Staff")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveOrder(int orderId, string? returnUrl = null)
     {
-        // Trong request bình thường action tự mở transaction. Khi được gọi bên trong
-        // một transaction nghiệp vụ/test lớn hơn thì tham gia transaction hiện hữu.
+        var userId = _userManager.GetUserId(User) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Staff";
+        if (_orderService != null)
+        {
+            var result = await _orderService.ConfirmQrOrderAsync(orderId, userId, OrderConstants.StatusServed);
+            if (IsAjaxRequest())
+            {
+                return Json(new { success = result.Success, message = result.Message });
+            }
+
+            if (result.Success)
+            {
+                TempData["Success"] = result.Message;
+                TempData["SuccessMessage"] = result.Message;
+            }
+            else
+            {
+                TempData["Error"] = result.Message;
+                TempData["ErrorMessage"] = result.Message;
+            }
+
+            return RedirectToReturnUrl(returnUrl);
+        }
+
+        // Fallback trực tiếp nếu OrderController được khởi tạo thủ công trong test không có DI
         await using var tx = _db.Database.CurrentTransaction == null
             ? await _db.Database.BeginTransactionAsync()
             : null;
@@ -471,8 +485,6 @@ public class OrderController : Controller
                 return RedirectToReturnUrl(returnUrl);
             }
 
-            // ExecuteUpdate chạy trực tiếp trên DB nên loại bản Order cũ khỏi tracker
-            // trước khi nạp lại trạng thái Preparing.
             var trackedOrder = _db.ChangeTracker.Entries<Order>()
                 .FirstOrDefault(e => e.Entity.Id == orderId);
             if (trackedOrder != null)

@@ -1043,9 +1043,13 @@ try
     var orderSvc = scope.ServiceProvider.GetRequiredService<IOrderService>();
 
     // 1. Mở phiên chơi trên bàn để chuẩn bị gọi món
-    var openSessionRes = await tableSessionSvc.OpenSessionAsync(createdTable.Id, staff.Id);
+    var counterTableCode = "CNT-" + key[..4];
+    await mgrPricingCtrl.SaveTable(0, counterTableCode, testType.Id, 1, "Available");
+    var counterTable = await db.BilliardTables.AsNoTracking().SingleAsync(t => t.TableCode == counterTableCode);
+
+    var openSessionRes = await tableSessionSvc.OpenSessionAsync(counterTable.Id, staff.Id);
     Check(openSessionRes.Success, "WF2 P3: Open table session for counter ordering");
-    var activeSession = await db.PlaySessions.Include(s => s.BilliardTable).FirstAsync(s => s.TableId == createdTable.Id && s.Status == "Active");
+    var activeSession = await db.PlaySessions.Include(s => s.BilliardTable).FirstAsync(s => s.TableId == counterTable.Id && s.Status == "Active");
 
     // 2. UC-23: Thêm món tại quầy (Gọi 2 lon Coca Demo đang có giá 15,000 đ)
     var counterOrderItems = new List<OrderItemInputModel>
@@ -1060,7 +1064,7 @@ try
     var demoDrinkAfterCounterOrder = await productSvc.GetProductByIdAsync(demoDrink.Id);
     var movementsAfterOrder = await inventorySvc.GetStockMovementsAsync(demoDrink.Id);
     var sessionOrders = await orderSvc.GetSessionOrdersAsync(activeSession.Id);
-    var tableDetailAfterOrder = await tableSessionSvc.GetTableDetailAsync(createdTable.Id);
+    var tableDetailAfterOrder = await tableSessionSvc.GetTableDetailAsync(counterTable.Id);
 
     Check(demoDrinkAfterCounterOrder?.StockQuantity == 23
         && movementsAfterOrder.First().MovementType == StockMovement.TypeOrderDeduct
@@ -1082,7 +1086,7 @@ try
     var demoDrinkAfterCancel = await productSvc.GetProductByIdAsync(demoDrink.Id);
     var movementsAfterCancel = await inventorySvc.GetStockMovementsAsync(demoDrink.Id);
     var sessionOrdersAfterCancel = await orderSvc.GetSessionOrdersAsync(activeSession.Id);
-    var tableDetailAfterCancel = await tableSessionSvc.GetTableDetailAsync(createdTable.Id);
+    var tableDetailAfterCancel = await tableSessionSvc.GetTableDetailAsync(counterTable.Id);
 
     Check(demoDrinkAfterCancel?.StockQuantity == 24
         && movementsAfterCancel.First().MovementType == StockMovement.TypeOrderCancelReturn
@@ -1298,6 +1302,9 @@ try
     // Kết thúc phiên qrSession1
     var closeRes = await tableSessionSvc.CloseSessionAsync(qrSession1.Id, staff.Id);
     Check(closeRes.Success, "WF2 P4: Closed session qrSession1");
+
+    // Đảm bảo bàn Available trước khi mở phiên mới
+    await db.Database.ExecuteSqlRawAsync($"UPDATE dbo.BilliardTables SET Status = 'Available' WHERE Id = {qrTable.Id}");
 
     // Mở phiên mới qrSession2 cho bàn T01
     var openQrSession2Res = await tableSessionSvc.OpenSessionAsync(qrTable.Id, staff.Id);

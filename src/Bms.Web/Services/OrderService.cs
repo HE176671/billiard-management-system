@@ -238,8 +238,26 @@ public class OrderService : IOrderService
         }
     }
 
-    public async Task<OrderOperationResult> ConfirmQrOrderAsync(int orderId, string staffId)
+    public async Task<OrderOperationResult> ConfirmQrOrderAsync(int orderId, string staffId, string targetStatus = OrderEntity.StatusCompleted)
     {
+        // 1. Chống tranh chấp 2 nhân viên cùng duyệt 1 đơn (Hiệp Concurrency Lock):
+        int claimed = await _db.Orders
+            .Where(o => o.Id == orderId && o.Status == OrderEntity.StatusPending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(o => o.Status, OrderEntity.StatusPreparing));
+
+        if (claimed == 0)
+        {
+            return OrderOperationResult.Fail($"Đơn hàng #{orderId} không tồn tại hoặc đã được nhân viên khác xử lý.");
+        }
+
+        // Tách thực thể cũ khỏi EF ChangeTracker vì ExecuteUpdate chạy trực tiếp trên SQL
+        var tracked = _db.ChangeTracker.Entries<OrderEntity>().FirstOrDefault(e => e.Entity.Id == orderId);
+        if (tracked != null)
+        {
+            tracked.State = EntityState.Detached;
+        }
+
         var order = await _db.Orders
             .Include(o => o.OrderDetails)
                 .ThenInclude(d => d.Product)
@@ -247,17 +265,19 @@ public class OrderService : IOrderService
                 .ThenInclude(s => s!.BilliardTable)
             .FirstOrDefaultAsync(o => o.Id == orderId);
 
-        if (order == null)
+        if (order == null || order.Status != OrderEntity.StatusPreparing)
         {
-            return OrderOperationResult.Fail($"Không tìm thấy đơn hàng #{orderId}");
+            return OrderOperationResult.Fail($"Không tìm thấy đơn hàng #{orderId} ở trạng thái Chờ xử lý.");
         }
 
-        if (order.Status != OrderEntity.StatusPending)
+        // 2. Kiểm tra phiên chơi còn Active không:
+        if (order.Session != null && order.Session.Status != "Active")
         {
-            return OrderOperationResult.Fail($"Đơn hàng #{orderId} đã được xử lý trước đó (Trạng thái: {order.Status})");
+            await _db.Orders.Where(o => o.Id == orderId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, OrderEntity.StatusPending));
+            return OrderOperationResult.Fail("Phiên chơi của đơn hàng không còn ở trạng thái Hoạt động!");
         }
 
-        // UC-24 BR: Bàn đã Chờ thanh toán thì không xác nhận được đơn
+        // 3. Kiểm tra trạng thái bàn (AwaitingPayment):
         if (order.Session != null)
         {
             var currentTableStatus = await _db.BilliardTables.AsNoTracking()
@@ -267,20 +287,30 @@ public class OrderService : IOrderService
 
             if (currentTableStatus == "AwaitingPayment" || (order.Session.BilliardTable != null && order.Session.BilliardTable.Status == "AwaitingPayment"))
             {
+                await _db.Orders.Where(o => o.Id == orderId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, OrderEntity.StatusPending));
                 return OrderOperationResult.Fail($"Bàn {order.Session.BilliardTable?.TableCode} đã Chờ thanh toán, không thể xác nhận đơn gọi món!");
             }
         }
 
-        if (order.Session != null && order.Session.Status != "Active")
+        // 4. Kiểm tra khóa thanh toán chuyển khoản (Hiệp PaymentIntent Lock):
+        if (order.SessionId > 0)
         {
-            return OrderOperationResult.Fail($"Phiên chơi của đơn hàng không còn ở trạng thái Hoạt động!");
+            var paymentLocked = await _db.PaymentIntents.AsNoTracking()
+                .AnyAsync(p => p.SessionId == order.SessionId
+                            && p.Status == PaymentIntent.StatusPending
+                            && (p.ExpiresAtUtc == null || p.ExpiresAtUtc > DateTime.UtcNow));
+            if (paymentLocked)
+            {
+                await _db.Orders.Where(o => o.Id == orderId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, OrderEntity.StatusPending));
+                return OrderOperationResult.Fail("Bàn đang chờ xác nhận thanh toán. Hãy hoàn tất hoặc hủy yêu cầu thanh toán trước khi duyệt món.");
+            }
         }
 
+        // 5. Trừ kho nguyên tử từng món & Ghi sổ thẻ kho StockMovements
         var ownTx = _db.Database.CurrentTransaction == null;
         var tx = ownTx ? await _db.Database.BeginTransactionAsync() : null;
         try
         {
-            // Trừ kho nguyên tử từng món
             foreach (var detail in order.OrderDetails.Where(d => d.Status == OrderDetailEntity.StatusActive))
             {
                 var stockRes = await _inventoryService.ChangeStockAsync(
@@ -289,24 +319,26 @@ public class OrderService : IOrderService
                     StockMovement.TypeOrderDeduct,
                     "Order",
                     order.Id,
-                    $"Xác nhận đơn QR bàn {order.Session?.BilliardTable?.TableCode} (Đơn #{order.Id})",
+                    $"Xác nhận đơn món bàn {order.Session?.BilliardTable?.TableCode} (Đơn #{order.Id})",
                     staffId);
 
                 if (!stockRes.Success)
                 {
                     if (ownTx && tx != null) await tx.RollbackAsync();
+                    await _db.Orders.Where(o => o.Id == orderId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, OrderEntity.StatusPending));
                     return OrderOperationResult.Fail($"Xác nhận thất bại: {stockRes.Message}");
                 }
             }
 
-            order.Status = OrderEntity.StatusCompleted;
+            order.Status = targetStatus;
             order.CreatedById = staffId;
             await _db.SaveChangesAsync();
 
             if (ownTx && tx != null) await tx.CommitAsync();
 
-            _logger.LogInformation("QR Order #{OrderId} confirmed by {Staff}", orderId, staffId);
+            _logger.LogInformation("Order #{OrderId} confirmed by {Staff} with status {Status}", orderId, staffId, targetStatus);
 
+            // 6. Phát tín hiệu SignalR Realtime đến nhóm Staff
             if (_hubContext != null)
             {
                 try
@@ -321,7 +353,7 @@ public class OrderService : IOrderService
                     {
                         orderId = order.Id,
                         sessionId = order.SessionId,
-                        status = OrderEntity.StatusCompleted
+                        status = targetStatus
                     });
                 }
                 catch (Exception ex)
@@ -335,7 +367,8 @@ public class OrderService : IOrderService
         catch (Exception ex)
         {
             if (ownTx && tx != null) await tx.RollbackAsync();
-            _logger.LogError(ex, "Lỗi khi xác nhận đơn QR #{OrderId}", orderId);
+            await _db.Orders.Where(o => o.Id == orderId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, OrderEntity.StatusPending));
+            _logger.LogError(ex, "Lỗi khi xác nhận đơn #{OrderId}", orderId);
             return OrderOperationResult.Fail("Lỗi khi xác nhận đơn: " + ex.Message);
         }
         finally
