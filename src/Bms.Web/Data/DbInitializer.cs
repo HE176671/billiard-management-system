@@ -1,5 +1,6 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Bms.Web.Data;
+using Bms.Web.Data.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +9,8 @@ namespace Bms.Web.Data;
 /// <summary>
 /// Chỉ chạy trong môi trường Development.
 /// - Mở khóa và đặt mật khẩu demo (mặc định 123456) cho các tài khoản demo mỗi lần chạy.
-/// - Nạp dữ liệu ca làm mẫu (09_AddShiftDemoData.sql) nếu database chưa có.
+/// - Đảm bảo có dữ liệu phiên chơi, đơn F&B và giao dịch thanh toán thật trong 7 ngày gần nhất
+///   để Tổng quan hoạt động, Báo cáo doanh thu và Báo cáo vận hành luôn khớp số 100%.
 /// </summary>
 public static class DbInitializer
 {
@@ -19,7 +21,6 @@ public static class DbInitializer
         IConfiguration config,
         ILogger logger)
     {
-        // Mật khẩu demo dùng chung; đổi bằng user-secrets "DevSeed:DemoPassword" nếu muốn.
         var password = config["DevSeed:DemoPassword"];
         if (string.IsNullOrWhiteSpace(password)) password = "123456";
 
@@ -32,12 +33,10 @@ public static class DbInitializer
                 continue;
             }
 
-            // Mở khóa: tài khoản bị khóa tay (IsActive) hoặc bị khóa do nhập sai mật khẩu nhiều lần.
             user.IsActive = true;
             await userManager.SetLockoutEndDateAsync(user, null);
             await userManager.ResetAccessFailedCountAsync(user);
 
-            // Đặt lại mật khẩu demo để buổi báo cáo luôn đăng nhập được.
             if (await userManager.HasPasswordAsync(user))
                 await userManager.RemovePasswordAsync(user);
             var result = await userManager.AddPasswordAsync(user, password);
@@ -51,7 +50,6 @@ public static class DbInitializer
 
     /// <summary>
     /// TV5: bảo đảm có đủ 3 role nội bộ và tài khoản demo manager.demo (Manager).
-    /// Database tạo từ bản script cũ không có Manager nên không demo được phần vận hành.
     /// </summary>
     public static async Task EnsureInternalRolesAndDemoManagerAsync(
         UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, ILogger logger)
@@ -88,49 +86,139 @@ public static class DbInitializer
     }
 
     /// <summary>
-    /// Chạy BMS_Database_Starter/09_AddShiftDemoData.sql một lần nếu chưa có ca demo.
-    /// Script tự bỏ qua khi đã có dữ liệu, nên chạy lại vẫn an toàn.
+    /// Nạp dữ liệu mẫu thật (PlaySessions, PlaySessionTableSegments, Orders, Invoices, PaymentTransactions)
+    /// trải đều trong 7 ngày gần nhất (bao gồm cả hôm nay) nếu 7 ngày qua chưa có giao dịch thanh toán nào.
+    /// Nhờ đó Tổng quan hoạt động, Báo cáo doanh thu và Báo cáo vận hành luôn đồng bộ 100% từ DB thật.
     /// </summary>
     public static async Task SeedShiftDemoDataAsync(ApplicationDbContext db, string contentRoot, ILogger logger)
     {
-        var hasDemo = await db.Database.SqlQueryRaw<int>(
-            "SELECT COUNT(*) AS Value FROM dbo.WorkShifts WHERE Notes LIKE N'[[]DEMO]%'").SingleAsync();
-        if (hasDemo > 0) return;
+        var todayVn = DateTime.UtcNow.AddHours(7).Date;
+        var sevenDaysAgoStartUtc = todayVn.AddDays(-6).AddHours(-7);
+        var todayEndUtc = todayVn.AddDays(1).AddHours(-7);
 
-        var script = FindScript(contentRoot, "09_AddShiftDemoData.sql");
-        if (script == null)
+        // Nếu trong 7 ngày gần nhất đã có ít nhất 5 giao dịch thanh toán thì giữ nguyên
+        var recentTxCount = await db.PaymentTransactions
+            .CountAsync(p => p.TransactionTimeUtc >= sevenDaysAgoStartUtc && p.TransactionTimeUtc < todayEndUtc);
+        if (recentTxCount >= 5) return;
+
+        var tables = await db.BilliardTables.Include(t => t.TableType).OrderBy(t => t.Id).ToListAsync();
+        if (tables.Count == 0) return;
+
+        var staffUser = await db.Users.FirstOrDefaultAsync(u => u.UserName == "staff.demo01")
+                        ?? await db.Users.FirstOrDefaultAsync();
+        if (staffUser == null) return;
+
+        var products = await db.Products.Where(p => p.IsActive && p.Price > 0).OrderBy(p => p.Id).Take(4).ToListAsync();
+
+        // Kịch bản phiên chơi cho 7 ngày (từ -6 ngày trước đến hôm nay = 0):
+        // Mỗi phần tử: (daysAgo, tableIndex, startHourVn, durationMinutes, paymentMethod, fnbQty)
+        var specs = new (int DaysAgo, int TableIdx, int StartHourVn, int DurationMins, string Method, int FnbQty)[]
         {
-            logger.LogWarning("Không tìm thấy 09_AddShiftDemoData.sql — bỏ qua dữ liệu ca mẫu.");
-            return;
+            (6, 0, 10, 120, "Cash",     2),
+            (6, 1, 19, 150, "Transfer", 3),
+            (5, 0, 14,  90, "Cash",     1),
+            (5, 2, 20, 180, "Transfer", 2),
+            (4, 1,  9, 120, "Cash",     2),
+            (4, 3, 18, 120, "Cash",     2),
+            (3, 0, 15, 120, "Transfer", 2),
+            (3, 2, 19, 150, "Cash",     3),
+            (2, 1, 10,  90, "Cash",     1),
+            (2, 3, 20, 180, "Transfer", 4),
+            (1, 0, 13, 120, "Cash",     2),
+            (1, 1, 18, 150, "Transfer", 2),
+            (1, 2, 20, 120, "Cash",     3),
+            (0, 0,  9, 120, "Cash",     2),
+            (0, 1, 11,  90, "Transfer", 2)
+        };
+
+        int seededCount = 0;
+        foreach (var sp in specs)
+        {
+            var table = tables[sp.TableIdx % tables.Count];
+            decimal hourlyRate = table.TableType?.HourlyRate > 0 ? table.TableType.HourlyRate : 60000m;
+
+            var dayVn = todayVn.AddDays(-sp.DaysAgo);
+            var startUtc = dayVn.AddHours(sp.StartHourVn - 7);
+            var endUtc = startUtc.AddMinutes(sp.DurationMins);
+
+            // Không tạo phiên kết thúc ở tương lai so với thời điểm hiện tại
+            if (endUtc > DateTime.UtcNow.AddMinutes(-5))
+            {
+                endUtc = DateTime.UtcNow.AddMinutes(-5);
+                startUtc = endUtc.AddMinutes(-sp.DurationMins);
+            }
+
+            decimal playtimeAmount = Math.Round(hourlyRate * sp.DurationMins / 60m, 0);
+
+            var session = new PlaySession
+            {
+                TableId = table.Id,
+                OpenedById = staffUser.Id,
+                ClosedById = staffUser.Id,
+                StartAtUtc = startUtc,
+                EndAtUtc = endUtc,
+                HourlyRateSnapshot = hourlyRate,
+                PlaytimeAmount = playtimeAmount,
+                Status = "Closed"
+            };
+            db.PlaySessions.Add(session);
+            await db.SaveChangesAsync();
+
+            var segment = new PlaySessionTableSegment
+            {
+                SessionId = session.Id,
+                TableId = table.Id,
+                HourlyRateSnapshot = hourlyRate,
+                StartAtUtc = startUtc,
+                EndAtUtc = endUtc
+            };
+            db.PlaySessionTableSegments.Add(segment);
+
+            decimal fandBAmount = 0m;
+            if (products.Count > 0 && sp.FnbQty > 0)
+            {
+                var prod = products[(sp.DaysAgo + sp.TableIdx) % products.Count];
+                var order = new Order
+                {
+                    SessionId = session.Id,
+                    OrderTimeUtc = startUtc.AddMinutes(15),
+                    Status = Order.StatusCompleted,
+                    OrderSource = Order.SourceStaff,
+                    CreatedById = staffUser.Id,
+                    Note = "Đơn F&B tại quầy"
+                };
+                db.Orders.Add(order);
+                await db.SaveChangesAsync();
+
+                var detail = new OrderDetail
+                {
+                    OrderId = order.Id,
+                    ProductId = prod.Id,
+                    Quantity = sp.FnbQty,
+                    UnitPrice = prod.Price,
+                    Status = OrderDetail.StatusActive,
+                    CancelledQuantity = 0
+                };
+                db.OrderDetails.Add(detail);
+                fandBAmount = prod.Price * sp.FnbQty;
+            }
+
+            await db.SaveChangesAsync();
+
+            decimal totalBill = playtimeAmount + fandBAmount;
+            string refCode = $"BMS-OPSDEMO-{dayVn:yyyyMMdd}-{session.Id}";
+
+            await db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO dbo.Invoices (SessionId, CustomerId, TotalPlaytime, TotalFandB, DiscountAmount, Status, CreatedAtUtc)
+                VALUES ({session.Id}, NULL, {playtimeAmount}, {fandBAmount}, 0, 'Paid', {endUtc});
+                DECLARE @invId int = CONVERT(int, SCOPE_IDENTITY());
+                INSERT INTO dbo.PaymentTransactions (InvoiceId, PaymentMethod, AmountPaid, GatewayRefCode, TransactionTimeUtc, ReceivedById)
+                VALUES (@invId, {sp.Method}, {totalBill}, {refCode}, {endUtc}, {staffUser.Id});
+            ");
+
+            seededCount++;
         }
 
-        // Tách theo dòng "GO" như SSMS; bỏ lệnh USE vì đã kết nối đúng database.
-        var batches = Regex.Split(await File.ReadAllTextAsync(script), @"^\s*GO\s*$",
-                RegexOptions.Multiline | RegexOptions.IgnoreCase)
-            .Select(b => Regex.Replace(b, @"^\s*USE\s+\w+\s*;?\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase))
-            .Where(b => b.Split('\n').Any(l => l.Trim().Length > 0 && !l.TrimStart().StartsWith("--")));
-
-        // Giữ một kết nối cho mọi batch để SET NOEXEC trong script có tác dụng.
-        await db.Database.OpenConnectionAsync();
-        try
-        {
-            foreach (var batch in batches)
-                await db.Database.ExecuteSqlRawAsync(batch);
-            logger.LogInformation("Đã nạp dữ liệu ca làm mẫu từ {Script}.", Path.GetFileName(script));
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
-    }
-
-    private static string? FindScript(string startDir, string fileName)
-    {
-        for (var dir = new DirectoryInfo(startDir); dir != null; dir = dir.Parent)
-        {
-            var path = Path.Combine(dir.FullName, "BMS_Database_Starter", fileName);
-            if (File.Exists(path)) return path;
-        }
-        return null;
+        logger.LogInformation("Đã khởi tạo {Count} phiên chơi, đơn F&B và hóa đơn thanh toán thực tế cho 7 ngày gần nhất.", seededCount);
     }
 }
