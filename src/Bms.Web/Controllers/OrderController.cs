@@ -188,7 +188,7 @@ public class OrderController : Controller
     // ─────────────────────────────────────────────────────────────
 
     // GET /Order/Service (Màn hình Phục vụ F&B tích hợp: Tab 1 Realtime Queue & Tab 2 Gọi món bàn/quầy)
-    [Authorize(Roles = "Staff,Manager,Admin")]
+    [Authorize(Roles = "Staff,Admin")]
     [HttpGet]
     public async Task<IActionResult> Service(int? sessionId, string tab = "queue")
     {
@@ -241,7 +241,7 @@ public class OrderController : Controller
     }
 
     // GET /Order/Counter (Chuyển tiếp đến Tab Gọi món tại bàn / Quầy trên màn hình Phục vụ F&B)
-    [Authorize(Roles = "Staff,Manager,Admin")]
+    [Authorize(Roles = "Staff,Admin")]
     [HttpGet]
     public IActionResult Counter(int? sessionId, string tab = "table")
     {
@@ -437,7 +437,7 @@ public class OrderController : Controller
     }
 
     // GET /Order/Manage (Chuyển tiếp đến màn hình Phục vụ F&B chuẩn của Staff)
-    [Authorize(Roles = "Staff,Manager,Admin")]
+    [Authorize(Roles = "Staff,Admin")]
     [HttpGet]
     public IActionResult Manage()
     {
@@ -586,9 +586,14 @@ public class OrderController : Controller
     [HttpGet]
     public async Task<IActionResult> Index()
     {
-        if (User.IsInRole("Staff") || User.IsInRole("Admin") || User.IsInRole("Manager"))
+        if (User.IsInRole("Staff") || User.IsInRole("Admin"))
         {
             return RedirectToAction(nameof(Service));
+        }
+
+        if (User.IsInRole("Manager"))
+        {
+            return RedirectToAction("Index", "Product");
         }
 
         if (User.IsInRole("Customer"))
@@ -746,7 +751,7 @@ public class OrderController : Controller
     }
 
     // UC-24: Màn hình nhận đơn QR Realtime (Chuyển tiếp đến màn hình Phục vụ F&B)
-    [Authorize(Roles = "Staff,Manager,Admin")]
+    [Authorize(Roles = "Staff,Admin")]
     [HttpGet]
     public async Task<IActionResult> Pending(int? sessionId, string tab = "queue")
     {

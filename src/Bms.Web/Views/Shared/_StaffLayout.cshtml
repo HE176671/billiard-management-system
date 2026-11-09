@@ -88,13 +88,6 @@
                 </a>
 
                 <div class="nav-section-label">F&amp;B &amp; Kho hàng</div>
-                <a class="sidebar-link @Active("Order")" asp-controller="Order" asp-action="Service">
-                    <i class="bi bi-bell"></i> Phục vụ F&amp;B
-                    @if (pendingOrderCount > 0)
-                    {
-                        <span class="badge-count global-qr-pending-badge">@pendingOrderCount</span>
-                    }
-                </a>
                 <a class="sidebar-link @Active("Product")" asp-controller="Product" asp-action="Index">
                     <i class="bi bi-cup-straw"></i> Thực đơn &amp; Món
                 </a>
@@ -181,7 +174,7 @@
         <header class="topbar">
             <span class="topbar-title">@ViewData["Title"]</span>
             <div class="topbar-actions">
-                @if (!isAdmin || isManager)
+                @if (isStaff)
                 {
                     <a asp-controller="Order" asp-action="Service" class="btn-logout" title="Đơn QR chờ duyệt">
                         <i class="bi bi-cup-straw text-warning"></i> Đơn QR
