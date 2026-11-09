@@ -36,7 +36,8 @@ public class CustomerProfileController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Challenge();
 
-        var totalPoints = await CalcTotalPointsAsync(user.Id);
+        await _db.Entry(user).Reference(u => u.Tier).LoadAsync();
+        var totalPoints = user.RewardPoints;
 
         var vm = new ProfileViewModel
         {
@@ -44,12 +45,18 @@ public class CustomerProfileController : Controller
             UserName         = user.UserName,
             Email            = user.Email,
             PhoneNumber      = user.PhoneNumber,
-            RankName         = LoyaltyConstants.GetRankName(totalPoints),
+            RankName         = user.Tier?.TierName ?? "Member",
             TotalPoints      = totalPoints,
             CreatedAtUtc     = user.CreatedAtUtc,
-            PointsToNextRank = LoyaltyConstants.PointsToNextRank(totalPoints)
+            WalletBalance = user.WalletBalance
         };
 
+        vm.Spend12Months = await new TierEvaluationService(_db).GetSpendLast12MonthsAsync(user.Id);
+        var next = await _db.MembershipTiers.AsNoTracking()
+            .Where(t => t.SpendThreshold > (user.Tier != null ? user.Tier.SpendThreshold : 0m))
+            .OrderBy(t => t.SpendThreshold).FirstOrDefaultAsync();
+        vm.NextTierName = next?.TierName;
+        vm.AmountToNextTier = next == null ? 0m : Math.Max(0m, next.SpendThreshold - vm.Spend12Months);
         ViewData["Title"] = "Hồ sơ của tôi";
         return View(vm);
     }
@@ -61,7 +68,8 @@ public class CustomerProfileController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Challenge();
 
-        var totalPoints = await CalcTotalPointsAsync(user.Id);
+        await _db.Entry(user).Reference(u => u.Tier).LoadAsync();
+        var totalPoints = user.RewardPoints;
 
         var vm = new CustomerEditProfileViewModel
         {
@@ -69,7 +77,7 @@ public class CustomerProfileController : Controller
             Email        = user.Email ?? string.Empty,
             PhoneNumber  = user.PhoneNumber ?? string.Empty,
             UserName     = user.UserName,
-            RankName     = LoyaltyConstants.GetRankName(totalPoints),
+            RankName     = user.Tier?.TierName ?? "Member",
             TotalPoints  = totalPoints
         };
 
@@ -146,23 +154,14 @@ public class CustomerProfileController : Controller
 
     // ── Helpers ──
 
-    private async Task<int> CalcTotalPointsAsync(string userId)
-    {
-        var sessions = await _db.PlaySessions
-            .Where(s => s.CustomerId == userId && s.Status == "Closed" && s.PlaytimeAmount.HasValue)
-            .Select(s => s.PlaytimeAmount!.Value)
-            .ToListAsync();
-
-        return sessions.Sum(a => LoyaltyConstants.CalcSessionPoints(a));
-    }
-
     private async Task RestoreReadOnlyFields(CustomerEditProfileViewModel model)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return;
         model.UserName  = user.UserName;
-        var pts = await CalcTotalPointsAsync(user.Id);
+        await _db.Entry(user).Reference(u => u.Tier).LoadAsync();
+        var pts = user.RewardPoints;
         model.TotalPoints = pts;
-        model.RankName    = LoyaltyConstants.GetRankName(pts);
+        model.RankName    = user.Tier?.TierName ?? "Member";
     }
 }

@@ -19,7 +19,7 @@
             <div class="stat-icon amber"><i class="bi bi-trophy-fill"></i></div>
             <div>
                 <div class="stat-value">@Model.TotalPoints</div>
-                <div class="stat-label">Tổng điểm</div>
+                <div class="stat-label">Điểm khả dụng</div>
             </div>
         </div>
     </div>
@@ -32,31 +32,10 @@
             </div>
         </div>
     </div>
-    @if (Model.PointsToNextRank.HasValue)
-    {
-        <div class="col-sm-6 col-xl-3">
-            <div class="stat-card">
-                <div class="stat-icon blue"><i class="bi bi-arrow-up-circle-fill"></i></div>
-                <div>
-                    <div class="stat-value">@Model.PointsToNextRank</div>
-                    <div class="stat-label">Điểm để lên hạng</div>
-                </div>
-            </div>
-        </div>
-    }
-    else
-    {
-        <div class="col-sm-6 col-xl-3">
-            <div class="stat-card">
-                <div class="stat-icon green"><i class="bi bi-star-fill"></i></div>
-                <div>
-                    <div class="stat-value" style="font-size:0.9rem">Cao nhất</div>
-                    <div class="stat-label">Bạn đang ở hạng cao nhất</div>
-                </div>
-            </div>
-        </div>
-    }
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div><div class="stat-value" style="font-size:1.1rem">@Bms.Web.Services.VnFormat.Money(Model.Spend12Months)</div><div class="stat-label">Tích lũy xét hạng 365 ngày</div><small>@(Model.NextTierName == null ? "Đang ở hạng cao nhất" : $"Còn {Bms.Web.Services.VnFormat.Money(Model.AmountToNextTier)} lên {Model.NextTierName}")</small></div></div></div>
+    <div class="col-sm-6 col-xl-3"><div class="stat-card"><div><div class="stat-value" style="font-size:1.1rem">@Bms.Web.Services.VnFormat.Money(Model.WalletBalance)</div><div class="stat-label">Số dư trả trước</div><a asp-controller="Wallet" asp-action="Index">Xem lịch sử ví</a></div></div></div>
 </div>
+<p class="text-muted mt-3">Nạp tiền và thanh toán bằng tiền mặt, chuyển khoản hoặc ví đều được cộng điểm và tích lũy xét hạng: 20.000đ = 1 điểm × hệ số hạng trước giao dịch. Hóa đơn tích điểm theo số tiền thực trả sau ưu đãi và đổi điểm; chỉ đổi điểm khi khách yêu cầu. Xét giữ hạng hàng tháng, có 30 ngày ân hạn.</p>
 
 <!-- Thông tin hồ sơ -->
 <div class="form-card mt-4">

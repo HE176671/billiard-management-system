@@ -1,0 +1,237 @@
+@model Bms.Web.Models.WalletViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = "Ví trả trước";
+    Layout = User.IsInRole("Customer") ? "_Layout" : (User.IsInRole("Staff") ? "_StaffLayout" : "_AdminLayout");
+    var transferDescription = "Khách thanh toán phiên chơi bida";
+    var showRequests = Model.Transactions.Count == 0 && Model.RecentTransfers.Count > 0;
+    var showActor = Model.ActorNames.Count > 0;
+    var transferToConfirm = Model.SelectedTransfer is { Status: "Pending" or "Expired" } ? Model.SelectedTransfer : null;
+    var amountInput = (Model.SelectedTransfer?.ExpectedAmount ?? 2000000m).ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+    var autoPrepare = !TempData.ContainsKey("Error");
+}
+<link rel="stylesheet" href="~/css/wallet.css" asp-append-version="true" />
+<div class="wallet-page">
+    @foreach (var key in new[] { "Success", "Error" })
+    {
+        if (TempData[key] != null)
+        {
+            <div class="alert @(key == "Success" ? "alert-success" : "alert-danger")" role="alert">@TempData[key]</div>
+        }
+    }
+
+    <section class="wallet-panel wallet-overview" aria-label="Thông tin ví">
+        <div class="wallet-summary">
+            <div class="wallet-owner">
+                <span class="wallet-label">Ví trả trước</span>
+                <h1>@Model.CustomerName</h1>
+            </div>
+            <div class="wallet-metric">
+                <span class="wallet-label">Số dư</span>
+                <strong class="wallet-balance">@VnFormat.Money(Model.Balance)</strong>
+            </div>
+            <div class="wallet-metric">
+                <span class="wallet-label">Hạng thành viên</span>
+                <strong>@Model.TierName</strong>
+            </div>
+            <div class="wallet-metric">
+                <span class="wallet-label">Điểm hiện có</span>
+                <strong>@VnFormat.Number(Model.RewardPoints) <small>điểm</small></strong>
+            </div>
+        </div>
+        <details class="wallet-policy">
+            <summary>Cách tích điểm và xét hạng</summary>
+            <p>Nạp tiền và thanh toán hóa đơn bằng tiền mặt, chuyển khoản hoặc ví đều được cộng điểm và tích lũy xét hạng trong 365 ngày. Mỗi 20.000đ được 1 điểm × hệ số hạng trước giao dịch. Khi thanh toán hóa đơn, điểm và tích lũy tính theo số tiền thực trả sau ưu đãi và đổi điểm. Đổi điểm mặc định là 0; nhân viên chỉ nhập điểm khi khách yêu cầu.</p>
+            <p>Hệ số hiện tại ×@Model.PointMultiplier. Phiếu nạp không áp dụng giảm giá hóa đơn.</p>
+        </details>
+    </section>
+
+    <div class="wallet-workspace @(Model.CanTopUp && Model.SelectedTransfer != null ? "has-transfer" : "")">
+        @if (Model.CanTopUp)
+        {
+            <div class="wallet-panel wallet-topup">
+            <form asp-action="TopUp" method="post" id="walletTopUpForm"
+                  data-transfer-reference="@Model.SelectedTransfer?.ReferenceCode"
+                  data-transfer-amount="@(Model.SelectedTransfer?.ExpectedAmount.ToString("0", System.Globalization.CultureInfo.InvariantCulture))"
+                  data-auto-prepare="@autoPrepare.ToString().ToLowerInvariant()">
+                <div class="wallet-panel-heading">
+                    <h2>Nạp tiền</h2>
+                    <span class="wallet-caption">Tại quầy</span>
+                </div>
+                <input type="hidden" name="customerId" value="@Model.CustomerId" />
+                <input type="hidden" name="requestId" value="@Model.RequestId" />
+                <div class="wallet-fields">
+                    <div>
+                        <label for="walletPaymentMethod" class="form-label">Hình thức</label>
+                        <select id="walletPaymentMethod" name="paymentMethod" class="form-select">
+                            <option value="Cash" selected="@(Model.PaymentMethod == "Cash")">Tiền mặt</option>
+                            <option value="Transfer" selected="@(Model.PaymentMethod == "Transfer")">Chuyển khoản VietQR</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="topUpAmount" class="form-label">Số tiền nạp (VND)</label>
+                        <input id="topUpAmount" name="amount" type="number" min="1000" max="100000000" step="1" value="@amountInput" required class="form-control" />
+                    </div>
+                </div>
+                <div class="wallet-cash @(Model.PaymentMethod == "Cash" ? "" : "d-none")" id="walletCashConfirmation">
+                    <div class="form-check">
+                        <input id="receivedCash" name="receivedCash" type="checkbox" value="true" required="@(Model.PaymentMethod == "Cash")" disabled="@(Model.PaymentMethod != "Cash")" class="form-check-input" />
+                        <label for="receivedCash" class="form-check-label">Tôi đã nhận đủ tiền mặt từ khách.</label>
+                    </div>
+                    <span class="wallet-caption">Cần có ca đang mở để ghi nhận tiền mặt.</span>
+                </div>
+                <div id="walletTransferHelp" class="wallet-help @(Model.PaymentMethod == "Transfer" ? "" : "d-none")">
+                    @if (Model.TransferEnabled)
+                    {
+                        <span>Mã QR không hết hạn theo thời gian, giữ đến khi nhân viên xác nhận đã nhận tiền.</span>
+                        <div class="mt-1">Nhân viên kiểm tra tiền đã vào trên ứng dụng ngân hàng của tài khoản nhận chưa, sau đó bấm xác nhận nếu đã nhận tiền.</div>
+                    }
+                    else
+                    {
+                        <span>Chưa cấu hình tài khoản nhận tiền. Vui lòng liên hệ quản lý.</span>
+                    }
+                </div>
+                <div class="wallet-form-actions @(Model.PaymentMethod == "Cash" ? "" : "d-none")" id="walletCashActions">
+                    <button type="submit" class="btn btn-primary" id="walletTopUpSubmit">Xác nhận nạp tiền</button>
+                </div>
+            </form>
+            <div id="walletTransferActions" class="@(Model.PaymentMethod == "Transfer" ? "" : "d-none")">
+                @if (transferToConfirm != null)
+                {
+                    <form asp-action="ConfirmTransfer" method="post" id="walletManualConfirmForm" class="wallet-confirm">
+                        <input type="hidden" name="referenceCode" value="@transferToConfirm.ReferenceCode" />
+                        <div class="form-check">
+                            <input id="receivedTransfer" name="receivedTransfer" type="checkbox" value="true" required class="form-check-input" />
+                            <label for="receivedTransfer" class="form-check-label">Tôi đã kiểm tra tiền vào tài khoản nhận, đúng số tiền và nội dung.</label>
+                        </div>
+                        <div class="wallet-form-actions">
+                            <button type="submit" class="btn btn-success" id="walletManualConfirmSubmit">Xác nhận đã nhận tiền</button>
+                        </div>
+                    </form>
+                }
+                else if (Model.SelectedTransfer?.Status == "Confirmed")
+                {
+                    <p class="wallet-caption mt-3 mb-0">Phiếu nạp này đã được xác nhận.</p>
+                }
+                <p id="walletPrepareStatus" class="wallet-caption mt-2 mb-0" role="status"></p>
+                @if (Model.SelectedTransfer != null)
+                {
+                    <a asp-route-customerId="@Model.CustomerId" asp-route-paymentMethod="Transfer" class="wallet-new-deposit">Nạp mới</a>
+                }
+            </div>
+            </div>
+        }
+
+        @if (Model.SelectedTransfer is { } transfer)
+        {
+            var pending = transfer.Status is "Pending" or "Expired";
+            var confirmed = transfer.Status == "Confirmed";
+            <section class="wallet-panel wallet-transfer" id="walletTransferStatus" data-reference="@transfer.ReferenceCode" data-pending="@pending.ToString().ToLowerInvariant()">
+                <div class="wallet-panel-heading">
+                    <h2>Chuyển khoản nạp ví</h2>
+                </div>
+                <p id="walletTransferStatusText" class="wallet-status @(confirmed ? "is-confirmed" : "is-pending")" role="status">@(confirmed ? "Đã nhận tiền và cập nhật ví, điểm, hạng." : "Chờ xác nhận đã nhận tiền.")</p>
+                <div class="wallet-transfer-body @(pending && Model.TransferEnabled ? "has-qr" : "")">
+                @if (!confirmed)
+                {
+                    <div class="wallet-transfer-details">
+                        @if (pending && Model.TransferEnabled)
+                        {
+                            var qr = $"{Model.QrBaseUrl}?amount={transfer.ExpectedAmount.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}&addInfo={Uri.EscapeDataString(transferDescription)}&accountName={Uri.EscapeDataString(Model.AccountName)}";
+                            <div id="walletQrDetails" class="wallet-qr-image">
+                                <img src="@qr" alt="Mã VietQR nạp ví" width="200" />
+                            </div>
+                        }
+                        <dl class="wallet-bank-details">
+                            <div><dt>Số tiền cần nhận</dt><dd class="wallet-transfer-amount">@VnFormat.Money(transfer.ExpectedAmount)</dd></div>
+                            <div><dt>Tài khoản nhận</dt><dd>@Model.BankCode · @Model.AccountNumber</dd></div>
+                            @if (!string.IsNullOrWhiteSpace(Model.AccountName))
+                            {
+                                <div><dt>Chủ tài khoản</dt><dd>@Model.AccountName</dd></div>
+                            }
+                            <div><dt>Nội dung</dt><dd>@transferDescription</dd></div>
+                            <div><dt>Trạng thái QR</dt><dd>Giữ đến khi xác nhận đã nhận tiền</dd></div>
+                        </dl>
+                    </div>
+                }
+                </div>
+                @if (confirmed)
+                {
+                    <div class="wallet-confirmed-details">
+                        <strong>@VnFormat.Money(transfer.ExpectedAmount)</strong>
+                        <p>@(transfer.ConfirmationMethod == "Manual" ? "Nhân viên xác nhận" : "Xác nhận tự động")
+                            @if (transfer.ConfirmedById != null && Model.ActorNames.TryGetValue(transfer.ConfirmedById, out var confirmer)) { <span> · @confirmer</span> }
+                            <span class="d-block wallet-caption">@transfer.ConfirmedAtUtc?.AddHours(7).ToString("HH:mm · dd/MM/yyyy")</span></p>
+                    </div>
+                }
+            </section>
+        }
+    </div>
+
+    <section class="wallet-panel wallet-history" aria-label="Lịch sử ví">
+        <div class="nav wallet-history-tabs" role="tablist" aria-label="Loại lịch sử">
+            <button class="nav-link @(!showRequests ? "active" : "")" id="walletLedgerTab" data-bs-toggle="tab" data-bs-target="#walletLedger" type="button" role="tab" aria-controls="walletLedger" aria-selected="@(!showRequests ? "true" : "false")">Lịch sử ví</button>
+            @if (Model.RecentTransfers.Count > 0)
+            {
+                <button class="nav-link @(showRequests ? "active" : "")" id="walletRequestsTab" data-bs-toggle="tab" data-bs-target="#walletRequests" type="button" role="tab" aria-controls="walletRequests" aria-selected="@(showRequests ? "true" : "false")">Yêu cầu chuyển khoản</button>
+            }
+        </div>
+        <div class="tab-content">
+            <div id="walletLedger" class="tab-pane @(!showRequests ? "show active" : "")" role="tabpanel" aria-labelledby="walletLedgerTab" tabindex="0">
+                <div class="table-responsive">
+                    <table class="table wallet-table align-middle">
+                        <thead><tr><th scope="col">Thời gian</th><th scope="col">Giao dịch</th>@if (showActor) { <th scope="col">Nhân viên</th> }<th scope="col" class="text-end">Số tiền</th><th scope="col" class="text-end">Số dư sau</th></tr></thead>
+                        <tbody>
+                            @foreach (var row in Model.Transactions)
+                            {
+                                <tr>
+                                    <td class="text-nowrap">@row.CreatedAtUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>@(row.TransactionType == "TopUp"
+                                        ? row.PaymentMethod == "Transfer" ? "Nạp chuyển khoản" : "Nạp tiền mặt"
+                                        : row.InvoiceId is { } invoiceId ? $"Thanh toán hóa đơn #{invoiceId}" : "Thanh toán hóa đơn")</td>
+                                    @if (showActor) { <td>@Model.ActorNames.GetValueOrDefault(row.CreatedById, "—")</td> }
+                                    <td class="text-end text-nowrap">@VnFormat.Money(row.Amount)</td>
+                                    <td class="text-end text-nowrap">@VnFormat.Money(row.BalanceAfter)</td>
+                                </tr>
+                            }
+                            @if (Model.Transactions.Count == 0) { <tr><td colspan="@(showActor ? 5 : 4)" class="wallet-empty">Chưa có giao dịch ví.</td></tr> }
+                        </tbody>
+                    </table>
+                </div>
+                @if (Model.Page > 1 || Model.HasNextPage)
+                {
+                    <nav class="wallet-pagination" aria-label="Trang lịch sử ví">
+                        @if (Model.Page > 1) { <a asp-route-customerId="@Model.CustomerId" asp-route-page="@(Model.Page - 1)" asp-route-referenceCode="@Model.SelectedTransfer?.ReferenceCode" asp-route-paymentMethod="@Model.PaymentMethod" class="btn btn-sm btn-outline-secondary">Trang trước</a> }
+                        <span class="wallet-caption">Trang @Model.Page</span>
+                        @if (Model.HasNextPage) { <a asp-route-customerId="@Model.CustomerId" asp-route-page="@(Model.Page + 1)" asp-route-referenceCode="@Model.SelectedTransfer?.ReferenceCode" asp-route-paymentMethod="@Model.PaymentMethod" class="btn btn-sm btn-outline-secondary">Trang sau</a> }
+                    </nav>
+                }
+            </div>
+            @if (Model.RecentTransfers.Count > 0)
+            {
+                <div id="walletRequests" class="tab-pane @(showRequests ? "show active" : "")" role="tabpanel" aria-labelledby="walletRequestsTab" tabindex="0">
+                    <div class="table-responsive">
+                        <table class="table wallet-table align-middle">
+                            <thead><tr><th scope="col">Thời gian tạo</th><th scope="col" class="text-end">Số tiền</th><th scope="col">Trạng thái</th><th scope="col">Xác nhận</th></tr></thead>
+                            <tbody>
+                                @foreach (var recent in Model.RecentTransfers)
+                                {
+                                    var status = recent.Status == "Confirmed" ? "Đã ghi nhận" : "Chờ xác nhận";
+                                    <tr><td><a class="text-nowrap" title="Mở yêu cầu chuyển khoản" asp-route-customerId="@Model.CustomerId" asp-route-referenceCode="@recent.ReferenceCode">@recent.CreatedAtUtc.AddHours(7).ToString("dd/MM/yyyy HH:mm:ss")</a></td><td class="text-end text-nowrap">@VnFormat.Money(recent.ExpectedAmount)</td><td class="text-nowrap">@status</td>
+                                        <td>@if (recent.Status == "Confirmed") {
+                                            <span>@(recent.ConfirmationMethod == "Manual" ? "Nhân viên" : "Tự động")</span>
+                                            @if (recent.ConfirmedById != null && Model.ActorNames.TryGetValue(recent.ConfirmedById, out var name)) { <span> · @name</span> }
+                                            <small class="d-block wallet-caption">@recent.ConfirmedAtUtc?.AddHours(7).ToString("dd/MM/yyyy HH:mm")</small>
+                                        } else { <span>—</span> }</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+</div>
+@section Scripts {
+    <script src="~/js/wallet.js" asp-append-version="true" data-transfer-enabled="@Model.TransferEnabled.ToString().ToLowerInvariant()"></script>
+}

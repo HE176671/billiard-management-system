@@ -14,7 +14,9 @@ public record CheckoutCommand(
     int PointsToRedeem,
     string? VoucherCode,
     string? CashierId,
-    decimal? CashReceived = null);
+    decimal? CashReceived = null,
+    bool PayWithWallet = false,
+    bool ManualAmounts = false);
 
 public record CheckoutPaymentResult(
     bool Success,
@@ -28,12 +30,17 @@ public record CheckoutPaymentResult(
 
 public interface ICheckoutService
 {
+    Task<CheckoutPaymentResult> SubmitDraftAsync(CheckoutCommand command, string paymentMethod, CancellationToken ct = default);
+    Task<CheckoutPaymentResult> ConfirmTransferManuallyAsync(string referenceCode, string actorId, CancellationToken ct = default);
+    Task<CheckoutPaymentResult> ReopenTransferAsync(string referenceCode, string actorId, CancellationToken ct = default);
+    Task<CheckoutPaymentResult> SwitchTransferToCashAsync(string referenceCode, decimal cashReceived, string reason, string actorId, CancellationToken ct = default);
+    Task<CheckoutPaymentResult> CompleteWalletAsync(CheckoutCommand command, CancellationToken ct = default);
     Task<CheckoutPaymentResult> CompleteCashAsync(CheckoutCommand command, CancellationToken ct = default);
     Task<CheckoutPaymentResult> CreateTransferIntentAsync(CheckoutCommand command, CancellationToken ct = default);
     Task<CheckoutPaymentResult> ConfirmTransferAsync(string referenceCode, string providerTransactionId, decimal receivedAmount, CancellationToken ct = default);
 }
 
-public class CheckoutService : ICheckoutService
+public partial class CheckoutService : ICheckoutService
 {
     private readonly ApplicationDbContext _db;
     private readonly ILoyaltyService _loyalty;
@@ -46,11 +53,58 @@ public class CheckoutService : ICheckoutService
         _logger = logger;
     }
 
+    public async Task<CheckoutPaymentResult> CompleteWalletAsync(CheckoutCommand command, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(command.CustomerId))
+            return new(false, false, false, "Chỉ hội viên mới có thể thanh toán bằng ví.");
+        command = command with { PayWithWallet = true, ReferenceCode = NormalizeReference(command.ReferenceCode) };
+        await using var tx = await BeginCheckoutTransactionAsync("Wallet", ct);
+        try
+        {
+            await LockCommandAsync(command, ct);
+            var user = await _db.Users.FromSqlInterpolated($"SELECT * FROM dbo.AspNetUsers WITH (UPDLOCK,HOLDLOCK) WHERE Id={command.CustomerId}")
+                .SingleOrDefaultAsync(ct);
+            if (user == null || !user.IsActive)
+                return new(false, false, false, "Hội viên không tồn tại hoặc đang bị khóa.");
+            var duplicate = await FindCompletedByReferenceAsync(command.ReferenceCode, ct);
+            if (duplicate != null) return duplicate;
+            var prepared = await PrepareInvoiceAsync(command, ct);
+            if (!prepared.Success) return prepared.Result!;
+            var amount = await CalculateFinalAmountAsync(command, prepared, ct, commitLoyalty: false);
+            if (!amount.Success) return amount.Result!;
+            if (user.WalletBalance < amount.Amount)
+                return new(false, false, false, $"Số dư ví {VnFormat.Money(user.WalletBalance)} không đủ trả {VnFormat.Money(amount.Amount)}. Vui lòng nạp thêm hoặc chọn tiền mặt/chuyển khoản.");
+            var settled = await SettleAsync(command, prepared, amount.Amount, "Wallet", NormalizeReference(command.ReferenceCode), false, ct);
+            if (!settled.Success) return settled;
+            await _db.Entry(user).ReloadAsync(ct);
+            user.WalletBalance -= amount.Amount;
+            _db.WalletTransactions.Add(new WalletTransaction
+            {
+                CustomerId = user.Id, TransactionType = WalletTransaction.Payment, PaymentMethod = "Wallet",
+                Amount = -amount.Amount, BalanceAfter = user.WalletBalance,
+                InvoiceId = prepared.InvoiceId, ReferenceCode = NormalizeReference(command.ReferenceCode),
+                CreatedById = command.CashierId!
+            });
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return settled with { Message = "Đã thanh toán bằng ví trả trước, cộng điểm và cập nhật tích lũy xét hạng." };
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            _db.ChangeTracker.Clear();
+            _logger.LogError(ex, "Thanh toán ví thất bại. Reference={Reference}", command.ReferenceCode);
+            return new(false, false, false, "Không thể thanh toán ví; giao dịch đã được hoàn tác.");
+        }
+    }
+
     public async Task<CheckoutPaymentResult> CompleteCashAsync(CheckoutCommand command, CancellationToken ct = default)
     {
+        command = command with { PayWithWallet = false, ReferenceCode = NormalizeReference(command.ReferenceCode) };
         await using var tx = await BeginCheckoutTransactionAsync("Cash", ct);
         try
         {
+            await LockCommandAsync(command, ct);
             var duplicate = await FindCompletedByReferenceAsync(command.ReferenceCode, ct);
             if (duplicate != null)
             {
@@ -101,9 +155,11 @@ public class CheckoutService : ICheckoutService
 
     public async Task<CheckoutPaymentResult> CreateTransferIntentAsync(CheckoutCommand command, CancellationToken ct = default)
     {
+        command = command with { PayWithWallet = false, ReferenceCode = NormalizeReference(command.ReferenceCode) };
         await using var tx = await BeginCheckoutTransactionAsync("Intent", ct);
         try
         {
+            await LockCommandAsync(command, ct);
             var refCode = NormalizeReference(command.ReferenceCode);
             var existing = await _db.PaymentIntents.AsNoTracking().FirstOrDefaultAsync(x => x.ReferenceCode == refCode, ct);
             if (existing != null)
@@ -112,7 +168,7 @@ public class CheckoutService : ICheckoutService
                 return new(existing.Status == PaymentIntent.StatusConfirmed, true,
                     existing.Status == PaymentIntent.StatusPending,
                     existing.Status == PaymentIntent.StatusPending
-                        ? "Yêu cầu chuyển khoản này đang chờ ngân hàng xác nhận."
+                        ? "Yêu cầu chuyển khoản này đang chờ xác nhận đã nhận tiền."
                         : "Yêu cầu chuyển khoản này đã được xử lý.",
                     existing.InvoiceId, existing.ExpectedAmount, 0, existing.ReferenceCode);
             }
@@ -147,13 +203,13 @@ public class CheckoutService : ICheckoutService
                 VoucherCode = NormalizeOptional(command.VoucherCode),
                 CashierId = command.CashierId,
                 CreatedAtUtc = now,
-                ExpiresAtUtc = now.AddMinutes(15)
+                ExpiresAtUtc = null
             });
 
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             return new(true, false, true,
-                "Đã tạo yêu cầu VietQR. Hóa đơn chỉ được ghi nhận đã thanh toán sau khi ngân hàng xác nhận.",
+                "Đã tạo QR. Kiểm tra tiền vào tài khoản nhận trước khi xác nhận đã nhận tiền.",
                 prepared.InvoiceId, finalAmount.Amount, 0, refCode);
         }
         catch (Exception ex)
@@ -164,16 +220,21 @@ public class CheckoutService : ICheckoutService
         }
     }
 
-    public async Task<CheckoutPaymentResult> ConfirmTransferAsync(
+    public Task<CheckoutPaymentResult> ConfirmTransferAsync(
         string referenceCode,
         string providerTransactionId,
         decimal receivedAmount,
-        CancellationToken ct = default)
+        CancellationToken ct = default) => ConfirmTransferCoreAsync(referenceCode, providerTransactionId, receivedAmount, null, ct);
+
+    private async Task<CheckoutPaymentResult> ConfirmTransferCoreAsync(
+        string referenceCode, string providerTransactionId, decimal? receivedAmount, string? confirmedById, CancellationToken ct)
     {
         await using var tx = await BeginCheckoutTransactionAsync("Webhook", ct);
         try
         {
             var refCode = NormalizeReference(referenceCode);
+            await LockCheckoutAsync("REF", refCode, ct);
+            await BankTransactionGuard.LockAsync(_db, providerTransactionId, ct);
             var intent = await _db.PaymentIntents
                 .FromSqlInterpolated($"SELECT * FROM dbo.PaymentIntents WITH (UPDLOCK, HOLDLOCK) WHERE ReferenceCode = {refCode}")
                 .SingleOrDefaultAsync(ct);
@@ -183,6 +244,20 @@ public class CheckoutService : ICheckoutService
                 await tx.RollbackAsync(ct);
                 return new(false, false, false, "Không tìm thấy yêu cầu thanh toán tương ứng.", ReferenceCode: refCode);
             }
+            await _db.Entry(intent).ReloadAsync(ct);
+            if (intent.SessionId is > 0)
+                await LockCheckoutAsync("SESSION", intent.SessionId.Value.ToString(), ct);
+            await LockCheckoutAsync("INVOICE", intent.InvoiceId.ToString(), ct);
+            if (confirmedById == null)
+            {
+                var reviewed = await CheckBankNotificationAsync(intent, providerTransactionId, receivedAmount ?? 0, ct);
+                if (reviewed != null)
+                {
+                    if (reviewed.Success) await tx.CommitAsync(ct); else await tx.RollbackAsync(ct);
+                    return reviewed;
+                }
+            }
+            if (confirmedById != null) receivedAmount = intent.ExpectedAmount;
 
             if (intent.Status == PaymentIntent.StatusConfirmed)
             {
@@ -190,31 +265,23 @@ public class CheckoutService : ICheckoutService
                 return new(true, true, false, "Giao dịch đã được xác nhận trước đó.", intent.InvoiceId, intent.ExpectedAmount, 0, refCode);
             }
 
-            if (intent.Status != PaymentIntent.StatusPending)
+            if (intent.Status != PaymentIntent.StatusPending && !(confirmedById != null && intent.Status == PaymentIntent.StatusExpired))
             {
                 await tx.RollbackAsync(ct);
                 return new(false, false, false, $"Yêu cầu thanh toán đang ở trạng thái {intent.Status}.", intent.InvoiceId, intent.ExpectedAmount, 0, refCode);
-            }
-
-            if (DateTime.UtcNow > intent.ExpiresAtUtc)
-            {
-                intent.Status = PaymentIntent.StatusExpired;
-                await _db.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
-                return new(false, false, false, "Yêu cầu thanh toán đã hết hạn.", intent.InvoiceId, intent.ExpectedAmount, 0, refCode);
             }
 
             if (receivedAmount != intent.ExpectedAmount)
             {
                 await tx.RollbackAsync(ct);
                 return new(false, false, false,
-                    $"Số tiền nhận được {VnFormat.Money(receivedAmount)} không khớp số tiền cần thanh toán {VnFormat.Money(intent.ExpectedAmount)}.",
+                    $"Số tiền nhận được {VnFormat.Money(receivedAmount ?? 0)} không khớp số tiền cần thanh toán {VnFormat.Money(intent.ExpectedAmount)}.",
                     intent.InvoiceId, intent.ExpectedAmount, 0, refCode);
             }
 
             var providerDuplicate = await _db.PaymentIntents.AsNoTracking()
                 .AnyAsync(x => x.ProviderTransactionId == providerTransactionId && x.Id != intent.Id, ct);
-            if (providerDuplicate)
+            if (providerDuplicate || await _db.WalletTopUpIntents.AnyAsync(w => w.ProviderTransactionId == providerTransactionId, ct))
             {
                 await tx.RollbackAsync(ct);
                 return new(false, true, false, "Mã giao dịch ngân hàng đã được dùng cho một thanh toán khác.", ReferenceCode: refCode);
@@ -223,11 +290,11 @@ public class CheckoutService : ICheckoutService
             var command = new CheckoutCommand(
                 intent.CustomerId, intent.ReferenceCode, intent.SessionId,
                 intent.PlaytimeAmount, intent.FandBAmount, intent.PointsToRedeem,
-                intent.VoucherCode, intent.CashierId);
+                intent.VoucherCode, confirmedById ?? intent.CashierId);
             var prepared = new PreparedInvoice(true, intent.InvoiceId, intent.SessionId ?? 0,
                 intent.PlaytimeAmount, intent.FandBAmount, null);
 
-            var settled = await SettleAsync(command, prepared, intent.ExpectedAmount, "Transfer", providerTransactionId, false, ct);
+            var settled = await SettleAsync(command, prepared, intent.ExpectedAmount, "Transfer", providerTransactionId, false, ct, confirmedById);
             if (!settled.Success)
             {
                 await tx.RollbackAsync(ct);
@@ -237,6 +304,8 @@ public class CheckoutService : ICheckoutService
             intent.Status = PaymentIntent.StatusConfirmed;
             intent.ProviderTransactionId = providerTransactionId;
             intent.ConfirmedAtUtc = DateTime.UtcNow;
+            intent.ConfirmationMethod = confirmedById == null ? "SePay" : "Manual";
+            intent.ConfirmedById = confirmedById;
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             return settled;
@@ -245,7 +314,7 @@ public class CheckoutService : ICheckoutService
         {
             await tx.RollbackAsync(ct);
             _logger.LogError(ex, "Xác nhận webhook thất bại. ReferenceCode={ReferenceCode}, ProviderTransactionId={ProviderTransactionId}", referenceCode, providerTransactionId);
-            return new(false, false, false, "Không thể hoàn tất giao dịch; webhook có thể thử gửi lại.", ReferenceCode: referenceCode);
+            return new(false, false, false, "Chưa hoàn tất thanh toán. Kiểm tra trạng thái rồi thử lại.", ReferenceCode: referenceCode);
         }
     }
 
@@ -263,12 +332,18 @@ public class CheckoutService : ICheckoutService
         if (string.IsNullOrWhiteSpace(command.CashierId))
             return PreparedInvoice.Fail("Không xác định được nhân viên thực hiện thanh toán.", command.ReferenceCode);
 
+        if (await _db.PaymentIntents.AnyAsync(p => p.ReferenceCode == NormalizeReference(command.ReferenceCode), ct))
+            return PreparedInvoice.Fail("Mã tham chiếu đã thuộc một yêu cầu chuyển khoản. Hãy dùng mã giao dịch mới.", command.ReferenceCode);
         decimal playtime = command.SubmittedPlaytimeAmount;
         decimal fandB = command.SubmittedFandBAmount;
         int sessionId = command.SessionId ?? 0;
 
         if (sessionId > 0)
         {
+            var waiting = await _db.PaymentIntents.AsNoTracking().FirstOrDefaultAsync(p => p.SessionId == sessionId
+                && (p.Status == PaymentIntent.StatusPending || p.Status == PaymentIntent.StatusExpired), ct);
+            if (waiting != null)
+                return PreparedInvoice.Fail("Phiên chơi có yêu cầu chuyển khoản chưa hoàn tất. Mở phiếu để xác nhận hoặc sửa thanh toán.", waiting.ReferenceCode, waiting.InvoiceId);
             bool hasPendingOrders = await _db.Orders.AsNoTracking()
                 .AnyAsync(o => o.SessionId == sessionId
                             && (o.Status == OrderConstants.StatusPending
@@ -280,10 +355,15 @@ public class CheckoutService : ICheckoutService
                     command.ReferenceCode);
             }
 
+            // Match the cashier preview: transferred table rates and purchased combo
+            // minutes take precedence over the legacy single-rate calculation.
             var rows = await _db.Database.SqlQuery<CheckoutAmountsRow>($"""
                 SELECT TOP 1
                     s.Id AS SessionId,
-                    CASE WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
+                    CASE WHEN OBJECT_ID(N'dbo.fn_CalcPlaytimeAmount', N'FN') IS NOT NULL
+                              AND dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) IS NOT NULL
+                         THEN dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
+                         WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
                          ELSE CAST(ROUND((CASE WHEN DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) < 1
                                               THEN 1 ELSE DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) END / 60.0)
                                               * s.HourlyRateSnapshot, -3) AS decimal(18,2)) END AS PlaytimeAmount,
@@ -298,8 +378,11 @@ public class CheckoutService : ICheckoutService
             if (row == null)
                 return PreparedInvoice.Fail("Không tìm thấy phiên bàn cần thanh toán.", command.ReferenceCode);
 
-            playtime = row.PlaytimeAmount;
-            fandB = row.FandBAmount;
+            if (!command.ManualAmounts)
+            {
+                playtime = row.PlaytimeAmount;
+                fandB = row.FandBAmount;
+            }
         }
         else
         {
@@ -313,7 +396,7 @@ public class CheckoutService : ICheckoutService
             sessionId = (await _db.Database.SqlQuery<int>($"""
                 INSERT INTO dbo.PlaySessions (TableId, CustomerId, OpenedById, ClosedById, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status)
                 OUTPUT INSERTED.Id AS [Value]
-                VALUES ({tableId}, {command.CustomerId}, {command.CashierId}, {command.CashierId}, DATEADD(hour, -1, SYSUTCDATETIME()), SYSUTCDATETIME(), {playtime}, {playtime}, 'Closed');
+                VALUES ({tableId}, {command.CustomerId}, {command.CashierId}, {command.CashierId}, DATEADD(hour, -1, SYSUTCDATETIME()), SYSUTCDATETIME(), {Math.Max(1m, playtime)}, {playtime}, 'Closed');
                 """).ToListAsync(ct)).Single();
         }
 
@@ -353,7 +436,7 @@ public class CheckoutService : ICheckoutService
         var request = new CheckoutLoyaltyRequest(
             command.CustomerId, NormalizeReference(command.ReferenceCode), prepared.InvoiceId,
             prepared.PlaytimeAmount, prepared.FandBAmount, command.PointsToRedeem,
-            NormalizeOptional(command.VoucherCode), command.CashierId);
+            NormalizeOptional(command.VoucherCode), command.CashierId, command.PayWithWallet);
 
         var preview = await _loyalty.PreviewCheckoutAsync(request, ct);
         if (!preview.IsValid)
@@ -363,7 +446,7 @@ public class CheckoutService : ICheckoutService
             return new(true, preview.FinalAmount, null);
 
         var result = await _loyalty.CommitCheckoutAsync(request, ct);
-        if (!result.Success)
+        if (!result.Success || result.Duplicate)
             return CalculatedAmount.Fail(result.Message, command.ReferenceCode, prepared.InvoiceId);
 
         return new(true, result.FinalAmount, null);
@@ -376,8 +459,12 @@ public class CheckoutService : ICheckoutService
         string method,
         string gatewayReference,
         bool receivedAtCounter,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? transferConfirmer = null)
     {
+        await LockCheckoutAsync("INVOICE", prepared.InvoiceId.ToString(), ct);
+        if (await _db.PaymentTransactions.AsNoTracking().AnyAsync(p => p.InvoiceId == prepared.InvoiceId, ct))
+            return new(false, true, false, "Hóa đơn đã được thanh toán. Không ghi nhận thêm giao dịch.", prepared.InvoiceId, ReferenceCode: command.ReferenceCode);
         var calculated = await CalculateFinalAmountAsync(command, prepared, ct);
         if (!calculated.Success)
             return calculated.Result!;
@@ -402,10 +489,14 @@ public class CheckoutService : ICheckoutService
                 CustomerId = ISNULL(CustomerId, {command.CustomerId}), PlaytimeAmount = {prepared.PlaytimeAmount}
             WHERE Id = {prepared.SessionId};
 
+            -- Manual invoices and older closed sessions can share a table with a
+            -- different active session. Only release a table with nobody playing.
             UPDATE t SET t.Status = 'Available'
             FROM dbo.BilliardTables t
             INNER JOIN dbo.PlaySessions s ON s.TableId = t.Id
-            WHERE s.Id = {prepared.SessionId} AND t.Status = 'InUse';
+            WHERE s.Id = {prepared.SessionId} AND t.Status = 'InUse'
+              AND NOT EXISTS (SELECT 1 FROM dbo.PlaySessions active
+                              WHERE active.TableId = t.Id AND active.Status = 'Active');
             """, ct);
 
         var activeShiftId = receivedAtCounter
@@ -421,10 +512,12 @@ public class CheckoutService : ICheckoutService
             AmountPaid = calculated.Amount,
             GatewayRefCode = gatewayReference,
             WorkShiftId = activeShiftId,
-            ReceivedById = receivedAtCounter ? command.CashierId : null,
+            ReceivedById = transferConfirmer ?? (receivedAtCounter || method == "Wallet" ? command.CashierId : null),
             TransactionTimeUtc = DateTime.UtcNow
         });
         await _db.SaveChangesAsync(ct);
+
+        await FinishDraftAsync(command, prepared, calculated.Amount, method, ct);
 
         return new(true, false, false, "Thanh toán đã được ghi nhận thành công.", prepared.InvoiceId,
             calculated.Amount, 0, NormalizeReference(command.ReferenceCode));
@@ -433,7 +526,7 @@ public class CheckoutService : ICheckoutService
     private static string NormalizeReference(string value)
     {
         var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
-        if (normalized.Length == 0) normalized = $"HD-{DateTime.UtcNow:yyyyMMddHHmmssfff}";
+        if (normalized.Length == 0) normalized = "HD" + Guid.NewGuid().ToString("N").ToUpperInvariant();
         return normalized.Length <= 50 ? normalized : normalized[..50];
     }
 
@@ -509,6 +602,7 @@ public class CheckoutService : ICheckoutService
 
         public async ValueTask DisposeAsync()
         {
+            if (!_completed) await RollbackAsync(CancellationToken.None);
             if (_ownsTransaction)
                 await _transaction.DisposeAsync();
         }

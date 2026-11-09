@@ -18,6 +18,7 @@ public class ApplicationUser : IdentityUser
     public MembershipTier? Tier { get; set; }
     public int RewardPoints { get; set; }
     public decimal TotalSpend { get; set; }
+    public decimal WalletBalance { get; set; }
     public DateTime? LastPaidDate { get; set; }
 
     // ---- CRM & Loyalty V2 ----

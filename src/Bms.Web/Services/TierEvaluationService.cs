@@ -76,11 +76,11 @@ public class TierEvaluationService : ITierEvaluationService
         var currentTier = tiers.FirstOrDefault(t => t.Id == user.TierId) ?? tiers[0];
         var oldTierName = currentTier.TierName;
 
-        // Hạng cao nhất đạt được theo ngưỡng điểm tích lũy hoặc chi tiêu
+        // Hạng cao nhất đạt được theo tích lũy hợp lệ trong 365 ngày
         var resolvedTier = TierHelper.Resolve(tiers, newSpend12Months, user.RewardPoints) ?? tiers[0];
 
         // 1. Nếu khách đang trong ân hạn mà đã chi tiêu hoặc đạt ngưỡng điểm đủ giữ hạng hiện tại -> xóa ân hạn, gia hạn review +1 tháng
-        if (user.TierGraceUntilUtc != null && (newSpend12Months >= currentTier.SpendThreshold || (currentTier.MinPoints > 0 && user.RewardPoints >= currentTier.MinPoints)))
+        if (user.TierGraceUntilUtc != null && newSpend12Months >= currentTier.SpendThreshold)
         {
             user.TierGraceUntilUtc = null;
             user.TierReviewAtUtc = now.AddMonths(1);
@@ -104,7 +104,7 @@ public class TierEvaluationService : ITierEvaluationService
                     {
                         UserId = user.Id,
                         Title = $"Chúc mừng thăng hạng {resolvedTier.TierName}!",
-                        Content = $"Bạn đã đạt ngưỡng thăng hạng (Điểm hiện tại: {user.RewardPoints} · Chi tiêu: {VnFormat.Money(newSpend12Months)}), chính thức lên hạng {resolvedTier.TierName} (giảm {resolvedTier.DiscountPercent:0.##}% tiền giờ, tích điểm ×{resolvedTier.PointMultiplier}). Chu kỳ xét giữ hạng kế tiếp: {now.AddMonths(1):dd/MM/yyyy}.",
+                        Content = $"Bạn đã đạt ngưỡng thăng hạng (Điểm hiện tại: {user.RewardPoints} · Tích lũy 365 ngày: {VnFormat.Money(newSpend12Months)}), chính thức lên hạng {resolvedTier.TierName} (giảm {resolvedTier.DiscountPercent:0.##}% tiền giờ, tích điểm ×{resolvedTier.PointMultiplier}). Chu kỳ xét giữ hạng kế tiếp: {now.AddMonths(1):dd/MM/yyyy}.",
                         Type = "TierUpgrade",
                         IsRead = false,
                         CreatedAt = now
@@ -114,7 +114,7 @@ public class TierEvaluationService : ITierEvaluationService
                     {
                         CustomerId = user.Id,
                         Action = "TierChange",
-                        Detail = JsonSerializer.Serialize(new { from = oldTierName, to = resolvedTier.TierName, reason = "ImmediateCheckoutUpgrade", points = user.RewardPoints, spend12M = newSpend12Months }),
+                        Detail = JsonSerializer.Serialize(new { from = oldTierName, to = resolvedTier.TierName, reason = "EligibleAccumulationUpgrade", points = user.RewardPoints, spend12M = newSpend12Months }),
                         ActorId = actorId,
                         CreatedAtUtc = now
                     });

@@ -44,14 +44,43 @@ public class LoyaltyTestController : Controller
         string? customerId = null,
         string? customerMode = null,
         int? sessionId = null,
-        decimal playtimeAmount = 300000m,
-        decimal fandBAmount = 80000m,
+        decimal playtimeAmount = 0m,
+        decimal fandBAmount = 0m,
         int pointsToRedeem = 0,
         string? voucherCode = null,
         string? referenceCode = null,
         string paymentMethod = "VietQR",
-        decimal? cashReceived = null)
+        decimal? cashReceived = null,
+        bool cashMode = false,
+        decimal? switchCashReceived = null,
+        string? switchReason = null,
+        bool useRewardPoints = false)
     {
+        if (!useRewardPoints) pointsToRedeem = 0;
+        // A persisted reference owns the customer, session and receipt snapshot.
+        // Query-string values must not rewrite a pending or completed checkout.
+        var draft = string.IsNullOrWhiteSpace(referenceCode) ? null : await _context.CheckoutDrafts.AsNoTracking()
+            .SingleOrDefaultAsync(d => d.ReferenceCode == referenceCode);
+        var selectedIntent = string.IsNullOrWhiteSpace(referenceCode) ? null : await _context.PaymentIntents.AsNoTracking()
+            .SingleOrDefaultAsync(i => i.ReferenceCode == referenceCode);
+        if (draft?.Status == CheckoutDraft.Superseded)
+            return RedirectToAction(nameof(Index), new { referenceCode = draft.ReplacementReference });
+        if (!string.IsNullOrWhiteSpace(referenceCode) && draft == null && selectedIntent == null)
+            return NotFound("Phiếu không tồn tại. Mở Thanh toán & Tích điểm để bắt đầu giao dịch mới.");
+        if (draft != null || selectedIntent != null)
+        {
+            customerId = draft != null ? draft.CustomerId : selectedIntent!.CustomerId;
+            customerMode = customerId == null ? "guest" : "member";
+            sessionId = draft != null ? draft.SessionId : selectedIntent!.SessionId;
+            playtimeAmount = draft != null ? draft.PlaytimeAmount : selectedIntent!.PlaytimeAmount;
+            fandBAmount = draft != null ? draft.FandBAmount : selectedIntent!.FandBAmount;
+            pointsToRedeem = draft != null ? draft.PointsToRedeem : selectedIntent!.PointsToRedeem;
+            voucherCode = draft != null ? draft.VoucherCode : selectedIntent!.VoucherCode;
+            paymentMethod = draft?.PaymentMethod ?? "VietQR";
+            cashReceived = draft?.CashReceived;
+        }
+        var checkoutLocked = (draft != null && draft.Status != CheckoutDraft.Draft) || selectedIntent != null;
+        var paid = draft?.Status == CheckoutDraft.Paid || selectedIntent?.Status == PaymentIntent.StatusConfirmed;
         var roleId = await _context.Roles.Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync();
 
         var customers = await _context.Users
@@ -78,8 +107,8 @@ public class LoyaltyTestController : Controller
 
         if (sessionId.HasValue && sessionId.Value > 0)
         {
-            selectedSession = activeSessions.FirstOrDefault(s => s.SessionId == sessionId.Value);
-            if (selectedSession != null)
+            selectedSession = draft?.IsManualEntry == true ? null : activeSessions.FirstOrDefault(s => s.SessionId == sessionId.Value);
+            if (selectedSession != null && !checkoutLocked)
             {
                 playtimeAmount = selectedSession.PlaytimeAmount;
                 fandBAmount = selectedSession.FandBAmount;
@@ -103,11 +132,31 @@ public class LoyaltyTestController : Controller
         SelectedCustomerDetailViewModel? detail = null;
         var availableVouchers = new List<CustomerVoucher>();
         CheckoutLoyaltyPreview? preview = null;
-        var refCode = string.IsNullOrWhiteSpace(referenceCode)
-            ? $"HD-{DateTime.UtcNow:yyyyMMddHHmmss}"
-            : referenceCode.Trim();
-        var pendingIntent = await _context.PaymentIntents.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.ReferenceCode == refCode && x.Status == PaymentIntent.StatusPending);
+        if (string.IsNullOrWhiteSpace(referenceCode))
+        {
+            if (customerId != null && !customers.Any(c => c.Id == customerId))
+                return BadRequest("Hội viên không hợp lệ.");
+            if (sessionId.HasValue && selectedSession == null)
+                return BadRequest("Phiên chơi không tồn tại hoặc đã được thanh toán. Hãy chọn phiên khác.");
+            if (playtimeAmount < 0 || fandBAmount < 0 || playtimeAmount > 100_000_000 || fandBAmount > 100_000_000
+                || playtimeAmount != decimal.Truncate(playtimeAmount) || fandBAmount != decimal.Truncate(fandBAmount)
+                || pointsToRedeem < 0 || (voucherCode?.Length ?? 0) > 20)
+                return BadRequest("Dữ liệu khởi tạo phiếu thanh toán không hợp lệ.");
+            draft = new CheckoutDraft
+            {
+                CreatedById = CurrentActorId!, CustomerId = customerId, SessionId = sessionId,
+                IsManualEntry = sessionId == null,
+                PlaytimeAmount = playtimeAmount, FandBAmount = fandBAmount,
+                PointsToRedeem = pointsToRedeem, VoucherCode = voucherCode,
+                PaymentMethod = paymentMethod is "Cash" or "Wallet" ? paymentMethod : "VietQR",
+                CashReceived = cashReceived
+            };
+            _context.CheckoutDrafts.Add(draft);
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index), new { referenceCode = draft.ReferenceCode });
+        }
+        var refCode = referenceCode.Trim();
+        var pendingIntent = selectedIntent is { Status: PaymentIntent.StatusPending or PaymentIntent.StatusExpired } ? selectedIntent : null;
 
         if (resolvedMode == "member" && !string.IsNullOrEmpty(customerId))
         {
@@ -146,9 +195,10 @@ public class LoyaltyTestController : Controller
                     TierName = user.Tier?.TierName ?? "Member",
                     PointMultiplier = user.Tier?.PointMultiplier ?? 1,
                     DiscountPercent = user.Tier?.DiscountPercent ?? 0,
+                    WalletBalance = user.WalletBalance,
                     RewardPoints = user.RewardPoints,
-                    TotalSpend = Math.Max(user.TotalSpend, spend12M),
-                    Spend12Months = Math.Max(user.TotalSpend, spend12M),
+                    TotalSpend = user.TotalSpend,
+                    Spend12Months = spend12M,
                     LastPaidDate = user.LastPaidDate,
                     RecentTransactions = transactions
                 };
@@ -166,7 +216,7 @@ public class LoyaltyTestController : Controller
                     .OrderBy(v => v.ExpiresAtUtc)
                     .ToListAsync();
 
-                preview = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
+                if (!paid) preview = await _loyaltyService.PreviewCheckoutAsync(new CheckoutLoyaltyRequest(
                     CustomerId: customerId,
                     ReferenceCode: refCode,
                     InvoiceId: null,
@@ -174,7 +224,8 @@ public class LoyaltyTestController : Controller
                     FandBAmount: fandBAmount,
                     PointsToRedeem: pointsToRedeem,
                     VoucherCode: voucherCode,
-                    CashierId: CurrentActorId));
+                    CashierId: CurrentActorId,
+                    PayWithWallet: paymentMethod == "Wallet"));
             }
         }
 
@@ -199,7 +250,8 @@ public class LoyaltyTestController : Controller
         }
 
         decimal finalAmt = preview?.FinalAmount ?? Math.Max(0m, playtimeAmount + fandBAmount);
-        string normalizedMethod = string.Equals(paymentMethod, "Cash", StringComparison.OrdinalIgnoreCase) ? "Cash" : "VietQR";
+        string normalizedMethod = paymentMethod == "Wallet" && resolvedMode == "member" ? "Wallet" : (string.Equals(paymentMethod, "Cash", StringComparison.OrdinalIgnoreCase) ? "Cash" : "VietQR");
+        var methodChange = await _context.PaymentMethodChanges.AsNoTracking().SingleOrDefaultAsync(c => c.ReferenceCode == refCode);
 
         var vm = new LoyaltyTestViewModel
         {
@@ -212,6 +264,20 @@ public class LoyaltyTestController : Controller
             SelectedSession = selectedSession,
             SessionOrderLines = sessionOrderLines,
             ReferenceCode = refCode,
+            CheckoutStatus = paid ? CheckoutDraft.Paid : checkoutLocked ? CheckoutDraft.Pending : CheckoutDraft.Draft,
+            InvoiceId = draft?.InvoiceId ?? selectedIntent?.InvoiceId,
+            StoredFinalAmount = checkoutLocked ? draft?.FinalAmount ?? selectedIntent?.ExpectedAmount : null,
+            CanConfirmTransfer = pendingIntent != null,
+            ConfirmationMethod = selectedIntent?.ConfirmationMethod,
+            ConfirmedByName = selectedIntent?.ConfirmedById == null ? null : await _context.Users.Where(u => u.Id == selectedIntent.ConfirmedById).Select(u => u.FullName).FirstOrDefaultAsync(),
+            PaidAtUtc = draft?.PaidAtUtc ?? selectedIntent?.ConfirmedAtUtc,
+            EarnedPoints = paid ? await _context.PointTransactions.Where(t => t.ReferenceCode == refCode && t.TransactionType == PointTransaction.Earn).SumAsync(t => t.Amount) : 0,
+            CashSwitchMode = cashMode && pendingIntent != null,
+            CashSwitchReceived = switchCashReceived ?? pendingIntent?.ExpectedAmount ?? 0,
+            CashSwitchReason = string.IsNullOrWhiteSpace(switchReason) ? "Ngân hàng của khách gặp lỗi" : switchReason,
+            MethodChange = methodChange,
+            MethodChangedByName = methodChange == null ? null : await _context.Users.Where(u => u.Id == methodChange.ChangedById).Select(u => u.FullName).FirstOrDefaultAsync(),
+            RedeemedPoints = paid ? -(await _context.PointTransactions.Where(t => t.ReferenceCode == refCode && t.TransactionType == PointTransaction.Redeem).SumAsync(t => t.Amount)) : pointsToRedeem,
             PlaytimeAmount = playtimeAmount,
             FandBAmount = fandBAmount,
             PointsToRedeem = pointsToRedeem,
@@ -221,8 +287,7 @@ public class LoyaltyTestController : Controller
             PaymentMethod = normalizedMethod,
             CashReceived = cashReceived ?? finalAmt,
             CustomerNotifications = customerNotifications,
-            HasPendingTransfer = pendingIntent != null,
-            PendingTransferExpiresAtUtc = pendingIntent?.ExpiresAtUtc
+            HasPendingTransfer = pendingIntent != null && !paid
         };
 
         return View(vm);
@@ -238,8 +303,11 @@ public class LoyaltyTestController : Controller
         int pointsToRedeem = 0,
         string? voucherCode = null,
         string? referenceCode = null,
-        string customerMode = "member")
+        string customerMode = "member",
+        string paymentMethod = "VietQR",
+        bool useRewardPoints = false)
     {
+        if (!useRewardPoints) pointsToRedeem = 0;
         decimal subtotal = Math.Max(0m, playtimeAmount) + Math.Max(0m, fandBAmount);
 
         if (string.Equals(customerMode, "guest", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(customerId))
@@ -281,12 +349,13 @@ public class LoyaltyTestController : Controller
             FandBAmount: fandBAmount,
             PointsToRedeem: pointsToRedeem,
             VoucherCode: string.IsNullOrWhiteSpace(voucherCode) ? null : voucherCode,
-            CashierId: CurrentActorId));
+            CashierId: CurrentActorId,
+                    PayWithWallet: paymentMethod == "Wallet"));
 
         var user = await _context.Users.AsNoTracking()
             .Include(u => u.Tier)
             .FirstOrDefaultAsync(u => u.Id == customerId);
-        var spend12M = user != null ? Math.Max(user.TotalSpend, await _tierEval.GetSpendLast12MonthsAsync(user.Id)) : 0m;
+        var spend12M = user != null ? await _tierEval.GetSpendLast12MonthsAsync(user.Id) : 0m;
         var nowUtc = DateTime.UtcNow;
         decimal userTierThreshold = user?.Tier?.SpendThreshold ?? 0m;
         var rawVouchers = user != null
@@ -330,6 +399,7 @@ public class LoyaltyTestController : Controller
             customerName = user?.FullName ?? "—",
             customerPhone = user?.PhoneNumber ?? "—",
             rewardPoints = user?.RewardPoints ?? 0,
+            walletBalance = user?.WalletBalance ?? 0m,
             spend12Months = spend12M,
             pointMultiplier = user?.Tier?.PointMultiplier ?? 1,
             tierBadgeStyle = VnFormat.TierBadgeStyle(res.TierName),
@@ -364,10 +434,11 @@ public class LoyaltyTestController : Controller
         string customerMode = "member",
         string paymentMethod = "VietQR",
         decimal? cashReceived = null,
-        int? sessionId = null)
+        int? sessionId = null,
+        bool useRewardPoints = false)
     {
+        if (!useRewardPoints) pointsToRedeem = 0;
         bool isGuest = string.Equals(customerMode, "guest", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(customerId);
-        bool isCash = string.Equals(paymentMethod, "Cash", StringComparison.OrdinalIgnoreCase);
         bool hasFractionalMoney = playtimeAmount != decimal.Truncate(playtimeAmount)
             || fandBAmount != decimal.Truncate(fandBAmount)
             || (cashReceived.HasValue && cashReceived.Value != decimal.Truncate(cashReceived.Value));
@@ -375,13 +446,13 @@ public class LoyaltyTestController : Controller
         if (!ModelState.IsValid || hasFractionalMoney || playtimeAmount < 0 || fandBAmount < 0 || pointsToRedeem < 0 || (cashReceived.HasValue && cashReceived.Value < 0))
         {
             TempData["Error"] = "Dữ liệu nhập không hợp lệ: Tiền giờ chơi, tiền F&B, số điểm đổi và tiền khách đưa phải là số từ 0 trở lên (không được nhập số âm hoặc ký tự đặc biệt).";
-            return RedirectToAction(nameof(Index), new { customerId, customerMode, sessionId, playtimeAmount = Math.Max(0m, playtimeAmount), fandBAmount = Math.Max(0m, fandBAmount), paymentMethod });
+            return RedirectToAction(nameof(Index), new { referenceCode });
         }
 
         if ((playtimeAmount + fandBAmount) <= 0)
         {
             TempData["Error"] = "Tổng tiền giờ chơi và dịch vụ ăn uống phải lớn hơn 0 VND.";
-            return RedirectToAction(nameof(Index), new { customerId, customerMode, sessionId, playtimeAmount, fandBAmount, paymentMethod });
+            return RedirectToAction(nameof(Index), new { referenceCode });
         }
 
         if (isGuest && !string.IsNullOrWhiteSpace(voucherCode))
@@ -401,9 +472,13 @@ public class LoyaltyTestController : Controller
             CurrentActorId,
             cashReceived);
 
-        CheckoutPaymentResult result = isCash
-            ? await _checkout.CompleteCashAsync(command)
-            : await _checkout.CreateTransferIntentAsync(command);
+        if (paymentMethod != "Cash" && paymentMethod != "VietQR" && paymentMethod != "Wallet") return BadRequest("Hình thức thanh toán không hợp lệ.");
+        if (paymentMethod == "VietQR" && !new BankTransferSettings(HttpContext.RequestServices.GetRequiredService<IConfiguration>()).CanCreateQr)
+        {
+            TempData["Error"] = "Chưa cấu hình tài khoản nhận chuyển khoản.";
+            return RedirectToAction(nameof(Index), new { referenceCode });
+        }
+        CheckoutPaymentResult result = await _checkout.SubmitDraftAsync(command, paymentMethod);
 
         if (!result.Success)
         {
@@ -424,15 +499,57 @@ public class LoyaltyTestController : Controller
 
         return RedirectToAction(nameof(Index), new
         {
-            customerId,
-            customerMode = "member",
-            playtimeAmount,
-            fandBAmount,
-            pointsToRedeem = result.Pending ? pointsToRedeem : 0,
-            voucherCode = result.Pending ? voucherCode : null,
-            paymentMethod,
             referenceCode = result.ReferenceCode ?? referenceCode
         });
+    }
+
+    [HttpPost("/CashierSimulator/ConfirmTransfer"), ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmTransfer(string referenceCode, bool receivedTransfer)
+    {
+        if (!ModelState.IsValid || !receivedTransfer)
+            TempData["Error"] = "Hãy kiểm tra tiền vào tài khoản nhận, đúng số tiền và nội dung, rồi tích ô xác nhận.";
+        else
+        {
+            var result = await _checkout.ConfirmTransferManuallyAsync(referenceCode, CurrentActorId ?? "");
+            TempData[result.Success ? "Success" : "Error"] = result.Message;
+        }
+        return RedirectToAction(nameof(Index), new { referenceCode });
+    }
+
+    [HttpPost("/CashierSimulator/ReopenTransfer"), ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReopenTransfer(string referenceCode, bool checkedUnpaid)
+    {
+        if (!ModelState.IsValid || !checkedUnpaid)
+        {
+            TempData["Error"] = "Kiểm tra chưa nhận tiền cho QR cũ trước khi sửa thanh toán.";
+            return RedirectToAction(nameof(Index), new { referenceCode });
+        }
+        var result = await _checkout.ReopenTransferAsync(referenceCode, CurrentActorId ?? "");
+        TempData[result.Success ? "Success" : "Error"] = result.Message;
+        return RedirectToAction(nameof(Index), new { referenceCode = result.ReferenceCode ?? referenceCode });
+    }
+
+    [HttpPost("/CashierSimulator/SwitchToCash"), ValidateAntiForgeryToken]
+    public async Task<IActionResult> SwitchToCash(string referenceCode, decimal cashReceived, string reason, bool checkedCashAndBank)
+    {
+        if (!ModelState.IsValid || !checkedCashAndBank)
+        {
+            TempData["Error"] = "Hãy kiểm tra chưa nhận tiền chuyển khoản và xác nhận đã nhận đủ tiền mặt.";
+            return RedirectToAction(nameof(Index), new { referenceCode, cashMode = true, switchCashReceived = cashReceived, switchReason = reason });
+        }
+        var result = await _checkout.SwitchTransferToCashAsync(referenceCode, cashReceived, reason, CurrentActorId ?? "");
+        TempData[result.Success ? "Success" : "Error"] = result.Success
+            ? $"{result.Message} Tiền trả lại khách: {VnFormat.Money(result.ChangeAmount)}." : result.Message;
+        return RedirectToAction(nameof(Index), new { referenceCode, cashMode = !result.Success, switchCashReceived = cashReceived, switchReason = reason });
+    }
+
+    [HttpGet("/CashierSimulator/CheckoutStatus")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> CheckoutStatus(string referenceCode)
+    {
+        var intent = await _context.PaymentIntents.AsNoTracking().SingleOrDefaultAsync(i => i.ReferenceCode == referenceCode);
+        if (intent == null) return NotFound();
+        return Json(new { status = intent.Status == PaymentIntent.StatusExpired ? PaymentIntent.StatusPending : intent.Status });
     }
 
     // ── Helpers tích hợp Vận hành bàn (PlaySessions) & Thực đơn F&B (Orders/OrderDetails) ──
@@ -522,15 +639,8 @@ public class LoyaltyTestController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SimulatePayment(string customerId, decimal finalAmount)
     {
-        var result = await _loyaltyService.CommitCheckoutAsync(new CheckoutLoyaltyRequest(
-            CustomerId: customerId,
-            ReferenceCode: $"SIM-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
-            InvoiceId: null,
-            PlaytimeAmount: finalAmount,
-            FandBAmount: 0m,
-            PointsToRedeem: 0,
-            VoucherCode: null,
-            CashierId: CurrentActorId));
+        var result = await _checkout.CompleteCashAsync(new CheckoutCommand(
+            customerId, $"SIM-{Guid.NewGuid():N}", null, finalAmount, 0m, 0, null, CurrentActorId));
 
         if (result.Success) TempData["Success"] = result.Message;
         else TempData["Error"] = result.Message;

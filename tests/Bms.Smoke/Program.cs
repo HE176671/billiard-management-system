@@ -76,14 +76,15 @@ T Prepare<T>(T controller, ClaimsPrincipal? principal = null) where T : Controll
 try
 {
     var key = Guid.NewGuid().ToString("N");
-    var tierController = Prepare(new MemberTierController(db));
-    var threshold = 1000000000;
-    while (await db.MembershipTiers.AnyAsync(t => t.MinPoints == threshold)) threshold++;
-    Check(await tierController.Create(new() { TierName = "Smoke " + key[..8], MinPoints = threshold, DiscountPercent = 5 }) is RedirectToActionResult, "Tier create");
-    var tier = await db.MembershipTiers.SingleAsync(t => t.MinPoints == threshold);
-    var duplicateTier = Prepare(new MemberTierController(db));
-    Check(await duplicateTier.Create(new() { TierName = "Duplicate " + key[..8], MinPoints = threshold }) is ViewResult && !duplicateTier.ModelState.IsValid, "Duplicate threshold rejected");
-    Check(await tierController.Edit(new CreateEditTierViewModel() { Id = tier.Id, TierName = tier.TierName, MinPoints = threshold, DiscountPercent = 10 }) is RedirectToActionResult && tier.DiscountPercent == 10, "Tier update");
+    var legacyTiers = Prepare(new MemberTierController(db));
+    Check(await legacyTiers.Index() is RedirectToActionResult { ControllerName: "TierConfig" }, "Legacy tiers redirect to monetary configuration");
+    var tierController = Prepare(new TierConfigController(db, new TierEvaluationService(db)));
+    decimal threshold = 10_000_000_000m;
+    while (await db.MembershipTiers.AnyAsync(t => t.SpendThreshold == threshold)) threshold++;
+    Check(await tierController.AddTier("Smoke " + key[..8], threshold, 5) is RedirectToActionResult, "Tier create by accumulation threshold");
+    var tier = await db.MembershipTiers.SingleAsync(t => t.SpendThreshold == threshold);
+    await tierController.AddTier("Duplicate " + key[..8], threshold, 5);
+    Check(await db.MembershipTiers.CountAsync(t => t.SpendThreshold == threshold) == 1, "Duplicate monetary threshold rejected");
 
     var type = await db.TableTypes.FirstAsync();
     // Use a temporary type so existing configs never interfere with the test.
@@ -104,7 +105,7 @@ try
 
     var staff = new ApplicationUser { UserName = "smoke." + key, Email = key + "@example.invalid", FullName = "Smoke staff", TierId = tier.Id };
     Check((await users.CreateAsync(staff, "SmokeOriginal!123")).Succeeded && (await users.AddToRoleAsync(staff, "Staff")).Succeeded, "Identity fixture creation");
-    await tierController.Delete(tier.Id);
+    await tierController.DeleteTier(tier.Id);
     Check(await db.MembershipTiers.AnyAsync(t => t.Id == tier.Id), "Referenced tier deletion blocked");
     var employees = Prepare(new EmployeeController(users, db));
     await employees.ResetPassword(new ResetStaffPasswordViewModel() { UserId = staff.Id, NewPassword = "abcdefgh", ConfirmPassword = "abcdefgh" });
@@ -187,7 +188,7 @@ try
         + dashboardWithShift.AwaitingPaymentTables + dashboardWithShift.UnavailableTables, "Dashboard table statuses add up");
 
     staff.TierId = null; customer.TierId = null; await db.SaveChangesAsync();
-    await tierController.Delete(tier.Id);
+    await tierController.DeleteTier(tier.Id);
     Check(!await db.MembershipTiers.AnyAsync(t => t.Id == tier.Id), "Unreferenced tier deletion");
 
     // =========================================================================

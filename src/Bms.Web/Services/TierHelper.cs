@@ -7,16 +7,15 @@ namespace Bms.Web.Services;
 /// <summary>Tiện ích xếp hạng thành viên dùng chung (TierConfig, CustomerManagement, và LoyaltyService ở Bước 5).</summary>
 public static class TierHelper
 {
-    /// <summary>Hạng cao nhất có SpendThreshold &lt;= totalSpend hoặc MinPoints &lt;= rewardPoints. Trả về null nếu chưa có hạng nào.</summary>
+    /// <summary>Hạng cao nhất có SpendThreshold &lt;= totalSpend (tích lũy hợp lệ trong 365 ngày). Trả về null nếu chưa có hạng nào.</summary>
     public static MembershipTier? Resolve(IEnumerable<MembershipTier> tiers, decimal totalSpend, int rewardPoints = 0) =>
-        tiers.Where(t => t.SpendThreshold <= totalSpend || (t.MinPoints > 0 && rewardPoints >= t.MinPoints))
+        tiers.Where(t => t.SpendThreshold <= totalSpend)
              .OrderByDescending(t => t.SpendThreshold)
-             .ThenByDescending(t => t.MinPoints)
              .ThenByDescending(t => t.SortOrder)
              .FirstOrDefault();
 
     /// <summary>
-    /// Quét toàn bộ khách hàng (role Customer) và cập nhật lại TierId theo TotalSpend hiện có.
+    /// Quét toàn bộ khách hàng (role Customer) và xét nâng hạng theo tích lũy 365 ngày; giữ chính sách ân hạn khi hạ hạng.
     /// Trả về số khách có hạng thay đổi.
     /// </summary>
     public static async Task<int> RecalculateUserTiersAsync(ApplicationDbContext db, CancellationToken ct = default)
@@ -34,8 +33,9 @@ public static class TierHelper
         int changed = 0;
         foreach (var u in users)
         {
-            var tier = Resolve(tiers, u.TotalSpend);
-            if (tier != null && u.TierId != tier.Id)
+            var spend = await new TierEvaluationService(db).GetSpendLast12MonthsAsync(u.Id, ct: ct);
+            var tier = Resolve(tiers, spend);
+            if (tier != null && (u.TierId == null || tier.SpendThreshold > (tiers.FirstOrDefault(t => t.Id == u.TierId)?.SpendThreshold ?? 0m)))
             {
                 u.TierId = tier.Id;
                 changed++;

@@ -75,6 +75,10 @@ public class EditCustomerViewModel
 /// <summary>View model cho trang xem hồ sơ (GET /CustomerProfile).</summary>
 public class ProfileViewModel
 {
+    public decimal WalletBalance { get; set; }
+    public decimal Spend12Months { get; set; }
+    public string? NextTierName { get; set; }
+    public decimal AmountToNextTier { get; set; }
     public string FullName     { get; set; } = string.Empty;
     public string? UserName    { get; set; }
     public string? Email       { get; set; }
@@ -82,7 +86,6 @@ public class ProfileViewModel
     public string RankName     { get; set; } = string.Empty;
     public int    TotalPoints  { get; set; }
     public DateTime CreatedAtUtc { get; set; }
-    public int? PointsToNextRank { get; set; }   // null = đã hạng cao nhất
 }
 
 /// <summary>View model cho form sửa hồ sơ (GET/POST /CustomerProfile/Edit).</summary>

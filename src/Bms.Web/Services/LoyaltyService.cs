@@ -48,6 +48,9 @@ public class LoyaltyService : ILoyaltyService
 
         if (!user.IsActive)
             errors.Add("Tài khoản khách hàng đang bị khóa.");
+        var role = await _db.Roles.Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync(ct);
+        if (!await _db.UserRoles.AnyAsync(r => r.UserId == user.Id && r.RoleId == role, ct))
+            errors.Add("Tài khoản không phải hội viên.");
 
         var tiers = await _db.MembershipTiers.AsNoTracking()
             .OrderBy(t => t.SpendThreshold).ThenBy(t => t.SortOrder).ThenBy(t => t.Id)
@@ -138,9 +141,12 @@ public class LoyaltyService : ILoyaltyService
 
         // Bước 4: FinalAmount & Điểm tích lũy
         decimal finalAmount = Math.Max(0m, remainingAfterVoucher - pointsDiscountAmount);
-        int pointsToEarn = (int)Math.Floor(finalAmount / 20000m) * multiplier;
+        if (req.PayWithWallet && user.WalletBalance < finalAmount)
+            errors.Add("Số dư ví không đủ. Vui lòng nạp thêm hoặc chọn phương thức thanh toán khác.");
+        decimal eligibleAmount = finalAmount;
+        int pointsToEarn = LoyaltyPolicy.EarnPoints(eligibleAmount, multiplier);
 
-        decimal spend12MonthsAfter = currentSpend12M + finalAmount;
+        decimal spend12MonthsAfter = currentSpend12M + eligibleAmount;
         int pointsAfter = Math.Max(0, user.RewardPoints - req.PointsToRedeem) + pointsToEarn;
         var resolvedTierAfter = TierHelper.Resolve(tiers, spend12MonthsAfter, pointsAfter);
         bool willUpgrade = resolvedTierAfter != null && resolvedTierAfter.SpendThreshold > (currentTier?.SpendThreshold ?? 0m);
@@ -299,6 +305,7 @@ public class LoyaltyService : ILoyaltyService
                 spendAmount: preview.FinalAmount,
                 ct: ct);
 
+            if (!earnLedger.Success) throw new InvalidOperationException(earnLedger.Message);
             if (earnLedger.Duplicate)
             {
                 if (ownTx != null) await ownTx.RollbackAsync(ct);

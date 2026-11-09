@@ -13,6 +13,7 @@ public class MembershipTier
     public decimal DiscountPercent { get; set; }
 
     /// <summary>Số điểm tối thiểu (dùng cho MemberTierController của Hung).</summary>
+    // Legacy database compatibility only; no longer used to determine rank.
     public int MinPoints { get; set; }
 
     /// <summary>Ngưỡng chi tiêu 12 tháng gần nhất để đạt/giữ hạng này (decimal(18,2)).</summary>

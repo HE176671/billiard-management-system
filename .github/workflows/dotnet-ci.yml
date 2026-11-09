@@ -26,10 +26,5 @@ jobs:
     - name: Build project (Release)
       run: dotnet build src/Bms.Web/Bms.Web.csproj --no-restore --configuration Release
 
-    - name: Run Tests (if any)
-      run: |
-        if [ -f src/*.Tests/*.csproj ]; then
-          dotnet test --no-build --verbosity normal
-        else
-          echo "No test projects found, build verification passed."
-        fi
+    - name: Run Tests
+      run: dotnet test src/Bms.Tests/Bms.Tests.csproj --configuration Release --verbosity normal

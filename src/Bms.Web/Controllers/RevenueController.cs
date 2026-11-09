@@ -40,6 +40,9 @@ public class RevenueController : Controller
         csv.Append("Tong doanh thu VND,").Append(model.TotalRevenue.ToString(inv))
            .Append(",So giao dich,").Append(model.PaymentCount)
            .Append(",So hoa don,").Append(model.InvoiceCount).Append("\r\n\r\n");
+        csv.Append("Tien nap tra truoc VND,").Append(model.TopUpReceipts.ToString(inv)).Append("\r\n");
+        csv.Append("Hoa don tra bang vi VND,").Append(model.WalletPayments.ToString(inv)).Append("\r\n");
+        csv.Append("Tien moi thuc nhan VND,").Append(model.NewMoneyReceived.ToString(inv)).Append("\r\n\r\n");
         csv.Append("Ky,Doanh thu VND,So giao dich\r\n");
         foreach (var row in model.Periods)
             csv.Append($"{row.Period},{row.Revenue.ToString(inv)},{row.PaymentCount}\r\n");
@@ -79,6 +82,10 @@ public class RevenueController : Controller
         var payments = await _context.PaymentTransactions.AsNoTracking()
             .Where(p => p.TransactionTimeUtc >= start && p.TransactionTimeUtc < end).ToListAsync();
         model.TotalRevenue = payments.Sum(p => p.AmountPaid);
+        model.WalletPayments = payments.Where(p => p.PaymentMethod == "Wallet").Sum(p => p.AmountPaid);
+        model.TopUpReceipts = await _context.WalletTransactions.AsNoTracking()
+            .Where(w => w.TransactionType == WalletTransaction.TopUp && w.CreatedAtUtc >= start && w.CreatedAtUtc < end)
+            .SumAsync(w => (decimal?)w.Amount) ?? 0m;
         model.PaymentCount = payments.Count;
         model.InvoiceCount = payments.Select(p => p.InvoiceId).Distinct().Count();
         var format = model.GroupBy == "month" ? "yyyy-MM" : "yyyy-MM-dd";
