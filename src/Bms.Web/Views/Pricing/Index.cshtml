@@ -1,9 +1,8 @@
 @model Bms.Web.Models.PricingListViewModel
 @{
-    ViewData["Title"] = "Bảng giá & Combo dịch vụ";
+    ViewData["Title"] = "Bảng giá & Giờ chơi";
     Layout = "_AdminLayout";
     var editCue = Model.EditCue;
-    var editCombo = Model.EditCombo;
     var editTable = Model.EditTable;
     int mgrTotalTables = Model.Tables.Count;
     int mgrInUseTables = Model.Tables.Count(t => t.Status == "InUse" && !t.IsComboOverdue);
@@ -360,137 +359,7 @@
     </div>
 </div>
 
-<!-- 3. GÓI COMBO GIỜ CHƠI -->
-<div class="row g-3 mb-4">
-    <div class="col-lg-4">
-        <div class="data-card p-4 h-100">
-            <h2 class="pricing-section-title mb-3">
-                @(editCombo != null ? $"Cập nhật gói Combo #{editCombo.Id}" : "Thêm gói Combo giờ chơi")
-            </h2>
-
-            <form asp-action="SaveCombo" method="post">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="id" value="@(editCombo?.Id ?? 0)" />
-
-                <div class="mb-3">
-                    <label class="form-label">Tên gói Combo <span class="text-danger">*</span></label>
-                    <input type="text" name="name" value="@(editCombo?.Name ?? "")" class="form-control"
-                           placeholder="VD: Combo 2 giờ + 2 Trà đào" required maxlength="100" />
-                </div>
-
-                <div class="row g-2 mb-3">
-                    <div class="col-6">
-                        <label class="form-label">Thời lượng (giờ) <span class="text-danger">*</span></label>
-                        <input type="number" name="playtimeHours" value="@((editCombo?.PlaytimeHours ?? 2.0m).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))"
-                               min="0.5" max="24" step="0.5" class="form-control" required />
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Giá trọn gói (VND) <span class="text-danger">*</span></label>
-                        <input type="number" name="price" value="@((editCombo?.Price ?? 190000m).ToString("0"))"
-                               min="0" step="5000" class="form-control" required />
-                    </div>
-                </div>
-
-                <div class="row g-2 mb-3">
-                    <div class="col-8">
-                        <label class="form-label">Món đi kèm (nếu có)</label>
-                        <select name="bonusProductId" class="form-select">
-                            <option value="">-- Không kèm món --</option>
-                            @foreach (var prod in Model.AvailableBonusProducts)
-                            {
-                                <option value="@prod.Id" selected="@(editCombo?.BonusProductId == prod.Id)">
-                                    @prod.Name (@prod.Price.ToString("N0") VND)
-                                </option>
-                            }
-                        </select>
-                    </div>
-                    <div class="col-4">
-                        <label class="form-label">Số lượng</label>
-                        <input type="number" name="bonusQuantity" value="@(editCombo?.BonusQuantity ?? 2)"
-                               min="1" max="20" step="1" class="form-control" />
-                    </div>
-                </div>
-
-                <div class="form-check form-switch mb-3">
-                    <input class="form-check-input" type="checkbox" name="isActive" value="true" id="comboActiveSwitch"
-                           checked="@(editCombo?.IsActive ?? true)" />
-                    <label class="form-check-label" for="comboActiveSwitch" style="font-size:0.85rem">Đang mở bán</label>
-                </div>
-
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn-primary-bms flex-grow-1 justify-content-center">
-                        @(editCombo != null ? "Lưu thay đổi" : "Thêm gói Combo")
-                    </button>
-                    @if (editCombo != null)
-                    {
-                        <a asp-action="Index" class="btn-outline-bms">Hủy</a>
-                    }
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="col-lg-8">
-        <div class="data-card h-100">
-            <div class="data-card-header">
-                <span class="pricing-section-title">Danh sách gói Combo giờ chơi (@Model.Combos.Count)</span>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover mb-0 align-middle">
-                    <thead>
-                        <tr>
-                            <th>Tên gói Combo</th>
-                            <th class="text-center">Số giờ</th>
-                            <th>Món đi kèm</th>
-                            <th class="text-end">Giá trọn gói</th>
-                            <th>Trạng thái</th>
-                            <th class="text-end">Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var c in Model.Combos)
-                        {
-                            <tr>
-                                <td class="fw-bold">@c.Name</td>
-                                <td class="text-center">@c.PlaytimeHours.ToString("0.#") giờ</td>
-                                <td>@c.IncludedItemsSummary</td>
-                                <td class="text-end fw-bold text-danger">@c.Price.ToString("N0") VND</td>
-                                <td>
-                                    @if (c.IsActive)
-                                    {
-                                        <span class="badge-active">Đang mở</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge-inactive">Tạm ngưng</span>
-                                    }
-                                </td>
-                                <td class="text-end">
-                                    <a asp-action="Index" asp-route-editComboId="@c.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
-                                        Sửa
-                                    </a>
-                                    <form asp-action="ToggleComboStatus" method="post" class="d-inline ms-1">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="id" value="@c.Id" />
-                                        <button type="submit" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
-                                            @(c.IsActive ? "Đóng" : "Mở")
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        }
-                        @if (!Model.Combos.Any())
-                        {
-                            <tr><td colspan="6" class="text-center py-4 text-muted">Chưa có gói Combo nào.</td></tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 4. GẬY CHO THUÊ THEO LƯỢT -->
+<!-- 3. GẬY CHO THUÊ THEO LƯỢT -->
 <div class="row g-3">
     <div class="col-lg-4">
         <div class="data-card p-4 h-100">
