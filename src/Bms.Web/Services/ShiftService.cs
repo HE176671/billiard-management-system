@@ -125,8 +125,8 @@ public class ShiftService : IShiftService
         var handoverDiff = previous?.EndingCash is decimal left ? startingCash - left : 0m;
         if (handoverDiff != 0 && Clean(notes) == null)
             throw new ShiftException("HANDOVER_NOTE_REQUIRED",
-                $"Ca trước (#{previous!.Id}) để lại {previous.EndingCash:N0} VND trong két, bạn nhập {startingCash:N0} VND " +
-                $"({(handoverDiff > 0 ? "thừa" : "thiếu")} {Math.Abs(handoverDiff):N0} VND). Vui lòng ghi lý do, ví dụ: chủ quán đã rút tiền.");
+                $"Số tiền đếm được {(handoverDiff > 0 ? "thừa" : "thiếu")} {Math.Abs(handoverDiff):N0} VND so với số ca trước (#{previous!.Id}) để lại. " +
+                "Hãy đếm lại két; nếu vẫn lệch, ghi lý do (ví dụ: chủ quán đã rút tiền) rồi mở ca.");
 
         var shift = new WorkShift
         {
@@ -187,7 +187,8 @@ public class ShiftService : IShiftService
             var cleanNotes = Clean(notes);
             if (decimal.Round(endingCash, 2) != expected && cleanNotes == null)
                 throw new ShiftException("NOTE_REQUIRED",
-                    $"Tiền thực tế lệch {(endingCash - expected):N0} VND so với kỳ vọng {expected:N0} VND. Vui lòng ghi lý do.");
+                    $"Số tiền đếm được {(endingCash > expected ? "thừa" : "thiếu")} {Math.Abs(endingCash - expected):N0} VND so với sổ. " +
+                    "Hãy đếm lại két; nếu vẫn lệch, ghi lý do rồi đóng ca.");
 
             shift.EndTimeUtc    = TruncateToSecond(DateTime.UtcNow);
             shift.EndingCash    = decimal.Round(endingCash, 2);

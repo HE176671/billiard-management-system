@@ -52,10 +52,7 @@ public class ShiftController : Controller
                 vm.PreviousClosedByName = previous.ClosedBy?.FullName;
                 vm.PreviousEndTimeUtc = previous.EndTimeUtc;
             }
-            // Mặc định tiền đầu ca = tiền ca trước để lại; giữ lại số đã nhập nếu lần trước bị từ chối.
-            vm.Open.StartingCash = decimal.TryParse(TempData["OpenStartingCash"] as string,
-                System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var typed)
-                ? typed : previous?.EndingCash;
+            // Đếm mù: không điền sẵn tiền ca trước để lại, nhân viên phải tự đếm két.
             vm.Open.Notes = TempData["OpenNotes"] as string;
         }
         // 5 ca gần nhất của cả quán (không còn "ca của tôi" vì chỉ có một ca chung).
@@ -65,8 +62,9 @@ public class ShiftController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     [Authorize(Roles = "Staff")] // UC39: chỉ nhân viên trực quầy mở ca
-    public async Task<IActionResult> Open([Bind(Prefix = "Open")] OpenShiftViewModel model)
+    public async Task<IActionResult> Open([Bind(Prefix = "Open")] OpenShiftViewModel model, string? cashBreakdown)
     {
+        cashBreakdown = CleanBreakdown(cashBreakdown);
         if (!ModelState.IsValid)
         {
             TempData["Error"] = FirstError() ?? "Dữ liệu mở ca không hợp lệ.";
@@ -80,8 +78,13 @@ public class ShiftController : Controller
         catch (ShiftException ex)
         {
             TempData["Error"] = ex.Message;
-            TempData["OpenStartingCash"] = model.StartingCash?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            TempData["OpenBreakdown"] = cashBreakdown;
             TempData["OpenNotes"] = model.Notes;
+            if (ex.Code == "HANDOVER_NOTE_REQUIRED")
+            {
+                TempData["OpenNeedReason"] = "1";
+                await LogCountMismatchAsync(null, $"Mở ca: đếm két được {model.StartingCash:N0} VND, khác tiền ca trước để lại.", model.StartingCash, cashBreakdown);
+            }
         }
         return RedirectToAction(nameof(Index));
     }
@@ -91,8 +94,9 @@ public class ShiftController : Controller
     #region Dong ca va doi soat
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Close([Bind(Prefix = "Close")] CloseShiftViewModel model)
+    public async Task<IActionResult> Close([Bind(Prefix = "Close")] CloseShiftViewModel model, string? cashBreakdown)
     {
+        cashBreakdown = CleanBreakdown(cashBreakdown);
         var shift = await _db.WorkShifts.AsNoTracking().FirstOrDefaultAsync(s => s.Id == model.ShiftId);
         if (shift == null) return NotFound();
         // BR-23: ca của quán, nhân viên đang trực nào cũng đóng được (giao ca). Ca đã đóng thì service báo lỗi.
@@ -119,7 +123,13 @@ public class ShiftController : Controller
         catch (ShiftException ex)
         {
             TempData["Error"] = ex.Message;
-            TempData["CloseEndingCash"] = model.EndingCash?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            TempData["CloseBreakdown"] = cashBreakdown;
+            if (ex.Code == "NOTE_REQUIRED")
+            {
+                TempData["CloseNeedReason"] = "1";
+                // Ghi lại lần đếm lệch (kể cả khi sau đó đếm lại cho khớp) để Manager kiểm tra.
+                await LogCountMismatchAsync(shift.Id, $"Đóng ca #{shift.Id}: lần đếm được {model.EndingCash:N0} VND bị lệch, chưa chốt ca.", model.EndingCash, cashBreakdown);
+            }
             return back;
         }
     }
@@ -133,8 +143,10 @@ public class ShiftController : Controller
     {
         var summary = await _shifts.GetSummaryAsync(id);
         if (summary == null) return NotFound();
-        if (summary.Shift.StaffId != CurrentUserId && !summary.IsActive
-            && !User.IsInRole("Manager") && !User.IsInRole("Admin")) return Forbid();
+        // Đếm mù: nhân viên không xem chi tiết ca đang mở (lộ tổng tiền mặt phải có); xem lại ca của mình sau khi đóng.
+        var isManagerView = User.IsInRole("Manager") || User.IsInRole("Admin");
+        if (!isManagerView && (summary.IsActive || (summary.Shift.StaffId != CurrentUserId && summary.Shift.ClosedById != CurrentUserId)))
+            return Forbid();
 
         var vm = new ShiftDetailsViewModel
         {
@@ -254,6 +266,19 @@ public class ShiftController : Controller
                 CashCollected = cash, ExpectedCash = s.ExpectedCash ?? s.StartingCash + cash
             };
         }).ToList();
+    }
+
+    /// <summary>Chỉ nhận chuỗi chi tiết đếm dạng "500000:2,100000:3".</summary>
+    private static string? CleanBreakdown(string? s) =>
+        !string.IsNullOrWhiteSpace(s) && s.Length <= 300
+        && System.Text.RegularExpressions.Regex.IsMatch(s, @"^\d{1,6}:\d{1,6}(,\d{1,6}:\d{1,6})*$") ? s : null;
+
+    private async Task LogCountMismatchAsync(int? shiftId, string description, decimal? counted, string? breakdown)
+    {
+        var audit = HttpContext.RequestServices.GetService<IAuditLogService>();
+        if (audit == null) return;
+        await audit.LogAsync(AuditActions.ShiftCountMismatch, "WorkShift", shiftId?.ToString(), description,
+            newValue: counted?.ToString("0"), reason: breakdown == null ? null : "Chi tiết đếm: " + breakdown);
     }
 
     private string? FirstError() =>

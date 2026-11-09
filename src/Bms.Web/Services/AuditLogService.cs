@@ -10,6 +10,7 @@ public static class AuditActions
     public const string ShiftOpen          = "ShiftOpen";
     public const string ShiftClose         = "ShiftClose";
     public const string ShiftCashDiff      = "ShiftCashDifference";
+    public const string ShiftCountMismatch = "ShiftCountMismatch";
     public const string TableRateChange    = "TableRateChange";
     public const string TableTypeChange    = "TableTypeChange";
     public const string TierReviewRun      = "TierReviewRun";
@@ -27,6 +28,7 @@ public static class AuditActions
         [ShiftOpen]          = "Mở ca",
         [ShiftClose]         = "Đóng ca",
         [ShiftCashDiff]      = "Lệch tiền cuối ca",
+        [ShiftCountMismatch] = "Đếm két lệch (chưa chốt)",
         [TableRateChange]    = "Đổi giá giờ bàn",
         [TableTypeChange]    = "Thêm/đổi tên loại bàn",
         [TierReviewRun]      = "Chạy xét hạng",

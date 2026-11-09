@@ -14,30 +14,26 @@
         {
             <div class="mb-3 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.85rem">
                 <i class="bi bi-arrow-left-right me-1"></i>
-                Ca trước <strong>#@Model.PreviousShiftId</strong>@(Model.PreviousClosedByName != null ? $" ({Model.PreviousClosedByName} đóng" : " (đóng")
-                lúc @(Model.PreviousEndTimeUtc.ToVn()?.ToString("HH:mm dd/MM"))) để lại
-                <strong>@(Model.PreviousEndingCash?.ToString("N0") ?? "0") VND</strong> trong két.
-                Đếm lại két: nếu khác số này thì phải ghi lý do (ví dụ chủ quán đã rút tiền).
+                Nhận két từ ca trước <strong>#@Model.PreviousShiftId</strong>@(Model.PreviousClosedByName != null ? $" ({Model.PreviousClosedByName} đóng" : " (đóng")
+                lúc @(Model.PreviousEndTimeUtc.ToVn()?.ToString("HH:mm dd/MM"))).
+                Hãy tự đếm két; hệ thống sẽ đối chiếu với số ca trước để lại.
             </div>
         }
         @if (Model.CanOpen)
         {
+            var openNeedReason = TempData["OpenNeedReason"] as string == "1";
             <form asp-action="Open" method="post">
                 @Html.AntiForgeryToken()
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label asp-for="Open.StartingCash" class="form-label">Tiền mặt đếm được trong két (VND)</label>
-                        <input asp-for="Open.StartingCash" type="number" min="0" max="1000000000" step="1000" class="form-control" placeholder="500000" required />
-                        <span asp-validation-for="Open.StartingCash" class="field-error"></span>
-                    </div>
-                    <div class="col-md-8">
-                        <label asp-for="Open.Notes" class="form-label">Ghi chú / lý do nếu lệch tiền ca trước</label>
-                        <input asp-for="Open.Notes" class="form-control" maxlength="500" placeholder="Ví dụ: chủ quán rút 300.000đ cuối ca trước" />
-                    </div>
-                    <div class="col-12">
-                        <button type="submit" class="btn-primary-bms"><i class="bi bi-play-fill"></i> Mở ca</button>
-                    </div>
+                <partial name="_CashCounter" model='"Open.StartingCash"'
+                         view-data='new ViewDataDictionary(ViewData) { ["CounterId"] = "openCounter", ["Restore"] = TempData["OpenBreakdown"] as string }' />
+                <div class="mt-2" style="max-width:520px">
+                    <label class="form-label" for="Open_Notes">
+                        Lý do chênh lệch @(openNeedReason ? "(bắt buộc)" : "(chỉ cần khi hệ thống báo lệch)")
+                    </label>
+                    <input id="Open_Notes" name="Open.Notes" value="@Model.Open.Notes" class="form-control" maxlength="500"
+                           placeholder="Ví dụ: chủ quán rút 300.000đ cuối ca trước" required="@openNeedReason" />
                 </div>
+                <button type="submit" class="btn-primary-bms mt-3"><i class="bi bi-play-fill"></i> Mở ca</button>
             </form>
         }
         else
@@ -53,9 +49,12 @@ else
         <span class="badge-active">Đang mở</span>
         <strong>Ca #@s.Shift.Id</strong>
         <span class="text-muted" style="font-size:0.85rem">do <strong>@s.StaffName</strong> mở lúc @s.Shift.StartTimeUtc.ToVn().ToString("HH:mm dd/MM/yyyy")</span>
-        <a asp-action="Details" asp-route-id="@s.Shift.Id" class="btn-outline-bms ms-auto"><i class="bi bi-list-ul"></i> Giao dịch trong ca</a>
+        @if (!Model.CanOpen)
+        {
+            <a asp-action="Details" asp-route-id="@s.Shift.Id" class="btn-outline-bms ms-auto"><i class="bi bi-list-ul"></i> Giao dịch trong ca</a>
+        }
     </div>
-    <partial name="_SummaryCards" model="s" />
+    <partial name="_SummaryCards" model="s" view-data='new ViewDataDictionary(ViewData) { ["Blind"] = Model.CanOpen }' />
     <div class="form-card mb-4">
         <h6 class="mb-1" style="font-weight:600"><i class="bi bi-stop-circle me-2"></i>Đóng ca</h6>
         <p class="text-muted" style="font-size:0.85rem">Nhân viên đang trực nào cũng đóng được ca này khi giao ca. Người đóng ca được ghi lại trong nhật ký.</p>
@@ -66,7 +65,7 @@ else
                 Đóng ca vẫn được; tiền các bàn này sẽ thu vào ca sau.
             </div>
         }
-        <partial name="_CloseForm" model="Model.Close" view-data='new ViewDataDictionary(ViewData) { ["ExpectedCash"] = s.ExpectedCash }' />
+        <partial name="_CloseForm" model="Model.Close" />
     </div>
 }
 

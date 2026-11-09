@@ -31,11 +31,13 @@ script `18_WF5_AuditLog_SingleShift.sql` (web tự áp dụng khi khởi động
 ## Quy tắc ca làm (UC39–UC40)
 
 1. **Một ca cho cả quán** (BR-23): một két tiền, một ca đang mở. Ràng buộc DB `UX_WorkShifts_SingleActive`.
-2. **Chỉ Staff mở ca.** Tiền đầu ca là số nguyên VND, mặc định bằng tiền ca trước để lại.
+2. **Chỉ Staff mở ca.** Đếm két theo **mệnh giá** (nhập số tờ 500k, 200k... hệ thống tự cộng). **Đếm mù**: không điền sẵn số ca trước để lại.
    **Khác tiền ca trước để lại → bắt buộc ghi lý do** (ví dụ chủ quán rút tiền). Chống thất thoát giữa hai ca.
 3. **Chưa mở ca thì không mở bàn, không thu tiền** (`[RequireOpenShift]` trên mở bàn và thanh toán).
 4. **Tiền mặt kỳ vọng** = tiền đầu ca + các khoản thu **tiền mặt** gắn với ca. QR/chuyển khoản hiện riêng, không tính vào két.
-5. **Đóng ca**: nhân viên đang trực nào cũng đóng được (giao ca), Manager đóng hộ khi quên. Đếm tiền thực tế (số nguyên);
+5. **Đóng ca (đếm mù)**: nhân viên đang trực **không thấy** tiền mặt thu và tiền phải có cho tới khi chốt; đếm két theo mệnh giá.
+   Lệch thì hệ thống chỉ báo số lệch để đếm lại, **mỗi lần đếm lệch đều ghi Nhật ký** (kèm chi tiết mệnh giá) dù sau đó đếm lại cho khớp.
+   Nhân viên đang trực nào cũng đóng được (giao ca), Manager đóng hộ khi quên. Đếm tiền thực tế (số nguyên);
    **lệch → bắt buộc ghi lý do**. Hệ thống chốt snapshot (thu tiền mặt, kỳ vọng, thực tế, người đóng). Bàn còn đang chơi vẫn đóng được, tiền thu vào ca sau.
 6. **Ca đã đóng không sửa, không xóa.** Mở/đóng ca, lệch tiền đầu ca và cuối ca đều ghi Nhật ký hệ thống.
 7. **Manager**: xem mọi ca, lọc ca lệch tiền, cảnh báo ca mở quá 16 giờ (quên đóng), đóng hộ.
