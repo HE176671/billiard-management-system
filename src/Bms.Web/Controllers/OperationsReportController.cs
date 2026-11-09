@@ -256,7 +256,7 @@ public class OperationsReportController : Controller
 
         // Các phiên đã kết thúc trong khoảng [startUtc, endUtc)
         var closedSessions = sessionsInWindow
-            .Where(s => s.Status != "Active" && s.EndAtUtc.HasValue && s.EndAtUtc.Value >= startUtc && s.EndAtUtc.Value < endUtc)
+            .Where(s => s.Status == "Closed" && s.EndAtUtc.HasValue && s.EndAtUtc.Value >= startUtc && s.EndAtUtc.Value < endUtc)
             .ToList();
 
         model.ClosedSessionCount = closedSessions.Count;
@@ -269,79 +269,46 @@ public class OperationsReportController : Controller
         var totalOccupiedMinutesByTable = tables.ToDictionary(t => t.Id, _ => 0m);
         var heatmapMinutes = new Dictionary<(DayOfWeek Dow, int Hour), decimal>();
 
-        foreach (var seg in rawSegments)
+        // Hàm cộng phút có khách của 1 khoảng [fromUtc, toUtc) trên 1 bàn.
+        // Cắt khoảng vào [startUtc, endUtc), đổi sang giờ VN rồi chia thành từng lát 1 giờ
+        // (vd 19:40–21:10 → 20 phút ở 19h, 60 phút ở 20h, 10 phút ở 21h).
+        void AddOccupiedTime(int tableId, DateTime fromUtc, DateTime? toUtc)
         {
-            var effectiveEndUtc = seg.EndAtUtc ?? nowUtc;
-            // Cắt (clip) segment vào khoảng [startUtc, endUtc)
-            var segStartUtc = seg.StartAtUtc < startUtc ? startUtc : seg.StartAtUtc;
-            var segEndUtc = effectiveEndUtc > endUtc ? endUtc : effectiveEndUtc;
-            if (segEndUtc <= segStartUtc) continue;
+            var clipStartUtc = fromUtc < startUtc ? startUtc : fromUtc;
+            var effectiveEndUtc = toUtc ?? nowUtc;          // chưa kết thúc → tính đến hiện tại
+            var clipEndUtc = effectiveEndUtc > endUtc ? endUtc : effectiveEndUtc;
+            if (clipEndUtc <= clipStartUtc) return;
 
-            // Đổi sang giờ Việt Nam (UTC+7) để cắt theo từng khung 1 giờ
-            var curVn = segStartUtc.AddHours(7);
-            var stopVn = segEndUtc.AddHours(7);
-
+            var curVn = clipStartUtc.AddHours(7);
+            var stopVn = clipEndUtc.AddHours(7);
             while (curVn < stopVn)
             {
-                // Mốc đầu giờ tiếp theo theo giờ VN
                 var nextHourVn = new DateTime(curVn.Year, curVn.Month, curVn.Day, curVn.Hour, 0, 0).AddHours(1);
                 var sliceEndVn = nextHourVn < stopVn ? nextHourVn : stopVn;
                 var minutes = (decimal)(sliceEndVn - curVn).TotalMinutes;
 
-                if (minutes > 0)
+                totalOccupiedMinutesByTable[tableId] += minutes;
+
+                // Chỉ tính vào tỷ lệ lấp đầy và heatmap nếu giờ nằm trong [OpenHour, CloseHour)
+                int hour = curVn.Hour;
+                if (hour >= model.OpenHour && hour < model.CloseHour)
                 {
-                    totalOccupiedMinutesByTable[seg.TableId] += minutes;
-
-                    int hour = curVn.Hour;
-                    // Chỉ tính vào tỷ lệ lấp đầy giờ mở cửa và heatmap nếu giờ nằm trong [OpenHour, CloseHour)
-                    if (hour >= model.OpenHour && hour < model.CloseHour)
-                    {
-                        occupiedOpenMinutesByTable[seg.TableId] += minutes;
-                        var key = (curVn.DayOfWeek, hour);
-                        heatmapMinutes[key] = heatmapMinutes.GetValueOrDefault(key) + minutes;
-                    }
+                    occupiedOpenMinutesByTable[tableId] += minutes;
+                    var key = (curVn.DayOfWeek, hour);
+                    heatmapMinutes[key] = heatmapMinutes.GetValueOrDefault(key) + minutes;
                 }
-
                 curVn = sliceEndVn;
             }
         }
 
-        // Nếu DB chỉ có PlaySessions mà chưa có bản ghi PlaySessionTableSegments (dữ liệu seed cũ),
-        // fallback sang lấy thời gian từ PlaySessions để báo cáo vẫn chính xác.
-        if (rawSegments.Count == 0 && sessionsInWindow.Count > 0)
-        {
-            foreach (var sess in sessionsInWindow)
-            {
-                var effectiveEndUtc = sess.EndAtUtc ?? nowUtc;
-                var segStartUtc = sess.StartAtUtc < startUtc ? startUtc : sess.StartAtUtc;
-                var segEndUtc = effectiveEndUtc > endUtc ? endUtc : effectiveEndUtc;
-                if (segEndUtc <= segStartUtc) continue;
+        // Nguồn chính: segment (đúng cả khi khách chuyển bàn giữa phiên).
+        foreach (var seg in rawSegments)
+            AddOccupiedTime(seg.TableId, seg.StartAtUtc, seg.EndAtUtc);
 
-                var curVn = segStartUtc.AddHours(7);
-                var stopVn = segEndUtc.AddHours(7);
-
-                while (curVn < stopVn)
-                {
-                    var nextHourVn = new DateTime(curVn.Year, curVn.Month, curVn.Day, curVn.Hour, 0, 0).AddHours(1);
-                    var sliceEndVn = nextHourVn < stopVn ? nextHourVn : stopVn;
-                    var minutes = (decimal)(sliceEndVn - curVn).TotalMinutes;
-
-                    if (minutes > 0)
-                    {
-                        totalOccupiedMinutesByTable[sess.TableId] += minutes;
-                        int hour = curVn.Hour;
-                        if (hour >= model.OpenHour && hour < model.CloseHour)
-                        {
-                            occupiedOpenMinutesByTable[sess.TableId] += minutes;
-                            var key = (curVn.DayOfWeek, hour);
-                            heatmapMinutes[key] = heatmapMinutes.GetValueOrDefault(key) + minutes;
-                        }
-                    }
-
-                    curVn = sliceEndVn;
-                }
-            }
-        }
+        // Phiên cũ không có segment nào (dữ liệu nhập tay/seed cũ) → lấy thời gian của chính phiên.
+        var sessionsWithSegment = rawSegments.Select(s => s.SessionId).ToHashSet();
+        foreach (var sess in sessionsInWindow.Where(s => !sessionsWithSegment.Contains(s.Id)))
+            AddOccupiedTime(sess.TableId, sess.StartAtUtc, sess.EndAtUtc);
 
         // 5. Công thức KPI tổng quan:
         //    - Tổng giờ chơi = tổng số phút có khách / 60

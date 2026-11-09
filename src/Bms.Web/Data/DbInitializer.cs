@@ -90,7 +90,7 @@ public static class DbInitializer
     /// trải đều trong 7 ngày gần nhất (bao gồm cả hôm nay) nếu 7 ngày qua chưa có giao dịch thanh toán nào.
     /// Nhờ đó Tổng quan hoạt động, Báo cáo doanh thu và Báo cáo vận hành luôn đồng bộ 100% từ DB thật.
     /// </summary>
-    public static async Task SeedShiftDemoDataAsync(ApplicationDbContext db, string contentRoot, ILogger logger)
+    public static async Task SeedRecentOperationsDemoDataAsync(ApplicationDbContext db, string contentRoot, ILogger logger)
     {
         var todayVn = DateTime.UtcNow.AddHours(7).Date;
         var sevenDaysAgoStartUtc = todayVn.AddDays(-6).AddHours(-7);
