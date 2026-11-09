@@ -159,9 +159,14 @@
         <div class="data-card h-100">
             <div class="data-card-header">
                 <span class="pricing-section-title">Danh sách bàn (@Model.Tables.Count bàn)</span>
-                <a asp-controller="Table" asp-action="Index" class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
-                    Mở sơ đồ bàn
-                </a>
+                <div class="d-flex gap-1">
+                    <a asp-controller="Table" asp-action="QrCodes" class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
+                        <i class="bi bi-qr-code me-1"></i> Mã QR bàn
+                    </a>
+                    <a asp-controller="Table" asp-action="Index" class="btn-outline-bms py-1 px-2" style="font-size:0.78rem">
+                        Mở sơ đồ bàn
+                    </a>
+                </div>
             </div>
             <div class="mgr-table-filter-bar" role="radiogroup" aria-label="Bộ lọc trạng thái bàn">
                 <label class="mgr-filter-radio" for="mgr-filter-all">

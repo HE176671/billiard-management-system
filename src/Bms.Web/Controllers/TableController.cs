@@ -38,6 +38,16 @@ public class TableController : Controller
         return View(model);
     }
 
+    // GET: /Table/QrCodes (Quản lý tạo & in mã QR cho từng bàn — chỉ dành cho Manager & Admin)
+    [Authorize(Roles = "Manager,Admin")]
+    [HttpGet]
+    public async Task<IActionResult> QrCodes()
+    {
+        ViewData["Title"] = "Mã QR đặt món từng bàn";
+        var tableCards = await _tableSessionService.GetTableCardsAsync();
+        return View(tableCards);
+    }
+
     // GET: /Table/GetTableCardsPartial
     [HttpGet]
     public async Task<IActionResult> GetTableCardsPartial()

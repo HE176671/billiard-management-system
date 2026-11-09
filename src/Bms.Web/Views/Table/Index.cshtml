@@ -29,8 +29,14 @@
     <!-- ================================================================= -->
     <!-- Cột trái: Sơ đồ bàn -->
     <section class="table-grid-section">
-        <div class="section-box-header">
-            <h2 class="section-box-title">Sơ đồ bàn</h2>
+        <div class="section-box-header d-flex justify-content-between align-items-center">
+            <h2 class="section-box-title mb-0">Sơ đồ bàn</h2>
+            @if (User.IsInRole("Manager") || User.IsInRole("Admin"))
+            {
+                <a asp-controller="Table" asp-action="QrCodes" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 shadow-xs" style="font-size:0.8rem">
+                    <i class="bi bi-qr-code me-1"></i> Mã QR đặt món bàn
+                </a>
+            }
         </div>
 
         <!-- Bộ lọc nhanh trạng thái bàn: Tất cả / Đang sử dụng / Còn trống / Đã hết giờ Combo (Tính vượt giờ) / Bảo trì -->

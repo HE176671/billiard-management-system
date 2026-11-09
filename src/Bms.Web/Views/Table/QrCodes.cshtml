@@ -1,0 +1,300 @@
+@model List<Bms.Web.Models.TableCardViewModel>
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Mã QR đặt món từng bàn";
+    var defaultBaseUrl = $"{Context.Request.Scheme}://{Context.Request.Host}";
+    var floors = Model.Select(t => t.FloorNumber).Distinct().OrderBy(f => f).ToList();
+    var tableTypes = Model.Select(t => t.TableTypeName).Distinct().OrderBy(t => t).ToList();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 no-print">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1 small">
+                <li class="breadcrumb-item"><a asp-controller="Table" asp-action="Index" class="text-decoration-none">Quản lý bàn</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Mã QR đặt món</li>
+            </ol>
+        </nav>
+        <h2 class="h4 fw-bold mb-0">Mã QR đặt món từng bàn</h2>
+        <p class="text-muted small mb-0">In mã QR dán cố định tại từng bàn để khách quét và đặt món F&amp;B tự động.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-controller="Table" asp-action="Index" class="btn btn-outline-secondary btn-sm px-3 rounded-pill">
+            <i class="bi bi-arrow-left me-1"></i> Sơ đồ bàn
+        </a>
+        <button type="button" class="btn btn-primary btn-sm px-3 rounded-pill shadow-sm" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i> In danh sách mã QR
+        </button>
+    </div>
+</div>
+
+<!-- Thanh công cụ & Cấu hình Link QR (chỉ hiển thị trên màn hình, ẩn khi in) -->
+<div class="card border-0 shadow-sm rounded-4 mb-4 no-print">
+    <div class="card-body p-3 p-md-4">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label small fw-bold text-secondary mb-1">
+                    <i class="bi bi-link-45deg me-1"></i> Tiền tố đường dẫn (Base URL):
+                </label>
+                <div class="input-group input-group-sm">
+                    <input type="text" id="baseUrlInput" class="form-control" value="http://localhost:5000" placeholder="http://localhost:5000" />
+                    <button class="btn btn-dark" type="button" id="btnApplyBaseUrl">Áp dụng</button>
+                    <button class="btn btn-outline-secondary" type="button" id="btnResetBaseUrl" title="Lấy theo địa chỉ đang chạy (@defaultBaseUrl)">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                </div>
+                <div class="form-text small" style="font-size: 0.75rem;">
+                    * Lưu ý: Khi test bằng điện thoại thực tế, hãy đổi <code>localhost</code> thành địa chỉ IP Wi-Fi của máy chủ (ví dụ <code>http://192.168.1.50:5000</code>).
+                </div>
+            </div>
+
+            <div class="col-md-2 col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">Lọc theo Tầng:</label>
+                <select id="filterFloor" class="form-select form-select-sm">
+                    <option value="">Tất cả các tầng</option>
+                    @foreach (var f in floors)
+                    {
+                        <option value="@f">Tầng @f</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-2 col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">Loại bàn:</label>
+                <select id="filterType" class="form-select form-select-sm">
+                    <option value="">Tất cả loại bàn</option>
+                    @foreach (var t in tableTypes)
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-secondary mb-1">Tìm kiếm bàn:</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="text" id="filterSearch" class="form-control" placeholder="Nhập mã bàn (B01, B02...)" />
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lưới hiển thị các thẻ QR bàn -->
+<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xl-4 g-4" id="qrCardsGrid">
+    @foreach (var table in Model)
+    {
+        <div class="col qr-card-col" data-table-code="@table.TableCode" data-floor="@table.FloorNumber" data-type="@table.TableTypeName">
+            <div class="card h-100 border text-center shadow-sm rounded-4 qr-standee-card p-3">
+                <div class="standee-header mb-2">
+                    <span class="badge bg-danger-subtle text-danger px-3 py-1 rounded-pill small fw-bold mb-1">
+                        🎱 BMS BILLIARDS CLUB
+                    </span>
+                    <h3 class="h4 fw-bolder text-dark mb-0">BÀN @table.TableCode</h3>
+                    <div class="text-muted small">@table.TableTypeName · Tầng @table.FloorNumber</div>
+                </div>
+
+                <!-- Khung chứa Canvas QR Code -->
+                <div class="d-flex justify-content-center align-items-center my-2 qr-canvas-wrapper" style="min-height: 180px;">
+                    <div id="qrcode-@table.TableCode" class="qrcode-container p-2 border rounded-3 bg-white shadow-2xs" data-code="@table.TableCode"></div>
+                </div>
+
+                <div class="standee-body mb-2">
+                    <p class="text-secondary small fw-medium mb-1" style="font-size: 0.8rem;">
+                        <i class="bi bi-phone me-1"></i> Quét mã để xem thực đơn &amp; gọi món
+                    </p>
+                    <a href="http://localhost:5000/Order/Table/@table.TableCode" target="_blank" class="qr-target-link text-truncate d-block small text-decoration-none text-primary" style="font-size: 0.72rem;">
+                        http://localhost:5000/Order/Table/@table.TableCode
+                    </a>
+                </div>
+
+                <div class="standee-actions mt-auto pt-2 border-top no-print d-flex justify-content-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 btn-download-qr" data-code="@table.TableCode">
+                        <i class="bi bi-download me-1"></i> Tải ảnh
+                    </button>
+                    <a href="http://localhost:5000/Order/Table/@table.TableCode" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill px-3 qr-preview-btn">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> Mở thử
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/qrcode.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const baseUrlInput = document.getElementById('baseUrlInput');
+            const btnApplyBaseUrl = document.getElementById('btnApplyBaseUrl');
+            const btnResetBaseUrl = document.getElementById('btnResetBaseUrl');
+            const filterFloor = document.getElementById('filterFloor');
+            const filterType = document.getElementById('filterType');
+            const filterSearch = document.getElementById('filterSearch');
+            const qrContainers = document.querySelectorAll('.qrcode-container');
+
+            const qrInstances = {};
+
+            // Hàm tạo/cập nhật mã QR cho từng bàn
+            function renderAllQrs(baseUrl) {
+                const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+                qrContainers.forEach(container => {
+                    const tableCode = container.getAttribute('data-code');
+                    const targetUrl = `${cleanBaseUrl}/Order/Table/${encodeURIComponent(tableCode)}`;
+
+                    // Cập nhật link và nút xem thử
+                    const card = container.closest('.qr-standee-card');
+                    if (card) {
+                        const linkEl = card.querySelector('.qr-target-link');
+                        const previewBtn = card.querySelector('.qr-preview-btn');
+                        if (linkEl) {
+                            linkEl.textContent = targetUrl;
+                            linkEl.href = targetUrl;
+                        }
+                        if (previewBtn) {
+                            previewBtn.href = targetUrl;
+                        }
+                    }
+
+                    // Xóa mã QR cũ và vẽ lại
+                    container.innerHTML = '';
+                    qrInstances[tableCode] = new QRCode(container, {
+                        text: targetUrl,
+                        width: 170,
+                        height: 170,
+                        colorDark: "#1a1a1a",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                });
+            }
+
+            // Khởi tạo ban đầu
+            renderAllQrs(baseUrlInput.value.trim() || 'http://localhost:5000');
+
+            // Áp dụng Base URL tùy chỉnh
+            btnApplyBaseUrl.addEventListener('click', function () {
+                const customBase = baseUrlInput.value.trim();
+                if (!customBase) {
+                    alert('Vui lòng nhập tiền tố URL hợp lệ.');
+                    return;
+                }
+                renderAllQrs(customBase);
+            });
+
+            // Đặt lại theo URL trình duyệt hiện tại
+            btnResetBaseUrl.addEventListener('click', function () {
+                const currentOrigin = window.location.origin;
+                baseUrlInput.value = currentOrigin;
+                renderAllQrs(currentOrigin);
+            });
+
+            // Tải ảnh QR (PNG)
+            document.querySelectorAll('.btn-download-qr').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const code = this.getAttribute('data-code');
+                    const container = document.getElementById(`qrcode-${code}`);
+                    if (!container) return;
+
+                    const img = container.querySelector('img');
+                    const canvas = container.querySelector('canvas');
+                    let dataUrl = '';
+
+                    if (img && img.src && img.src.startsWith('data:image')) {
+                        dataUrl = img.src;
+                    } else if (canvas) {
+                        dataUrl = canvas.toDataURL('image/png');
+                    }
+
+                    if (dataUrl) {
+                        const downloadLink = document.createElement('a');
+                        downloadLink.href = dataUrl;
+                        downloadLink.download = `QR_Ban_${code}.png`;
+                        document.body.appendChild(downloadLink);
+                        downloadLink.click();
+                        document.body.removeChild(downloadLink);
+                    } else {
+                        alert('Đang tạo mã QR, vui lòng thử lại sau giây lát.');
+                    }
+                });
+            });
+
+            // Bộ lọc bàn
+            function filterCards() {
+                const floorVal = filterFloor.value.trim();
+                const typeVal = filterType.value.trim().toLowerCase();
+                const searchVal = filterSearch.value.trim().toLowerCase();
+
+                document.querySelectorAll('.qr-card-col').forEach(col => {
+                    const tCode = (col.getAttribute('data-table-code') || '').toLowerCase();
+                    const tFloor = col.getAttribute('data-floor') || '';
+                    const tType = (col.getAttribute('data-type') || '').toLowerCase();
+
+                    const matchFloor = !floorVal || tFloor === floorVal;
+                    const matchType = !typeVal || tType === typeVal;
+                    const matchSearch = !searchVal || tCode.includes(searchVal);
+
+                    col.style.display = (matchFloor && matchType && matchSearch) ? '' : 'none';
+                });
+            }
+
+            filterFloor.addEventListener('change', filterCards);
+            filterType.addEventListener('change', filterCards);
+            filterSearch.addEventListener('input', filterCards);
+        });
+    </script>
+}
+
+<style>
+    .qr-standee-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        background: #ffffff;
+        border-color: #e9ecef;
+    }
+
+    .qr-standee-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    .qrcode-container img,
+    .qrcode-container canvas {
+        display: block;
+        margin: 0 auto;
+    }
+
+    /* Định dạng tối ưu khi in (Print Stylesheet) */
+    @@media print {
+        .no-print,
+        .sidebar,
+        .admin-sidebar,
+        .header,
+        .sidebar-footer,
+        .navbar,
+        nav,
+        footer {
+            display: none !important;
+        }
+
+        body, .content-wrapper, main {
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .qr-card-col {
+            display: inline-block !important;
+            width: 48% !important;
+            float: left;
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+        }
+
+        .qr-standee-card {
+            border: 2px dashed #6c757d !important;
+            box-shadow: none !important;
+            padding: 15px !important;
+        }
+    }
+</style>

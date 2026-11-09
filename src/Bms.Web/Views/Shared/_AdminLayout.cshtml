@@ -292,8 +292,11 @@
             <a class="sidebar-link @Active("Pricing")" asp-controller="Pricing" asp-action="Index">
                 <i class="bi bi-tags"></i> Bảng giá &amp; Combo dịch vụ
             </a>
-            <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index">
+            <a class="sidebar-link @(curController == "Table" && curAction == "Index" ? "active" : "")" asp-controller="Table" asp-action="Index">
                 <i class="bi bi-grid-3x3"></i> Quản lý bàn
+            </a>
+            <a class="sidebar-link @(curController == "Table" && curAction == "QrCodes" ? "active" : "")" asp-controller="Table" asp-action="QrCodes">
+                <i class="bi bi-qr-code"></i> Mã QR đặt món bàn
             </a>
             <div class="nav-section-label">Quản lý Hội viên &amp; Ưu đãi</div>
             <a class="sidebar-link @Active("CrmDashboard")" asp-controller="CrmDashboard" asp-action="Index">
