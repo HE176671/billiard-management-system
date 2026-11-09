@@ -296,7 +296,7 @@
             </a>
 
             <div class="nav-section-label">F&amp;B &amp; Kho hàng</div>
-            <a class="sidebar-link @(curController == "Order" && curAction == "Pending" ? "active" : "")" asp-controller="Order" asp-action="Pending">
+            <a class="sidebar-link @(curController == "Order" && curAction == "Pending" ? "active" : "")" asp-controller="Order" asp-action="Pending" style="@(isStaff ? "" : "display:none")">
                 <i class="bi bi-bell"></i> Đơn QR chờ duyệt
                 @if (pendingOrderCount > 0)
                 {
@@ -360,7 +360,7 @@
             <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index"><i class="bi bi-grid-3x3"></i> Quản lý bàn</a>
 
             <div class="nav-section-label">F&amp;B &amp; Kho hàng</div>
-            <a class="sidebar-link @(curController == "Order" && curAction == "Pending" ? "active" : "")" asp-controller="Order" asp-action="Pending">
+            <a class="sidebar-link @(curController == "Order" && curAction == "Pending" ? "active" : "")" asp-controller="Order" asp-action="Pending" style="@(isStaff ? "" : "display:none")">
                 <i class="bi bi-bell"></i> Đơn QR chờ duyệt
                 @if (pendingOrderCount > 0)
                 {
@@ -388,7 +388,7 @@
     <div class="topbar">
         <span class="topbar-title">@ViewData["Title"]</span>
         <div class="topbar-actions">
-            @if (isManager || isStaff)
+            @if (isStaff)
             {
                 <a asp-controller="Order" asp-action="Pending" class="btn-logout" title="Đơn QR chờ duyệt">
                     <i class="bi bi-cup-straw text-warning"></i> Đơn QR

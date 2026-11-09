@@ -162,7 +162,7 @@
         <header class="topbar">
             <span class="topbar-title">@ViewData["Title"]</span>
             <div class="topbar-actions">
-                <a asp-controller="Order" asp-action="Pending" class="btn-logout" title="Đơn QR chờ duyệt">
+                <a asp-controller="Order" asp-action="Pending" class="btn-logout" title="Đơn QR chờ duyệt" style="@(isStaff ? "" : "display:none")">
                     <i class="bi bi-cup-straw text-warning"></i> Đơn QR
                     @if (pendingOrderCount > 0)
                     {
