@@ -266,13 +266,17 @@
     <div class="sidebar-nav">
         @if (isAdmin)
         {
+            @* TV5: Admin chỉ quản trị tài khoản (ma trận phân quyền SRS I.4.4) *@
             <div class="nav-section-label">Quản trị hệ thống</div>
             <a class="sidebar-link @Active("RoleManagement")" asp-controller="RoleManagement" asp-action="Index">
                 <i class="bi bi-shield-lock"></i> Phân quyền tài khoản
             </a>
+            <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
+                <i class="bi bi-people"></i> Quản lý nhân viên
+            </a>
         }
 
-        @if (isManager || isAdmin)
+        @if (isManager)
         {
             <div class="nav-section-label">Quản lý Vận hành</div>
             <a class="sidebar-link @Active("Dashboard")" asp-controller="Dashboard" asp-action="Index">
@@ -286,9 +290,6 @@
             </a>
             <a class="sidebar-link @Active("AuditLog")" asp-controller="AuditLog" asp-action="Index">
                 <i class="bi bi-journal-text"></i> Nhật ký hệ thống
-            </a>
-            <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
-                <i class="bi bi-people"></i> Quản lý nhân viên
             </a>
             <a class="sidebar-link @Active("Pricing")" asp-controller="Pricing" asp-action="Index">
                 <i class="bi bi-tags"></i> Bảng giá &amp; Giờ chơi

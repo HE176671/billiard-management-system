@@ -5,15 +5,19 @@ using Microsoft.Extensions.Logging;
 namespace Bms.Web.Services;
 
 /// <summary>
-/// Background Service chạy định kỳ hằng ngày lúc 02:00 giờ Việt Nam (và 15 giây sau khi khởi chạy):
-/// 1. Phát voucher mừng sinh nhật (1 lần/năm, hạn dùng 7 ngày) theo hạng (BirthdayVoucherValue > 0).
-/// 2. Cảnh báo điểm sắp hết hạn trước 14 ngày (86 ngày không thanh toán).
-/// 3. Thu hồi điểm thưởng đối với hồ sơ không giao dịch trên 100 ngày qua sổ cái.
-/// 4. Chuyển trạng thái Voucher quá hạn sang Expired.
-/// 5. Tự động xét giữ hạng 1 tháng, mở 30 ngày ân hạn khi thiếu chi tiêu, hạ tối đa 1 bậc liền kề sau ân hạn.
+/// TV5 — JOB-01 + JOB-02: chạy chu kỳ cuối ngày lúc 00:05 giờ Việt Nam mỗi ngày,
+/// và một lần khoảng 15 giây sau khi web khởi động để bù ngày bị lỡ khi server tắt.
+/// Nội dung chu kỳ nằm ở <see cref="IDailyCycleService"/>:
+/// 1. Phát voucher sinh nhật (chỉ dùng trong ngày sinh nhật, 1 lần/năm, theo hạng).
+/// 2. Chuyển voucher quá hạn sang Expired.
+/// 3. Xét giữ hạng 12 tháng, mở 30 ngày ân hạn khi thiếu chi tiêu, hạ đúng 1 bậc khi hết ân hạn.
+/// 4. Gửi email thông báo hạng và voucher cho hội viên có email.
+/// Mỗi bước đều chạy lại an toàn (không phát trùng voucher, không xét trùng).
 /// </summary>
 public class LoyaltyDailyJob : BackgroundService
 {
+    private static readonly TimeSpan RunAtVn = new(0, 5, 0);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<LoyaltyDailyJob> _logger;
 
@@ -42,9 +46,9 @@ public class LoyaltyDailyJob : BackgroundService
         {
             await RunSafeCycleAsync(stoppingToken);
 
-            // Tính khoảng chờ tới 02:00 sáng giờ Việt Nam tiếp theo
+            // Chờ tới 00:05 giờ Việt Nam tiếp theo
             var nowVn = DateTime.UtcNow.ToVn();
-            var nextRunVn = nowVn.Date.AddHours(2);
+            var nextRunVn = nowVn.Date.Add(RunAtVn);
             if (nextRunVn <= nowVn)
                 nextRunVn = nextRunVn.AddDays(1);
 
@@ -67,49 +71,24 @@ public class LoyaltyDailyJob : BackgroundService
 
     private async Task RunSafeCycleAsync(CancellationToken ct)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var campaignSvc = scope.ServiceProvider.GetRequiredService<ICampaignService>();
-        var loyaltySvc = scope.ServiceProvider.GetRequiredService<ILoyaltyService>();
-        var voucherSvc = scope.ServiceProvider.GetRequiredService<IVoucherService>();
-        var tierSvc = scope.ServiceProvider.GetRequiredService<ITierEvaluationService>();
-
         try
         {
-            int bday = await campaignSvc.IssueBirthdayVouchersAsync(null, ct);
-            if (bday > 0) _logger.LogInformation("LoyaltyDailyJob: Đã phát {Count} voucher sinh nhật.", bday);
+            using var scope = _scopeFactory.CreateScope();
+            var cycle = scope.ServiceProvider.GetRequiredService<IDailyCycleService>();
+            var result = await cycle.RunAsync(actorId: null, manual: false, ct);
+            var t = result.Summary.TierSummary;
+            _logger.LogInformation(
+                "LoyaltyDailyJob: voucher sinh nhật +{Bday}, voucher hết hạn {VExp}, giữ hạng {Renew}, ân hạn {Grace}, hạ hạng {Down}, email gửi {Sent}.",
+                result.Summary.BirthdayVouchersIssued, result.Summary.VouchersExpired,
+                t.RenewedCount, t.EnteredGraceCount, t.DowngradedCount, result.EmailsSent);
         }
-        catch (Exception ex) { _logger.LogError(ex, "Lỗi tác vụ phát voucher sinh nhật."); }
-
-        try
+        catch (OperationCanceledException)
         {
-            int warn = await campaignSvc.SendExpiryWarningNotificationsAsync(null, ct);
-            if (warn > 0) _logger.LogInformation("LoyaltyDailyJob: Đã gửi {Count} cảnh báo điểm sắp hết hạn.", warn);
+            // web đang dừng
         }
-        catch (Exception ex) { _logger.LogError(ex, "Lỗi tác vụ cảnh báo điểm sắp hết hạn."); }
-
-        try
+        catch (Exception ex)
         {
-            int exp = await loyaltySvc.ProcessPointExpirationsAsync(ct);
-            if (exp > 0) _logger.LogInformation("LoyaltyDailyJob: Đã xử lý hết hạn điểm cho {Count} khách hàng.", exp);
+            _logger.LogError(ex, "LoyaltyDailyJob lỗi; sẽ chạy lại ở lần kế tiếp.");
         }
-        catch (Exception ex) { _logger.LogError(ex, "Lỗi tác vụ hết hạn điểm."); }
-
-        try
-        {
-            int vExp = await voucherSvc.ExpireOverdueVouchersAsync(null, ct);
-            if (vExp > 0) _logger.LogInformation("LoyaltyDailyJob: Đã chuyển {Count} voucher quá hạn sang Expired.", vExp);
-        }
-        catch (Exception ex) { _logger.LogError(ex, "Lỗi tác vụ hết hạn voucher."); }
-
-        try
-        {
-            var tierSum = await tierSvc.ProcessDailyTierReviewsAsync(null, ct);
-            if (tierSum.RenewedCount + tierSum.EnteredGraceCount + tierSum.DowngradedCount > 0)
-            {
-                _logger.LogInformation("LoyaltyDailyJob TierReview (1M): Gia hạn={Renew}, Ân hạn 30 ngày={Grace}, Hạ 1 bậc liền kề={Down}.",
-                    tierSum.RenewedCount, tierSum.EnteredGraceCount, tierSum.DowngradedCount);
-            }
-        }
-        catch (Exception ex) { _logger.LogError(ex, "Lỗi tác vụ xét giữ hạng 1 tháng / ân hạn 30 ngày / hạ 1 bậc."); }
     }
 }

@@ -12,7 +12,7 @@ namespace Bms.Web.Controllers;
 /// TV5 — mở ca, đóng ca, đối soát tiền mặt, lịch sử ca.
 /// BR-23: cả quán chỉ có một ca đang mở; nhân viên nào đang trực cũng xem và đóng được ca đó (giao ca).
 /// </summary>
-[Authorize(Roles = "Staff,Manager,Admin")]
+[Authorize(Roles = "Staff,Manager")]
 public class ShiftController : Controller
 {
     private const int PageSize = 15;
@@ -147,7 +147,7 @@ public class ShiftController : Controller
     #region Admin: quan ly moi ca
 
     // GET /Shift/Manage
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Manage(DateOnly? from, DateOnly? to, string? staffId, string? status,
         bool onlyDifference = false, int page = 1)
     {

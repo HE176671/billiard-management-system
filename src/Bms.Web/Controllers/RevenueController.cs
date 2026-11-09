@@ -2,13 +2,14 @@ using System.Globalization;
 using System.Text;
 using Bms.Web.Data;
 using Bms.Web.Models;
+using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Manager,Admin")]
+[Authorize(Roles = "Manager")]
 public class RevenueController : Controller
 {
     private readonly ApplicationDbContext _context;
@@ -62,8 +63,8 @@ public class RevenueController : Controller
         };
         if (model.From > model.To || model.To.DayNumber - model.From.DayNumber > 366 || model.To.Year >= 9999 || model.From.Year < 2)
             ModelState.AddModelError("", "Chọn ngày bắt đầu không sau ngày kết thúc, tối đa 367 ngày.");
-        if (groupBy is not ("day" or "month"))
-            ModelState.AddModelError("", "Chỉ hỗ trợ nhóm theo ngày hoặc tháng.");
+        if (groupBy is not ("day" or "month" or "shift"))
+            ModelState.AddModelError("", "Chỉ hỗ trợ nhóm theo ngày, tháng hoặc ca.");
         return model;
     }
 
@@ -81,6 +82,32 @@ public class RevenueController : Controller
         model.TotalRevenue = payments.Sum(p => p.AmountPaid);
         model.PaymentCount = payments.Count;
         model.InvoiceCount = payments.Select(p => p.InvoiceId).Distinct().Count();
+        model.Methods = payments.GroupBy(p => p.PaymentMethod).OrderBy(g => g.Key)
+            .Select(g => new RevenueMethodRow(g.Key, g.Sum(p => p.AmountPaid), g.Count())).ToList();
+
+        if (model.GroupBy == "shift")
+        {
+            // TV5 — UC37: doanh thu theo ca (BR-23: mỗi khoản thu gắn với ca chung của quán).
+            var shiftIds = payments.Where(p => p.WorkShiftId != null).Select(p => p.WorkShiftId!.Value).Distinct().ToList();
+            var shifts = await _context.WorkShifts.AsNoTracking()
+                .Where(w => shiftIds.Contains(w.Id))
+                .Select(w => new { w.Id, w.StartTimeUtc, StaffName = w.Staff == null ? "" : w.Staff.FullName })
+                .ToDictionaryAsync(w => w.Id);
+            model.Periods = payments
+                .GroupBy(p => p.WorkShiftId)
+                .OrderBy(g => g.Key == null ? DateTime.MaxValue : shifts.TryGetValue(g.Key.Value, out var w) ? w.StartTimeUtc : DateTime.MaxValue)
+                .Select(g =>
+                {
+                    var label = g.Key == null
+                        ? "Không gắn ca"
+                        : shifts.TryGetValue(g.Key.Value, out var w)
+                            ? $"Ca #{w.Id} · {w.StaffName} · {w.StartTimeUtc.ToVn():dd/MM HH:mm}"
+                            : $"Ca #{g.Key}";
+                    return new RevenuePeriodRow(label, g.Sum(p => p.AmountPaid), g.Count());
+                }).ToList();
+            return;
+        }
+
         var format = model.GroupBy == "month" ? "yyyy-MM" : "yyyy-MM-dd";
         var grouped = payments.GroupBy(p => p.TransactionTimeUtc.AddHours(7).ToString(format));
         var totals = grouped.ToDictionary(g => g.Key, g => new RevenuePeriodRow(g.Key, g.Sum(p => p.AmountPaid), g.Count()));
@@ -91,8 +118,6 @@ public class RevenueController : Controller
             model.Periods.Add(totals.GetValueOrDefault(key, new RevenuePeriodRow(key, 0, 0)));
             date = model.GroupBy == "month" ? date.AddMonths(1) : date.AddDays(1);
         }
-        model.Methods = payments.GroupBy(p => p.PaymentMethod).OrderBy(g => g.Key)
-            .Select(g => new RevenueMethodRow(g.Key, g.Sum(p => p.AmountPaid), g.Count())).ToList();
     }
     #endregion
 }

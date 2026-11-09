@@ -74,6 +74,9 @@ builder.Services.AddScoped<IShiftService, ShiftService>();
 // TV5: nhat ky thao tac nhay cam dung chung
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+// TV5: email SMTP (API-02) và chu kỳ cuối ngày (JOB-01, JOB-02)
+builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<IDailyCycleService, DailyCycleService>();
 
 // WF2: Goi mon & Kho (Tung)
 builder.Services.AddSignalR();
@@ -107,6 +110,7 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.MapHub<OrderHub>("/hubs/order");
+app.MapHub<TableHub>(TableHub.Path); // TV5: sơ đồ bàn realtime
 
 #endregion
 

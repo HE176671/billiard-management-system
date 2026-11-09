@@ -267,6 +267,10 @@ public class CampaignService : ICampaignService
         var today = vnToday ?? VnTime.Today;
         int year = today.Year;
         var now = DateTime.UtcNow;
+        // BR-19c (TV5): voucher sinh nhật chỉ dùng trong đúng ngày sinh nhật, hết hạn 23:59:59 giờ VN.
+        var endOfBirthdayUtc = VnTime.StartOfDayUtc(today.AddDays(1)).AddSeconds(-1);
+        // Sinh 29/02: năm không nhuận nhận voucher vào 28/02.
+        bool includeLeapDay = today.Month == 2 && today.Day == 28 && !DateTime.IsLeapYear(today.Year);
 
         var customerRoleId = await _db.Roles.AsNoTracking()
             .Where(r => r.Name == "Customer").Select(r => r.Id).FirstOrDefaultAsync(ct);
@@ -275,8 +279,8 @@ public class CampaignService : ICampaignService
             .Include(u => u.Tier)
             .Where(u => u.IsActive
                      && u.DateOfBirth != null
-                     && u.DateOfBirth.Value.Month == today.Month
-                     && u.DateOfBirth.Value.Day == today.Day
+                     && ((u.DateOfBirth.Value.Month == today.Month && u.DateOfBirth.Value.Day == today.Day)
+                         || (includeLeapDay && u.DateOfBirth.Value.Month == 2 && u.DateOfBirth.Value.Day == 29))
                      && u.Tier != null
                      && u.Tier.BirthdayVoucherValue > 0
                      && _db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == customerRoleId))
@@ -306,7 +310,7 @@ public class CampaignService : ICampaignService
                 DiscountValue = val,
                 Status = CustomerVoucher.StatusActive,
                 IssuedAtUtc = now,
-                ExpiresAtUtc = now.AddDays(7),
+                ExpiresAtUtc = endOfBirthdayUtc,
                 UsedReferenceCode = bdayRef
             });
 
@@ -314,7 +318,7 @@ public class CampaignService : ICampaignService
             {
                 UserId = u.Id,
                 Title = $"🎂 Chúc mừng sinh nhật {u.FullName}!",
-                Content = $"Quán gửi tặng bạn voucher giảm {VnFormat.Money(val)} nhân dịp sinh nhật (Hạng {u.Tier.TierName}). Mã voucher: {code} (hạn dùng 7 ngày).",
+                Content = $"Quán gửi tặng bạn voucher giảm {VnFormat.Money(val)} nhân dịp sinh nhật (Hạng {u.Tier.TierName}). Mã voucher: {code} (chỉ dùng trong hôm nay).",
                 Type = "Birthday",
                 IsRead = false,
                 CreatedAt = now
@@ -372,8 +376,10 @@ public class CampaignService : ICampaignService
         var vnToday = DateOnly.FromDateTime(now.ToVn());
 
         int bday = await IssueBirthdayVouchersAsync(vnToday, ct);
-        int warn = await SendExpiryWarningNotificationsAsync(now, ct);
-        int expPts = await _loyalty.ProcessPointExpirationsAsync(ct);
+        // TV5: scope v1 không có quy tắc hết hạn điểm sau 100 ngày, nên chu kỳ ngày không cảnh báo/thu hồi điểm.
+        // Hai hàm SendExpiryWarningNotificationsAsync / ProcessPointExpirationsAsync vẫn giữ để bật lại nếu nhóm đưa vào scope.
+        int warn = 0;
+        int expPts = 0;
         int expVouchers = await _voucherService.ExpireOverdueVouchersAsync(now, ct);
         var tierSum = await _tierEval.ProcessDailyTierReviewsAsync(now, ct);
 

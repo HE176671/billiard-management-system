@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Manager,Admin,Staff")]
+[Authorize(Roles = "Manager,Staff")]
 public class InventoryController : Controller
 {
     private readonly IInventoryService _inventoryService;
@@ -56,7 +56,7 @@ public class InventoryController : Controller
     }
 
     // UC-11: Lập phiếu nhập kho (GET)
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> CreateReceipt()
     {
         var products = await _productService.GetAllProductsAsync(activeOnly: true);
@@ -73,7 +73,7 @@ public class InventoryController : Controller
     // UC-11: Lập phiếu nhập kho (POST)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> CreateReceipt(StockReceiptInputModel model)
     {
         // Loại bỏ các dòng trống
@@ -132,7 +132,7 @@ public class InventoryController : Controller
     // UC-13: Điều chỉnh kiểm kê tồn kho (Audit Adjustment)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Adjust(int productId, int newQuantity, string reason, string? returnUrl)
     {
         if (string.IsNullOrWhiteSpace(reason))

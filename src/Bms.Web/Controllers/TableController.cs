@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Staff,Manager,Admin")]
+[Authorize(Roles = "Staff,Manager")]
+[BroadcastTableChange] // TV5: thao tác bàn thành công thì đẩy realtime cho các màn sơ đồ bàn
 public class TableController : Controller
 {
     // =========================================================================

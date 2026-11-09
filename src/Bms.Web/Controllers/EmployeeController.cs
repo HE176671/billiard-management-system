@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Manager,Admin")]
+[Authorize(Roles = "Admin")] // TV5: chỉ Admin quản lý tài khoản (ma trận phân quyền SRS I.4.4)
 public class EmployeeController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;

@@ -37,6 +37,9 @@ public interface ITierEvaluationService
 
 public class TierEvaluationService : ITierEvaluationService
 {
+    /// <summary>BR-17d: chu kỳ xét giữ hạng là 12 tháng kể từ ngày đạt hoặc giữ hạng (TV5 sửa từ 1 tháng).</summary>
+    public const int ReviewCycleMonths = 12;
+
     private readonly ApplicationDbContext _db;
 
     public TierEvaluationService(ApplicationDbContext db)
@@ -79,11 +82,11 @@ public class TierEvaluationService : ITierEvaluationService
         // Hạng cao nhất đạt được theo ngưỡng điểm tích lũy hoặc chi tiêu
         var resolvedTier = TierHelper.Resolve(tiers, newSpend12Months, user.RewardPoints) ?? tiers[0];
 
-        // 1. Nếu khách đang trong ân hạn mà đã chi tiêu hoặc đạt ngưỡng điểm đủ giữ hạng hiện tại -> xóa ân hạn, gia hạn review +1 tháng
+        // 1. Nếu khách đang trong ân hạn mà đã chi tiêu hoặc đạt ngưỡng điểm đủ giữ hạng hiện tại -> xóa ân hạn, gia hạn review thêm 12 tháng
         if (user.TierGraceUntilUtc != null && (newSpend12Months >= currentTier.SpendThreshold || (currentTier.MinPoints > 0 && user.RewardPoints >= currentTier.MinPoints)))
         {
             user.TierGraceUntilUtc = null;
-            user.TierReviewAtUtc = now.AddMonths(1);
+            user.TierReviewAtUtc = now.AddMonths(ReviewCycleMonths);
         }
 
         // 2. Nếu đạt ngưỡng điểm/chi tiêu của hạng cao hơn hiện tại -> Tự động nâng hạng tức thì ngay sau thanh toán
@@ -95,7 +98,7 @@ public class TierEvaluationService : ITierEvaluationService
                 upgraded = user.TierId != null && resolvedTier.SpendThreshold > currentTier.SpendThreshold;
                 user.TierId = resolvedTier.Id;
                 user.TierAchievedAtUtc = now;
-                user.TierReviewAtUtc = now.AddMonths(1);
+                user.TierReviewAtUtc = now.AddMonths(ReviewCycleMonths);
                 user.TierGraceUntilUtc = null;
 
                 if (upgraded)
@@ -104,7 +107,7 @@ public class TierEvaluationService : ITierEvaluationService
                     {
                         UserId = user.Id,
                         Title = $"Chúc mừng thăng hạng {resolvedTier.TierName}!",
-                        Content = $"Bạn đã đạt ngưỡng thăng hạng (Điểm hiện tại: {user.RewardPoints} · Chi tiêu: {VnFormat.Money(newSpend12Months)}), chính thức lên hạng {resolvedTier.TierName} (giảm {resolvedTier.DiscountPercent:0.##}% tiền giờ, tích điểm ×{resolvedTier.PointMultiplier}). Chu kỳ xét giữ hạng kế tiếp: {now.AddMonths(1):dd/MM/yyyy}.",
+                        Content = $"Bạn đã đạt ngưỡng thăng hạng (Điểm hiện tại: {user.RewardPoints} · Chi tiêu: {VnFormat.Money(newSpend12Months)}), chính thức lên hạng {resolvedTier.TierName} (giảm {resolvedTier.DiscountPercent:0.##}% tiền giờ, tích điểm ×{resolvedTier.PointMultiplier}). Chu kỳ xét giữ hạng kế tiếp: {now.AddMonths(ReviewCycleMonths):dd/MM/yyyy}.",
                         Type = "TierUpgrade",
                         IsRead = false,
                         CreatedAt = now
@@ -126,7 +129,7 @@ public class TierEvaluationService : ITierEvaluationService
         else if (user.TierReviewAtUtc == null)
         {
             user.TierAchievedAtUtc ??= now;
-            user.TierReviewAtUtc = now.AddMonths(1);
+            user.TierReviewAtUtc = now.AddMonths(ReviewCycleMonths);
         }
 
         return (upgraded, oldTierName, currentTier);
@@ -162,9 +165,9 @@ public class TierEvaluationService : ITierEvaluationService
             {
                 if (spend12M >= currentTier.SpendThreshold)
                 {
-                    // Đã chi tiêu đủ trong thời gian ân hạn -> Giữ hạng thêm 1 tháng
+                    // Đã chi tiêu đủ trong thời gian ân hạn -> Giữ hạng thêm 12 tháng
                     user.TierGraceUntilUtc = null;
-                    user.TierReviewAtUtc = now.AddMonths(1);
+                    user.TierReviewAtUtc = now.AddMonths(ReviewCycleMonths);
                     renewed++;
                 }
                 else if (user.TierGraceUntilUtc.Value <= now)
@@ -176,7 +179,7 @@ public class TierEvaluationService : ITierEvaluationService
 
                     user.TierId = lowerTier.Id;
                     user.TierAchievedAtUtc = now;
-                    user.TierReviewAtUtc = now.AddMonths(1);
+                    user.TierReviewAtUtc = now.AddMonths(ReviewCycleMonths);
                     user.TierGraceUntilUtc = null;
                     downgraded++;
 
@@ -201,13 +204,13 @@ public class TierEvaluationService : ITierEvaluationService
                 continue;
             }
 
-            // B. Đến kỳ xét giữ hạng 1 tháng (TierReviewAtUtc <= now) cho các hạng > hạng thấp nhất
+            // B. Đến kỳ xét giữ hạng 12 tháng (TierReviewAtUtc <= now) cho các hạng > hạng thấp nhất
             if (currentIdx > 0 && user.TierReviewAtUtc.HasValue && user.TierReviewAtUtc.Value <= now)
             {
                 if (spend12M >= currentTier.SpendThreshold)
                 {
-                    // Đủ chi tiêu -> tự động xét giữ hạng thêm 1 tháng
-                    user.TierReviewAtUtc = now.AddMonths(1);
+                    // Đủ chi tiêu -> tự động giữ hạng thêm 12 tháng
+                    user.TierReviewAtUtc = now.AddMonths(ReviewCycleMonths);
                     renewed++;
                 }
                 else
@@ -222,7 +225,7 @@ public class TierEvaluationService : ITierEvaluationService
                     {
                         UserId = user.Id,
                         Title = $"Cảnh báo duy trì hạng {currentTier.TierName} (30 ngày ân hạn)",
-                        Content = $"Kỳ xét giữ hạng 1 tháng đã đến. Bạn đang được mở 30 ngày ân hạn và cần chi tiêu thêm {VnFormat.Money(needed)} trước ngày {graceUntil.ToVn():dd/MM/yyyy} để giữ hạng {currentTier.TierName}.",
+                        Content = $"Kỳ xét giữ hạng 12 tháng đã đến. Bạn đang được mở 30 ngày ân hạn và cần chi tiêu thêm {VnFormat.Money(needed)} trước ngày {graceUntil.ToVn():dd/MM/yyyy} để giữ hạng {currentTier.TierName}.",
                         Type = "TierGrace",
                         IsRead = false,
                         CreatedAt = now

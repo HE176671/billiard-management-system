@@ -54,30 +54,13 @@
         <div class="sidebar-nav">
             @if (isAdmin && !isManager)
             {
+                @* TV5: Admin chỉ quản trị tài khoản (ma trận phân quyền SRS I.4.4) *@
                 <div class="nav-section-label">Quản trị hệ thống</div>
                 <a class="sidebar-link @Active("RoleManagement")" asp-controller="RoleManagement" asp-action="Index">
                     <i class="bi bi-shield-lock"></i> Phân quyền tài khoản
                 </a>
-                <a class="sidebar-link @Active("Table")" asp-controller="Table" asp-action="Index">
-                    <i class="bi bi-grid-3x3"></i> Quản lý bàn
-                </a>
-
-                <div class="nav-section-label">F&amp;B &amp; Kho hàng</div>
-                <a class="sidebar-link @(curController == "Order" && curAction == "Pending" ? "active" : "")" asp-controller="Order" asp-action="Pending">
-                    <i class="bi bi-bell"></i> Đơn QR chờ duyệt
-                    @if (pendingOrderCount > 0)
-                    {
-                        <span class="badge-count global-qr-pending-badge">@pendingOrderCount</span>
-                    }
-                </a>
-                <a class="sidebar-link @Active("Product")" asp-controller="Product" asp-action="Index">
-                    <i class="bi bi-cup-straw"></i> Thực đơn &amp; Món
-                </a>
-                <a class="sidebar-link @Active("Combo")" asp-controller="Combo" asp-action="Index">
-                    <i class="bi bi-box2-heart"></i> Gói Combo
-                </a>
-                <a class="sidebar-link @Active("Inventory")" asp-controller="Inventory" asp-action="Index">
-                    <i class="bi bi-boxes"></i> Quản lý kho hàng
+                <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
+                    <i class="bi bi-people"></i> Quản lý nhân viên
                 </a>
             }
 
@@ -95,9 +78,6 @@
                 </a>
                 <a class="sidebar-link @Active("AuditLog")" asp-controller="AuditLog" asp-action="Index">
                     <i class="bi bi-journal-text"></i> Nhật ký hệ thống
-                </a>
-                <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
-                    <i class="bi bi-people"></i> Quản lý nhân viên
                 </a>
                 <a class="sidebar-link @Active("Pricing")" asp-controller="Pricing" asp-action="Index">
                     <i class="bi bi-tags"></i> Bảng giá &amp; Combo dịch vụ

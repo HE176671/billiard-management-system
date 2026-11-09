@@ -1,4 +1,5 @@
 using Bms.Web.Data;
+using Bms.Web.Data.Entities;
 using Bms.Web.Models;
 using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -13,7 +14,7 @@ namespace Bms.Web.Controllers;
 /// 2. Gậy cho thuê (Giá theo lượt, số lượng, đóng/mở)
 /// 3. Khuyến mãi Combo giờ chơi tặng kèm nước/đồ ăn (VD: Chơi 2 tiếng mua combo được tặng nước)
 /// </summary>
-[Authorize(Roles = "Manager,Admin")]
+[Authorize(Roles = "Manager")]
 public class PricingController : Controller
 {
     private readonly ApplicationDbContext _context;
@@ -220,6 +221,72 @@ public class PricingController : Controller
         await _context.SaveChangesAsync();
 
         TempData["Success"] = $"Đã cập nhật giá chuẩn bàn [{tableType.Name}] thành {hourlyRate:N0} VND/giờ.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // TV5 — UC35: thêm loại bàn mới với một đơn giá giờ duy nhất.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateTableType(string? name, decimal? hourlyRate)
+    {
+        var cleanName = (name ?? "").Trim();
+        if (cleanName.Length is < 2 or > 50)
+        {
+            TempData["Error"] = "Tên loại bàn phải từ 2 đến 50 ký tự.";
+            return RedirectToAction(nameof(Index));
+        }
+        if (hourlyRate is null or < 0 or > 10_000_000)
+        {
+            TempData["Error"] = "Đơn giá giờ phải từ 0 đến 10.000.000 VND.";
+            return RedirectToAction(nameof(Index));
+        }
+        if (await _context.TableTypes.AnyAsync(t => t.Name == cleanName))
+        {
+            TempData["Error"] = $"Loại bàn [{cleanName}] đã tồn tại.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var type = new TableType { Name = cleanName, HourlyRate = hourlyRate.Value };
+        _context.TableTypes.Add(type);
+        await _context.SaveChangesAsync();
+        await _audit.LogAsync(AuditActions.TableTypeChange, "TableType", type.Id.ToString(),
+            $"Thêm loại bàn [{cleanName}] với giá {hourlyRate.Value:N0} VND/giờ.",
+            newValue: hourlyRate.Value.ToString("0"));
+
+        TempData["Success"] = $"Đã thêm loại bàn [{cleanName}] ({hourlyRate.Value:N0} VND/giờ).";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // TV5 — UC35: đổi tên loại bàn (không ảnh hưởng giá và phiên đang chơi).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RenameTableType(int id, string? name)
+    {
+        var cleanName = (name ?? "").Trim();
+        if (cleanName.Length is < 2 or > 50)
+        {
+            TempData["Error"] = "Tên loại bàn phải từ 2 đến 50 ký tự.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var type = await _context.TableTypes.FindAsync(id);
+        if (type == null) return NotFound();
+        if (type.Name == cleanName)
+        {
+            TempData["Success"] = "Tên loại bàn không thay đổi.";
+            return RedirectToAction(nameof(Index));
+        }
+        if (await _context.TableTypes.AnyAsync(t => t.Id != id && t.Name == cleanName))
+        {
+            TempData["Error"] = $"Loại bàn [{cleanName}] đã tồn tại.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var oldName = type.Name;
+        type.Name = cleanName;
+        await _audit.AddAsync(AuditActions.TableTypeChange, "TableType", type.Id.ToString(),
+            $"Đổi tên loại bàn [{oldName}] thành [{cleanName}].", oldValue: oldName, newValue: cleanName);
+        await _context.SaveChangesAsync();
+
+        TempData["Success"] = $"Đã đổi tên loại bàn thành [{cleanName}].";
         return RedirectToAction(nameof(Index));
     }
 

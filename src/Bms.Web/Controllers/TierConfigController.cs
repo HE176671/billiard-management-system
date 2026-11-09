@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Manager,Admin")]
+[Authorize(Roles = "Manager")]
 public class TierConfigController : Controller
 {
     private readonly ApplicationDbContext _context;
@@ -147,7 +147,7 @@ public class TierConfigController : Controller
                 {
                     u.TierId = resolved.Id;
                     u.TierAchievedAtUtc = now;
-                    u.TierReviewAtUtc = now.AddMonths(1);
+                    u.TierReviewAtUtc = now.AddMonths(TierEvaluationService.ReviewCycleMonths);
                     u.TierGraceUntilUtc = null;
                     upgradedCount++;
                 }
@@ -157,7 +157,7 @@ public class TierConfigController : Controller
             await tx.CommitAsync();
 
             TempData["Success"] = upgradedCount > 0
-                ? $"Đã lưu cấu hình hạng & ưu đãi. Đã nâng hạng ngay cho {upgradedCount} khách hàng đủ điều kiện (các khách hàng chưa đủ ngưỡng sẽ được xét giữ/ân hạn theo chu kỳ 1 tháng)."
+                ? $"Đã lưu cấu hình hạng & ưu đãi. Đã nâng hạng ngay cho {upgradedCount} khách hàng đủ điều kiện (các khách hàng chưa đủ ngưỡng sẽ được xét giữ/ân hạn theo chu kỳ 12 tháng)."
                 : "Đã lưu cấu hình hạng & ưu đãi thành công.";
         }
         catch

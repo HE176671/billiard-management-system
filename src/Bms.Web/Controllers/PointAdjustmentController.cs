@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Staff,Manager,Admin")]
+[Authorize(Roles = "Staff,Manager")]
 public class PointAdjustmentController : Controller
 {
     private readonly ApplicationDbContext _db;
@@ -33,7 +33,7 @@ public class PointAdjustmentController : Controller
 
     // GET /PointAdjustment/Pending (Màn hình riêng dành cho Manager quản lý & phê duyệt phiếu điều chỉnh điểm của Staff)
     [HttpGet]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Pending()
     {
         return View("Manage", await BuildViewModelAsync(null));
@@ -157,7 +157,7 @@ public class PointAdjustmentController : Controller
     // POST /PointAdjustment/Approve (Manager phê duyệt phiếu điều chỉnh điểm của Staff)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Approve(int id, string? reviewNote = null)
     {
         var req = await _db.PointAdjustmentRequests
@@ -246,7 +246,7 @@ public class PointAdjustmentController : Controller
     // POST /PointAdjustment/Reject (Manager từ chối phiếu điều chỉnh điểm của Staff)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Reject(int id, string? reviewNote = null)
     {
         var req = await _db.PointAdjustmentRequests.FirstOrDefaultAsync(r => r.Id == id);

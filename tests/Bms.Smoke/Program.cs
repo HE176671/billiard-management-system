@@ -313,10 +313,10 @@ try
     var upUserAfter = await db.Users.AsNoTracking().SingleAsync(u => u.Id == upCustomer.Id);
     var hasUpgradeNotif = await db.Notifications.AnyAsync(n => n.UserId == upCustomer.Id && n.Title.Contains(silverTier.TierName));
     Check(commitT7.Success && commitT7.UpgradedTier && upUserAfter.TierId == silverTier.Id
-        && upUserAfter.TierReviewAtUtc.HasValue && upUserAfter.TierReviewAtUtc.Value > DateTime.UtcNow.AddDays(25)
-        && upUserAfter.TierReviewAtUtc.Value < DateTime.UtcNow.AddDays(35)
+        && upUserAfter.TierReviewAtUtc.HasValue && upUserAfter.TierReviewAtUtc.Value > DateTime.UtcNow.AddDays(360)
+        && upUserAfter.TierReviewAtUtc.Value < DateTime.UtcNow.AddDays(370)
         && hasUpgradeNotif,
-        "T7: Immediate tier upgrade on threshold updates TierId, sets 1-month TierReviewAtUtc (+1M), and creates Notification");
+        "T7: Immediate tier upgrade on threshold updates TierId, sets 12-month TierReviewAtUtc (BR-17d), and creates Notification");
 
     // T8: Hết review, chưa đủ chi tiêu -> Vào ân hạn 30 ngày, chưa hạ
     var graceCustomer = new ApplicationUser
@@ -460,13 +460,14 @@ try
     var pendingAuth = typeof(PointAdjustmentController).GetMethod(nameof(PointAdjustmentController.Pending))?.GetCustomAttribute<AuthorizeAttribute>();
     var rewardAuth = typeof(RewardItemController).GetCustomAttribute<AuthorizeAttribute>();
     var roleMgmtAuth = typeof(RoleManagementController).GetCustomAttribute<AuthorizeAttribute>();
-    Check(crmAuth?.Roles == "Manager,Admin"
-        && campAuth?.Roles == "Manager,Admin"
-        && approveAuth?.Roles == "Manager,Admin"
-        && pendingAuth?.Roles == "Manager,Admin"
-        && rewardAuth?.Roles == "Manager,Admin"
-        && roleMgmtAuth?.Roles == "Admin",
-        "T16: CrmDashboard, Campaign, RewardItem, and PointAdjustment.Approve/Pending enforce [Authorize(Roles = Manager,Admin)] while RoleManagement enforces [Authorize(Roles = Admin)]");
+    Check(crmAuth?.Roles == "Manager"
+        && campAuth?.Roles == "Manager"
+        && approveAuth?.Roles == "Manager"
+        && pendingAuth?.Roles == "Manager"
+        && rewardAuth?.Roles == "Manager"
+        && roleMgmtAuth?.Roles == "Admin"
+        && typeof(EmployeeController).GetCustomAttribute<AuthorizeAttribute>()?.Roles == "Admin",
+        "T16: CRM/Campaign/RewardItem/PointAdjustment are Manager-only; RoleManagement and Employee are Admin-only (SRS I.4.4)");
 
     // T17: Admin phân quyền tài khoản nội bộ (RoleManagementController: tạo/chuyển quyền Staff <-> Manager)
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
@@ -678,10 +679,9 @@ try
         && validDaysT22 == 7
         && dailySummary.VouchersExpired >= 1
         && vT22After.Status == CustomerVoucher.StatusExpired
-        && dailySummary.PointsExpiredUsers >= 1
-        && adultAfterDaily.RewardPoints == 0
-        && hasExpire100Tx,
-        "T22: Redeem issues BMS-XXXX-XXXX voucher with 7-day validity; LoyaltyDailyJob transitions overdue vouchers to Expired and reclaims points for accounts inactive >100 days");
+        && dailySummary.PointsExpiredUsers == 0
+        && !hasExpire100Tx,
+        "T22: Redeem issues BMS-XXXX-XXXX voucher with 7-day validity; daily cycle expires overdue vouchers and does NOT reclaim points (no point expiry in scope v1)");
 
     // T23: Manager tạo thêm bàn & điều chỉnh trạng thái bàn; Staff mở bàn chọn 1 trong 2 chế độ (Combo hoặc Tính giờ, không chạy song song)
     var newTableCode = "VIP-SM-" + key[..4];
@@ -734,8 +734,8 @@ try
         && !string.IsNullOrWhiteSpace(rejectLegacyStatusErr)
         && cardsAfterStd.All(c => allowedDisplayStatuses.Contains(c.DisplayStatus))
         && b01Detail != null && allowedDisplayStatuses.Contains(b01Detail.DisplayStatus)
-        && loyaltyAuth?.Roles == "Staff,Admin"
-        && quickEnrollAuth?.Roles == "Staff,Admin"
+        && loyaltyAuth?.Roles == "Staff"
+        && quickEnrollAuth?.Roles == "Staff"
         && staffCtrlRedirect?.ControllerName == "Shift" && staffCtrlRedirect?.ActionName == "Index",
         "T25: Table statuses strictly standardized to 4 states; Staff redirects to Shift; Manager excluded from POS Checkout & QuickEnroll");
 

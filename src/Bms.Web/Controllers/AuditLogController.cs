@@ -11,7 +11,7 @@ namespace Bms.Web.Controllers;
 /// TV5 — UC38 View Audit Log: Manager xem nhật ký thao tác nhạy cảm, lọc theo ngày, loại thao tác, người thao tác.
 /// Chỉ đọc; nhật ký không sửa, không xóa được từ giao diện.
 /// </summary>
-[Authorize(Roles = "Manager,Admin")]
+[Authorize(Roles = "Manager")]
 public class AuditLogController : Controller
 {
     private const int PageSize = 25;

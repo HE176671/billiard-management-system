@@ -12,7 +12,7 @@ namespace Bms.Web.Controllers;
 /// Trang chủ nhân viên (TV5 duy trì khung). Mỗi workflow dùng controller riêng
 /// (TV1 bàn/booking/phiên, TV3 thanh toán, TV4 món) và thêm lối tắt vào view này.
 /// </summary>
-[Authorize(Roles = "Staff,Manager,Admin")]
+[Authorize(Roles = "Staff,Manager")]
 public class StaffController : Controller
 {
     private readonly ApplicationDbContext _db;

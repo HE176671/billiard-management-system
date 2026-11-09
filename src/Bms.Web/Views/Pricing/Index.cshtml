@@ -315,51 +315,46 @@
     <div class="col-lg-7">
         <div class="data-card h-100">
             <div class="data-card-header">
-                <span class="pricing-section-title">Giá theo khung giờ trong ngày</span>
-                <a asp-action="Create" class="btn-primary-bms py-1 px-3" style="font-size:0.8rem">
-                    Thêm khung giờ
-                </a>
+                <span class="pricing-section-title">Thêm / đổi tên loại bàn</span>
             </div>
-
-            <div class="table-responsive">
-                <table class="table table-hover mb-0 align-middle">
-                    <thead>
-                        <tr>
-                            <th>Loại bàn</th>
-                            <th>Bắt đầu</th>
-                            <th>Kết thúc</th>
-                            <th>Đơn giá</th>
-                            <th class="text-end">Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var p in Model.Configs)
-                        {
-                            <tr>
-                                <td class="fw-semibold">@p.TableTypeName</td>
-                                <td>@p.StartHour</td>
-                                <td>@p.EndHour</td>
-                                <td class="fw-bold text-danger">@p.HourlyRate.ToString("N0") VND/giờ</td>
-                                <td class="text-end">
-                                    <a asp-action="Edit" asp-route-id="@p.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
-                                        Sửa
-                                    </a>
-                                    <form asp-action="Delete" asp-route-id="@p.Id" method="post" class="d-inline ms-1">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn-sm-icon danger" title="Xóa"
-                                                onclick="return confirm('Xóa mức giá khung giờ này?')">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        }
-                        @if (!Model.Configs.Any())
-                        {
-                            <tr><td colspan="5" class="text-center py-4 text-muted">Đang áp dụng đơn giá mặc định theo loại bàn.</td></tr>
-                        }
-                    </tbody>
-                </table>
+            <div class="p-3">
+                <form asp-action="CreateTableType" method="post" class="row g-2 align-items-end mb-3">
+                    @Html.AntiForgeryToken()
+                    <div class="col-sm-5">
+                        <label class="form-label" style="font-size:0.8rem">Tên loại bàn mới</label>
+                        <input type="text" name="name" maxlength="50" required class="form-control form-control-sm" placeholder="Ví dụ: Snooker" />
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label" style="font-size:0.8rem">Đơn giá (VND/giờ)</label>
+                        <input type="number" name="hourlyRate" min="0" max="10000000" step="1000" required class="form-control form-control-sm text-end" placeholder="60000" />
+                    </div>
+                    <div class="col-sm-3">
+                        <button type="submit" class="btn-primary-bms w-100 py-1" style="font-size:0.8rem"><i class="bi bi-plus-lg"></i> Thêm loại bàn</button>
+                    </div>
+                </form>
+                <form asp-action="RenameTableType" method="post" class="row g-2 align-items-end">
+                    @Html.AntiForgeryToken()
+                    <div class="col-sm-5">
+                        <label class="form-label" style="font-size:0.8rem">Loại bàn cần đổi tên</label>
+                        <select name="id" class="form-select form-select-sm" required>
+                            @foreach (var tt in Model.TableTypeRates)
+                            {
+                                <option value="@tt.Id">@tt.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label" style="font-size:0.8rem">Tên mới</label>
+                        <input type="text" name="name" maxlength="50" required class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-sm-3">
+                        <button type="submit" class="btn-outline-bms w-100 py-1" style="font-size:0.8rem"><i class="bi bi-pencil"></i> Đổi tên</button>
+                    </div>
+                </form>
+                <p class="text-muted mt-3 mb-0" style="font-size:0.8rem">
+                    Mỗi loại bàn có <strong>một đơn giá giờ duy nhất</strong>. Giá mới áp dụng cho phiên mở sau khi lưu;
+                    phiên đang chơi giữ giá lúc mở bàn. Mọi thay đổi giá và loại bàn được ghi vào Nhật ký hệ thống.
+                </p>
             </div>
         </div>
     </div>

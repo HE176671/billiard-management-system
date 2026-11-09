@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Manager,Admin,Staff")]
+[Authorize(Roles = "Manager,Staff")]
 public class OrderController : Controller
 {
     private readonly IOrderService _orderService;

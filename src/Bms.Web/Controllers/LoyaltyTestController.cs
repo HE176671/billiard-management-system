@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Staff,Admin")]
+[Authorize(Roles = "Staff")]
 public class LoyaltyTestController : Controller
 {
     private const string PlaceholderEmailDomain = "@noemail.bms.local";

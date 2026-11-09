@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bms.Web.Controllers;
 
-[Authorize(Roles = "Manager,Admin")]
+[Authorize(Roles = "Manager")]
 public class RewardItemController : Controller
 {
     private readonly ApplicationDbContext _db;
