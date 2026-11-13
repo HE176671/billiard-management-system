@@ -41,8 +41,8 @@ public partial class WalletService(ApplicationDbContext db, IPointLedgerService 
                     : new(false, false, "Mã yêu cầu đã được sử dụng cho giao dịch khác.");
             var shift = await db.WorkShifts.FromSqlInterpolated($"SELECT * FROM dbo.WorkShifts WITH (UPDLOCK,HOLDLOCK) WHERE StaffId={actorId} AND Status='Active'")
                 .SingleOrDefaultAsync(ct);
-            // TV5: ca làm đã bỏ khỏi nghiệp vụ; nếu còn ca cũ đang mở thì vẫn gắn, không thì để trống.
-            var result = await CreditAsync(user, amount, reference, actorId, shift?.Id, null, ct);
+            if (shift == null) return new(false, false, "Bạn cần mở ca trước khi nhận tiền nạp tại quầy.");
+            var result = await CreditAsync(user, amount, reference, actorId, shift.Id, null, ct);
             await tx.CommitAsync(ct);
             segments.InvalidateCache();
             return result;

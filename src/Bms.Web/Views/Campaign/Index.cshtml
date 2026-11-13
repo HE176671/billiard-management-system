@@ -63,7 +63,7 @@
                         <label class="form-label">Nhóm khách hàng</label>
                         <select name="TargetSegment" class="form-select">
                             <option value="All" selected="@(f.TargetSegment == "All" || string.IsNullOrEmpty(f.TargetSegment))">Tất cả nhóm khách</option>
-                            @foreach (var s in new[] { "Champion", "Loyal", "New", "AtRisk", "NeverVisited" })
+                            @foreach (var s in new[] { "Champion", "Loyal", "New", "AtRisk" })
                             {
                                 <option value="@s" selected="@(f.TargetSegment == s)">@VnFormat.SegmentLabel(s)</option>
                             }

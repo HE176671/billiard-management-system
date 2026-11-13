@@ -1,0 +1,78 @@
+@model Bms.Web.Models.ShiftHomeViewModel
+@{
+    ViewData["Title"] = "Ca làm của quán";
+    Layout = "_AdminLayout";
+}
+<partial name="_Alerts" />
+
+@if (Model.Active == null)
+{
+    <div class="form-card mb-4">
+        <h6 class="mb-1" style="font-weight:600"><i class="bi bi-play-circle me-2"></i>Mở ca mới</h6>
+        <p class="text-muted" style="font-size:0.85rem">Quán chưa có ca nào đang mở. Cả quán chỉ có một ca tại một thời điểm (BR-23); chưa mở ca thì không mở bàn và không thu tiền được.</p>
+        @if (Model.PreviousShiftId != null)
+        {
+            <div class="mb-3 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.85rem">
+                <i class="bi bi-arrow-left-right me-1"></i>
+                Nhận két từ ca trước <strong>#@Model.PreviousShiftId</strong>@(Model.PreviousClosedByName != null ? $" ({Model.PreviousClosedByName} đóng" : " (đóng")
+                lúc @(Model.PreviousEndTimeUtc.ToVn()?.ToString("HH:mm dd/MM"))).
+                Hãy tự đếm két; hệ thống sẽ đối chiếu với số ca trước để lại.
+            </div>
+        }
+        @if (Model.CanOpen)
+        {
+            var openNeedReason = TempData["OpenNeedReason"] as string == "1";
+            <form asp-action="Open" method="post">
+                @Html.AntiForgeryToken()
+                <partial name="_CashCounter" model='"Open.StartingCash"'
+                         view-data='new ViewDataDictionary(ViewData) { ["CounterId"] = "openCounter", ["Restore"] = TempData["OpenBreakdown"] as string }' />
+                <div class="mt-2" style="max-width:520px">
+                    <label class="form-label" for="Open_Notes">
+                        Lý do chênh lệch @(openNeedReason ? "(bắt buộc)" : "(chỉ cần khi hệ thống báo lệch)")
+                    </label>
+                    <input id="Open_Notes" name="Open.Notes" value="@Model.Open.Notes" class="form-control" maxlength="500"
+                           placeholder="Ví dụ: chủ quán rút 300.000đ cuối ca trước" required="@openNeedReason" />
+                </div>
+                <button type="submit" class="btn-primary-bms mt-3"><i class="bi bi-play-fill"></i> Mở ca</button>
+            </form>
+        }
+        else
+        {
+            <div class="alert alert-warning mb-0" style="font-size:0.85rem">Chỉ nhân viên trực quầy (Staff) được mở ca.</div>
+        }
+    </div>
+}
+else
+{
+    var s = Model.Active;
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <span class="badge-active">Đang mở</span>
+        <strong>Ca #@s.Shift.Id</strong>
+        <span class="text-muted" style="font-size:0.85rem">do <strong>@s.StaffName</strong> mở lúc @s.Shift.StartTimeUtc.ToVn().ToString("HH:mm dd/MM/yyyy")</span>
+        @if (!Model.CanOpen)
+        {
+            <a asp-action="Details" asp-route-id="@s.Shift.Id" class="btn-outline-bms ms-auto"><i class="bi bi-list-ul"></i> Giao dịch trong ca</a>
+        }
+    </div>
+    <partial name="_SummaryCards" model="s" view-data='new ViewDataDictionary(ViewData) { ["Blind"] = Model.CanOpen }' />
+    <div class="form-card mb-4">
+        <h6 class="mb-1" style="font-weight:600"><i class="bi bi-stop-circle me-2"></i>Đóng ca</h6>
+        <p class="text-muted" style="font-size:0.85rem">Nhân viên đang trực nào cũng đóng được ca này khi giao ca. Người đóng ca được ghi lại trong nhật ký.</p>
+        @if (Model.UnpaidTableCount > 0)
+        {
+            <div class="alert alert-info py-2" style="font-size:0.85rem">
+                <i class="bi bi-info-circle me-1"></i>Còn <strong>@Model.UnpaidTableCount bàn</strong> đang chơi hoặc chờ thanh toán.
+                Đóng ca vẫn được; tiền các bàn này sẽ thu vào ca sau.
+            </div>
+        }
+        <partial name="_CloseForm" model="Model.Close" />
+    </div>
+}
+
+<div class="data-card">
+    <div class="data-card-header">
+        <span class="data-card-title"><i class="bi bi-clock-history me-2"></i>Ca gần đây của quán</span>
+        <a asp-action="History" class="btn-outline-bms">Xem tất cả</a>
+    </div>
+    <partial name="_ShiftTable" model="Model.Recent" view-data='new ViewDataDictionary(ViewData) { ["ShowStaff"] = true }' />
+</div>

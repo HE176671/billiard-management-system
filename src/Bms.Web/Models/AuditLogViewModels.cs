@@ -32,9 +32,3 @@ public class AuditLogRowViewModel
     public string? Reason { get; set; }
     public string? ActorName { get; set; }
 }
-
-public class StaffOptionViewModel
-{
-    public string Id { get; set; } = "";
-    public string Name { get; set; } = "";
-}

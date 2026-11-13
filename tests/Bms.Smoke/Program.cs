@@ -469,8 +469,6 @@ try
     var segChampion = segmentSvc.ClassifySegment(nowRef.AddDays(-100), nowRef.AddDays(-5), 8, nowRef);
     var segLoyal = segmentSvc.ClassifySegment(nowRef.AddDays(-100), nowRef.AddDays(-15), 3, nowRef);
     var segAtRisk = segmentSvc.ClassifySegment(nowRef.AddDays(-120), nowRef.AddDays(-45), 3, nowRef);
-    var segNever = segmentSvc.ClassifySegment(nowRef.AddDays(-120), null, 0, nowRef);
-    Check(segNever == CustomerSegmentService.SegNever, "T13b: hội viên chưa thanh toán lần nào không bị xếp vào 'Lâu rồi chưa ghé'");
     Check(segNew == CustomerSegmentService.SegNew
         && segChampion == CustomerSegmentService.SegChampion
         && segLoyal == CustomerSegmentService.SegLoyal

@@ -45,8 +45,6 @@ public class CustomerSegmentService : ICustomerSegmentService
     public const string SegChampion = "Champion";
     public const string SegLoyal = "Loyal";
     public const string SegAtRisk = "AtRisk";
-    /// <summary>TV5: có tài khoản trên 30 ngày nhưng chưa thanh toán lần nào — không phải "khách quen vắng mặt".</summary>
-    public const string SegNever = "NeverVisited";
     public const string SegLost = "Lost";
     public const string SegRegular = "Regular";
 
@@ -70,10 +68,6 @@ public class CustomerSegmentService : ICustomerSegmentService
         if (accountAgeDays <= 30.0 && frequency12M <= 1)
             return SegNew;
 
-        // TV5: chưa từng phát sinh hóa đơn → nhóm riêng, không gộp vào "Lâu rồi chưa ghé"
-        if (!rDays.HasValue && frequency12M == 0)
-            return SegNever;
-
         if (rDays.HasValue)
         {
             // 2. VIP (Champion): R <= 14 và F >= 8
@@ -95,7 +89,6 @@ public class CustomerSegmentService : ICustomerSegmentService
         SegChampion => ("background:#f3e8ff;color:#7e22ce", "Ưu tiên giữ bàn VIP"),
         SegLoyal    => ("background:#dcfce7;color:#15803d", "Duy trì chăm sóc định kỳ"),
         SegAtRisk   => ("background:#ffedd5;color:#c2410c", "Gửi voucher mời quay lại"),
-        SegNever    => ("background:#f1f5f9;color:#475569", "Mời trải nghiệm lần đầu"),
         _           => ("background:#dcfce7;color:#15803d", "Duy trì chăm sóc định kỳ")
     };
 
@@ -115,11 +108,6 @@ public class CustomerSegmentService : ICustomerSegmentService
             .Include(u => u.Tier)
             .Where(u => _db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == customerRoleId))
             .ToListAsync(ct);
-
-        // TV5: khách chưa gán TierId được coi là hạng thấp nhất (giống TierEvaluationService)
-        var lowestTierName = await _db.MembershipTiers.AsNoTracking()
-            .OrderBy(t => t.SpendThreshold).ThenBy(t => t.SortOrder)
-            .Select(t => t.TierName).FirstOrDefaultAsync(ct) ?? "Member";
 
         var earnStats = await _db.PointTransactions.AsNoTracking()
             .Where(t => t.TransactionType == PointTransaction.Earn && t.CreatedAt >= since && t.CreatedAt <= now)
@@ -151,7 +139,7 @@ public class CustomerSegmentService : ICustomerSegmentService
                 FullName: u.FullName,
                 PhoneNumber: u.PhoneNumber,
                 CardCode: u.EmployeeCode,
-                TierName: u.Tier?.TierName ?? lowestTierName,
+                TierName: u.Tier?.TierName ?? "Member",
                 TierId: u.TierId,
                 RewardPoints: u.RewardPoints,
                 IsActive: u.IsActive,
