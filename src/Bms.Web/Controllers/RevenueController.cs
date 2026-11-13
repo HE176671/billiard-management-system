@@ -102,6 +102,16 @@ public class RevenueController : Controller
             model.Periods.Add(totals.GetValueOrDefault(key, new RevenuePeriodRow(key, 0, 0)));
             date = model.GroupBy == "month" ? date.AddMonths(1) : date.AddDays(1);
         }
+
+        // TV5 — UC40: nhóm theo tháng thì kèm mục tiêu để so sánh % đạt
+        if (model.GroupBy == "month")
+        {
+            int fromKey = model.From.Year * 12 + model.From.Month, toKey = model.To.Year * 12 + model.To.Month;
+            model.MonthTargets = (await _context.RevenueTargets.AsNoTracking()
+                    .Where(t => t.Year * 12 + t.Month >= fromKey && t.Year * 12 + t.Month <= toKey)
+                    .ToListAsync())
+                .ToDictionary(t => $"{t.Year:0000}-{t.Month:00}", t => t.TargetAmount);
+        }
     }
     #endregion
 }

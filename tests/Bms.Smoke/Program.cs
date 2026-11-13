@@ -164,7 +164,7 @@ try
     Check(empty.TotalRevenue == 0 && empty.Periods.Count == 2, "Empty report zero-filled periods");
     Check(await report.Export(new(2035,1,2),new(2035,1,2)) is FileContentResult csv && csv.FileContents.Length > 0, "CSV export");
     Check(await report.Export(new(2035,1,3),new(2035,1,1)) is BadRequestObjectResult, "Reversed report range rejected");
-    var dashboard = Prepare(new DashboardController(db));
+    var dashboard = Prepare(new DashboardController(db, new RevenueTargetService(db)));
     Check(((ViewResult)await dashboard.Index()).Model is DashboardViewModel { TotalTables: > 0 }, "Dashboard live SQL queries");
 
     // TV5 — Báo cáo vận hành (OperationsReportController)
@@ -242,7 +242,7 @@ try
     Check(handoverRejected && fractionRejected && handoverOk.Status == WorkShift.StatusActive,
         "Shift handover: opening cash must match previous counted cash or carry a reason; whole VND only");
     await shiftService.CloseShiftAsync(handoverOk.Id, staff.Id, 600000, null);
-    var dashboardWithShift = (DashboardViewModel)((ViewResult)await Prepare(new DashboardController(db)).Index()).Model!;
+    var dashboardWithShift = (DashboardViewModel)((ViewResult)await Prepare(new DashboardController(db, new RevenueTargetService(db))).Index()).Model!;
     Check(dashboardWithShift.TotalTables == dashboardWithShift.AvailableTables + dashboardWithShift.InUseTables
         + dashboardWithShift.AwaitingPaymentTables + dashboardWithShift.UnavailableTables, "Dashboard table statuses add up");
 
@@ -1371,6 +1371,20 @@ try
     // Kiểm tra phiên qrSession2 không có đơn hàng nào bị gán nhầm
     var session2Orders = await orderSvc.GetSessionOrdersAsync(qrSession2.Id);
     Check(session2Orders.Count == 0, "WF2 P4: New session qrSession2 remains completely clean without rogue orders");
+
+    // TV5 — UC40 mục tiêu doanh thu: công thức thuần, không phụ thuộc dữ liệu
+    {
+        var t = new RevenueTarget { Id = 1, Year = 2026, Month = 11, TargetAmount = 300_000_000 };
+        var mid = RevenueTargetService.Calculate(t, 120_000_000, new DateOnly(2026, 11, 10));
+        Check(mid.State == TargetMonthState.Current && mid.PercentAchieved == 40m, "UC40 % đạt = thực thu / mục tiêu");
+        Check(mid.ForecastRevenue == 360_000_000m && mid.StatusText == "Đúng tiến độ", "UC40 dự báo = 120tr / 10 ngày × 30 ngày");
+        Check(mid.RequiredPerDay == 8_571_429m, "UC40 cần mỗi ngày = 180tr / 21 ngày còn lại (làm tròn lên)");
+        var ended = RevenueTargetService.Calculate(t, 250_000_000, new DateOnly(2026, 12, 1));
+        Check(ended.State == TargetMonthState.Ended && ended.StatusText == "Không đạt" && ended.RequiredPerDay == 0, "UC40 tháng đã qua thiếu mục tiêu = Không đạt");
+        var future = RevenueTargetService.Calculate(t, 0, new DateOnly(2026, 10, 31));
+        Check(future.State == TargetMonthState.Future && future.StatusText == "Chưa bắt đầu", "UC40 tháng chưa tới = Chưa bắt đầu");
+        Check(RevenueTargetService.GetState(2026, 12, new DateOnly(2027, 1, 5)) == TargetMonthState.Ended, "UC40 so tháng qua năm (12/2026 < 01/2027)");
+    }
 
     Console.WriteLine($"{passed} integration checks passed; fixtures rolled back.");
 }

@@ -3,6 +3,7 @@
     ViewData["Title"] = "Báo cáo doanh thu";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 
+    var showTargets = Model.GroupBy == "month";
     string FormatMethodLabel(string method) => method switch
     {
         "Cash" => "Tiền mặt",
@@ -92,6 +93,14 @@ else
         </div>
     }
 
+    @* TV5: biểu đồ doanh thu theo kỳ (Chart.js), nhóm theo tháng thì kèm đường mục tiêu *@
+    <div class="data-card mb-4">
+        <div class="data-card-header">
+            <span class="data-card-title"><i class="bi bi-bar-chart-line me-1 text-primary"></i> Biểu đồ doanh thu</span>
+        </div>
+        <div class="p-3" style="height:300px"><canvas id="revenueChart"></canvas></div>
+    </div>
+
     <div class="row g-4">
         <div class="col-lg-7">
             <div class="data-card h-100">
@@ -107,6 +116,11 @@ else
                                 <th>Kỳ</th>
                                 <th class="text-end">Doanh thu</th>
                                 <th class="text-center">Số giao dịch</th>
+                                @if (showTargets)
+                                {
+                                    <th class="text-end">Mục tiêu</th>
+                                    <th class="text-end">% đạt</th>
+                                }
                             </tr>
                         </thead>
                         <tbody>
@@ -118,6 +132,20 @@ else
                                         @row.Revenue.ToString("N0") VND
                                     </td>
                                     <td class="text-center">@row.PaymentCount</td>
+                                    @if (showTargets)
+                                    {
+                                        if (Model.MonthTargets.TryGetValue(row.Period, out var target))
+                                        {
+                                            var pct = Math.Round(row.Revenue / target * 100, 1);
+                                            <td class="text-end">@target.ToString("N0")</td>
+                                            <td class="text-end fw-semibold @(pct >= 100 ? "text-success" : "text-danger")">@pct%</td>
+                                        }
+                                        else
+                                        {
+                                            <td class="text-end text-muted">—</td>
+                                            <td></td>
+                                        }
+                                    }
                                 </tr>
                             }
                         </tbody>
@@ -163,4 +191,31 @@ else
             </div>
         </div>
     </div>
+}
+
+@section Scripts {
+    @if (ViewData.ModelState.IsValid)
+    {
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+        <script>
+            (function () {
+                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Periods.Select(p => p.Period)));
+                const revenue = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Periods.Select(p => p.Revenue)));
+                const targets = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Periods.Select(p => Model.MonthTargets.TryGetValue(p.Period, out var t) ? (decimal?)t : null)));
+                const datasets = [{ type: 'bar', label: 'Doanh thu (VND)', data: revenue, backgroundColor: '#2563eb' }];
+                if (targets.some(t => t !== null))
+                    datasets.push({ type: 'line', label: 'Mục tiêu (VND)', data: targets, borderColor: '#dc2626', borderDash: [6, 4], pointRadius: 4, spanGaps: false });
+                const el = document.getElementById('revenueChart');
+                if (!el || typeof Chart === 'undefined') return;
+                new Chart(el, {
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString('vi-VN') } } },
+                        plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.parsed.y ?? 0).toLocaleString('vi-VN') } } }
+                    }
+                });
+            })();
+        </script>
+    }
 }

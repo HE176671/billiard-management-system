@@ -32,8 +32,6 @@ public partial class CheckoutService
                 return new(false, false, false, "Yêu cầu QR đã ngừng sử dụng. Tải lại trạng thái hóa đơn.", ReferenceCode: reference);
             if (cashReceived < intent.ExpectedAmount)
                 return new(false, false, true, "Tiền khách đưa chưa đủ. Yêu cầu QR vẫn được giữ nguyên.", intent.InvoiceId, intent.ExpectedAmount, ReferenceCode: reference);
-            if (!await _db.WorkShifts.AnyAsync(s => s.StaffId == actorId && s.Status == WorkShift.StatusActive, ct))
-                return new(false, false, true, "Bạn cần mở ca trước khi ghi nhận tiền mặt.", intent.InvoiceId, intent.ExpectedAmount, ReferenceCode: reference);
 
             var draft = await _db.CheckoutDrafts.SingleOrDefaultAsync(d => d.ReferenceCode == reference, ct);
             if (draft == null)

@@ -1,0 +1,95 @@
+@model Bms.Web.Models.RevenueTargetFormViewModel
+@using Bms.Web.Services
+@{
+    ViewData["Title"] = Model.IsEdit ? "Sửa mục tiêu doanh thu" : "Đặt mục tiêu doanh thu";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+    var today = VnTime.Today;
+    var isCurrent = Model.State == TargetMonthState.Current;
+}
+
+<div class="d-flex align-items-center gap-2 mb-4">
+    <a asp-action="Index" class="btn-sm-icon" title="Quay lại"><i class="bi bi-arrow-left"></i></a>
+    <h5 class="mb-0">@ViewData["Title"]</h5>
+</div>
+
+<div class="form-card" style="max-width:720px">
+    <form asp-action="@(Model.IsEdit ? "Edit" : "Create")" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+
+        @if (ViewData.ModelState.ContainsKey(string.Empty) && ViewData.ModelState[string.Empty]!.Errors.Any())
+        {
+            <div class="alert alert-danger rounded-3 mb-3" style="font-size:0.875rem">
+                @foreach (var err in ViewData.ModelState[string.Empty]!.Errors)
+                { <div><i class="bi bi-exclamation-circle me-1"></i>@err.ErrorMessage</div> }
+            </div>
+        }
+
+        @if (Model.IsEdit)
+        {
+            <div class="alert alert-light border mb-3" style="font-size:0.875rem">
+                Tháng <strong>@Model.Month?.ToString("00")/@Model.Year</strong> ·
+                mục tiêu hiện tại <strong>@Model.OldAmount?.ToString("N0") ₫</strong>
+                @if (Model.State != TargetMonthState.Future)
+                {
+                    <span> · đã thu <strong>@Model.ActualRevenue?.ToString("N0") ₫</strong></span>
+                }
+            </div>
+            <input type="hidden" asp-for="Year" />
+            <input type="hidden" asp-for="Month" />
+        }
+
+        <div class="row g-3">
+            @if (!Model.IsEdit)
+            {
+                <div class="col-md-6">
+                    <label asp-for="Month" class="form-label"></label>
+                    <select asp-for="Month" class="form-select">
+                        @for (int m = 1; m <= 12; m++)
+                        {
+                            <option value="@m">Tháng @m</option>
+                        }
+                    </select>
+                    <span asp-validation-for="Month" class="field-error"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Year" class="form-label"></label>
+                    <select asp-for="Year" class="form-select">
+                        <option value="@today.Year">@today.Year</option>
+                        <option value="@(today.Year + 1)">@(today.Year + 1)</option>
+                    </select>
+                    <div class="form-text">Chỉ tháng hiện tại đến tối đa 12 tháng tới.</div>
+                    <span asp-validation-for="Year" class="field-error"></span>
+                </div>
+            }
+            <div class="col-md-6">
+                <label asp-for="TargetAmount" class="form-label"></label>
+                <input asp-for="TargetAmount" type="number" min="1000000" max="100000000000" step="1000" class="form-control" placeholder="150000000" />
+                <div class="form-text">Từ 1 triệu đến 100 tỷ, làm tròn đến nghìn đồng.</div>
+                <span asp-validation-for="TargetAmount" class="field-error"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="Note" class="form-label"></label>
+                <input asp-for="Note" class="form-control" maxlength="300" placeholder="Ví dụ: tháng có giải đấu cuối tuần" />
+                <span asp-validation-for="Note" class="field-error"></span>
+            </div>
+            @if (isCurrent)
+            {
+                <div class="col-12">
+                    <label asp-for="Reason" class="form-label"></label>
+                    <textarea asp-for="Reason" class="form-control" rows="2" maxlength="300"
+                              placeholder="Bắt buộc nếu đổi số mục tiêu của tháng đang chạy (ít nhất 10 ký tự)"></textarea>
+                    <span asp-validation-for="Reason" class="field-error"></span>
+                </div>
+            }
+            <div class="col-12 d-flex gap-2 pt-2">
+                <button type="submit" class="btn-primary-bms"><i class="bi bi-check-lg"></i> Lưu</button>
+                <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

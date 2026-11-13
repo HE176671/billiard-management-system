@@ -83,6 +83,7 @@ builder.Services.AddScoped<IShiftService, ShiftService>();
 // TV5: nhat ky thao tac nhay cam dung chung
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<IRevenueTargetService, RevenueTargetService>();
 // TV5: email SMTP (API-02) và chu kỳ cuối ngày (JOB-01, JOB-02)
 builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<IDailyCycleService, DailyCycleService>();

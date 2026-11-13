@@ -21,6 +21,7 @@ public static class AuditActions
     public const string PointAdjust        = "PointAdjust";
     public const string TierChange         = "TierChange";
     public const string AccountChange      = "AccountChange";
+    public const string RevenueTargetChange = "RevenueTargetChange";
 
     /// <summary>Tên hiển thị tiếng Việt cho bộ lọc và bảng.</summary>
     public static readonly IReadOnlyDictionary<string, string> Labels = new Dictionary<string, string>
@@ -38,7 +39,8 @@ public static class AuditActions
         [BillCancel]         = "Hủy hóa đơn",
         [PointAdjust]        = "Điều chỉnh điểm",
         [TierChange]         = "Thay đổi hạng",
-        [AccountChange]      = "Thay đổi tài khoản"
+        [AccountChange]      = "Thay đổi tài khoản",
+        [RevenueTargetChange] = "Mục tiêu doanh thu"
     };
 
     public static string Label(string action) => Labels.TryGetValue(action, out var l) ? l : action;
