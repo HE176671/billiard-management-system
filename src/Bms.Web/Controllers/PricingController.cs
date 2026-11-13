@@ -30,9 +30,18 @@ public class PricingController : Controller
 
     #region Danh sach bang gia tong hop (Ban + Gay cho thue + Combo gio choi)
 
-    // GET /Pricing?editCueId=&editComboId=&editTableId=
-    public async Task<IActionResult> Index(int? editCueId = null, int? editComboId = null, int? editTableId = null)
+    // GET /Pricing?editCueId=&editComboId=&editTableId=&tab=
+    public async Task<IActionResult> Index(int? editCueId = null, int? editComboId = null, int? editTableId = null, string? tab = null)
     {
+        var normalizedTab = tab?.Trim().ToLowerInvariant();
+        var activeTab = normalizedTab is "tables" or "combos" or "cues"
+            ? normalizedTab
+            : editComboId.HasValue
+                ? "combos"
+                : editCueId.HasValue
+                    ? "cues"
+                    : "tables";
+
         var configs = await _context.PricingConfigs
             .Include(p => p.TableType)
             .OrderBy(p => p.TableType!.Name)
@@ -44,6 +53,7 @@ public class PricingController : Controller
 
         var vm = new PricingListViewModel
         {
+            ActiveTab = activeTab,
             TableTypes = tableTypes,
             TableTypeRates = tableTypeRates,
             Configs = configs.Select(p => new PricingRowViewModel
@@ -217,7 +227,7 @@ public class PricingController : Controller
         if (!ModelState.IsValid || string.IsNullOrEmpty(name) || price < 0 || stockQuantity < 0)
         {
             TempData["Error"] = "Tên gậy cho thuê không được trống, giá thuê/lượt và số lượng phải là số từ 0 trở lên (không được nhập số âm hoặc ký tự đặc biệt).";
-            return RedirectToAction(nameof(Index), new { editCueId = id > 0 ? (int?)id : null });
+            return RedirectToAction(nameof(Index), new { tab = "cues", editCueId = id > 0 ? (int?)id : null });
         }
 
         var cueCategory = await _context.ProductCategories
@@ -232,7 +242,7 @@ public class PricingController : Controller
         if (await _context.Products.AnyAsync(p => p.Name == name && p.Id != id))
         {
             TempData["Error"] = $"Tên dịch vụ/gậy '{name}' đã tồn tại trong danh mục.";
-            return RedirectToAction(nameof(Index), new { editCueId = id > 0 ? (int?)id : null });
+            return RedirectToAction(nameof(Index), new { tab = "cues", editCueId = id > 0 ? (int?)id : null });
         }
 
         if (id == 0)
@@ -260,7 +270,7 @@ public class PricingController : Controller
         }
 
         await _context.SaveChangesAsync();
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Index), new { tab = "cues" });
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -276,7 +286,7 @@ public class PricingController : Controller
             ? $"Đã MỞ dịch vụ cho thuê \"{cue.Name}\"."
             : $"Đã TẠM NGƯNG cho thuê \"{cue.Name}\".";
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Index), new { tab = "cues" });
     }
 
     #endregion
@@ -291,13 +301,13 @@ public class PricingController : Controller
         if (string.IsNullOrEmpty(name) || playtimeHours <= 0 || price < 0)
         {
             TempData["Error"] = "Tên Combo không được trống, số giờ chơi phải > 0 và giá Combo >= 0.";
-            return RedirectToAction(nameof(Index), new { editComboId = id > 0 ? (int?)id : null });
+            return RedirectToAction(nameof(Index), new { tab = "combos", editComboId = id > 0 ? (int?)id : null });
         }
 
         if (await _context.Combos.AnyAsync(c => c.Name == name && c.Id != id))
         {
             TempData["Error"] = $"Gói khuyến mãi Combo '{name}' đã tồn tại.";
-            return RedirectToAction(nameof(Index), new { editComboId = id > 0 ? (int?)id : null });
+            return RedirectToAction(nameof(Index), new { tab = "combos", editComboId = id > 0 ? (int?)id : null });
         }
 
         Combo combo;
@@ -349,7 +359,7 @@ public class PricingController : Controller
             ? $"Đã tạo khuyến mãi \"{name}\" ({playtimeHours:0.#} giờ chơi — {price:N0} VND)."
             : $"Đã cập nhật khuyến mãi \"{name}\".";
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Index), new { tab = "combos" });
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -365,7 +375,7 @@ public class PricingController : Controller
             ? $"Đã MỞ áp dụng gói khuyến mãi \"{combo.Name}\"."
             : $"Đã ĐÓNG (tạm ngưng) gói khuyến mãi \"{combo.Name}\".";
 
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Index), new { tab = "combos" });
     }
 
     #endregion

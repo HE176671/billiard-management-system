@@ -5,6 +5,7 @@
     var editCue = Model.EditCue;
     var editCombo = Model.EditCombo;
     var editTable = Model.EditTable;
+    var activeTab = Model.ActiveTab;
     int mgrTotalTables = Model.Tables.Count;
     int mgrInUseTables = Model.Tables.Count(t => t.Status == "InUse" && !t.IsComboOverdue);
     int mgrOverdueTables = Model.Tables.Count(t => t.IsComboOverdue);
@@ -88,6 +89,44 @@
     </div>
 }
 
+<ul class="nav nav-tabs mb-3" id="pricingTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(activeTab == "tables" ? "active" : "")"
+                id="tab-tables-btn"
+                data-bs-toggle="tab"
+                data-bs-target="#tabTables"
+                data-tab-key="tables"
+                type="button" role="tab" aria-controls="tabTables"
+                aria-selected="@(activeTab == "tables" ? "true" : "false")">
+            Quản lý bàn &amp; Giá giờ
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(activeTab == "combos" ? "active" : "")"
+                id="tab-combos-btn"
+                data-bs-toggle="tab"
+                data-bs-target="#tabCombos"
+                data-tab-key="combos"
+                type="button" role="tab" aria-controls="tabCombos"
+                aria-selected="@(activeTab == "combos" ? "true" : "false")">
+            Gói Combo giờ chơi
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(activeTab == "cues" ? "active" : "")"
+                id="tab-cues-btn"
+                data-bs-toggle="tab"
+                data-bs-target="#tabCues"
+                data-tab-key="cues"
+                type="button" role="tab" aria-controls="tabCues"
+                aria-selected="@(activeTab == "cues" ? "true" : "false")">
+            Gậy cho thuê
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="pricingTabsContent">
+<div class="tab-pane fade @(activeTab == "tables" ? "show active" : "")" id="tabTables" role="tabpanel" aria-labelledby="tab-tables-btn">
 <!-- 1. QUẢN LÝ BÀN & TRẠNG THÁI BÀN -->
 <div class="row g-3 mb-4">
     <div class="col-lg-4">
@@ -194,12 +233,12 @@
                 <table class="table table-hover mb-0 align-middle">
                     <thead class="sticky-top">
                         <tr>
-                            <th>Mã bàn</th>
-                            <th>Loại bàn</th>
-                            <th class="text-center">Tầng</th>
-                            <th class="text-end">Giá giờ chuẩn</th>
-                            <th>Trạng thái</th>
-                            <th class="text-end">Thao tác</th>
+                            <th class="text-nowrap">Mã bàn</th>
+                            <th class="text-nowrap">Loại bàn</th>
+                            <th class="text-center text-nowrap">Tầng</th>
+                            <th class="text-end text-nowrap">Giá giờ chuẩn</th>
+                            <th class="text-nowrap">Trạng thái</th>
+                            <th class="text-end text-nowrap">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody id="mgr-table-tbody">
@@ -213,11 +252,11 @@
                                         ? "maintenance"
                                         : "available";
                             <tr class="mgr-table-row" data-filter-state="@rowFilterState">
-                                <td class="fw-bold">@tb.TableCode</td>
-                                <td>@tb.TableTypeName</td>
-                                <td class="text-center">Tầng @tb.FloorNumber</td>
-                                <td class="text-end fw-semibold">@tb.HourlyRate.ToString("N0") VND/h</td>
-                                <td>
+                                <td class="fw-bold text-nowrap">@tb.TableCode</td>
+                                <td class="text-nowrap">@tb.TableTypeName</td>
+                                <td class="text-center text-nowrap">Tầng @tb.FloorNumber</td>
+                                <td class="text-end fw-semibold text-nowrap">@tb.HourlyRate.ToString("N0") VND/h</td>
+                                <td class="text-nowrap">
                                     @if (tb.IsComboOverdue)
                                     {
                                         <span class="badge bg-danger text-white">Đã hết giờ Combo (Tính vượt giờ)</span>
@@ -235,20 +274,22 @@
                                         <span class="badge-active">Còn trống</span>
                                     }
                                 </td>
-                                <td class="text-end">
+                                <td class="text-end text-nowrap">
                                     @if (tb.CanModifyStatus)
                                     {
-                                        <form asp-action="UpdateTableStatus" method="post" class="d-inline-flex align-items-center gap-1">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="id" value="@tb.Id" />
-                                            <select name="status" class="form-select form-select-sm py-0 px-2" style="width:auto;font-size:0.78rem;height:28px" onchange="this.form.submit()">
-                                                <option value="Available" selected="@(tb.Status == "Available")">Còn trống</option>
-                                                <option value="Maintenance" selected="@(tb.Status == "Maintenance")">Bảo trì</option>
-                                            </select>
-                                        </form>
-                                        <a asp-action="Index" asp-route-editTableId="@tb.Id" class="btn-outline-bms py-1 px-2 ms-1" style="font-size:0.75rem">
-                                            Sửa
-                                        </a>
+                                        <div class="d-inline-flex align-items-center justify-content-end gap-1 flex-nowrap">
+                                            <form asp-action="UpdateTableStatus" method="post" class="d-inline-flex align-items-center m-0">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@tb.Id" />
+                                                <select name="status" class="form-select form-select-sm py-0 ps-2" style="width:auto;font-size:0.78rem;height:28px;padding-right:1.85rem" onchange="this.form.submit()">
+                                                    <option value="Available" selected="@(tb.Status == "Available")">Còn trống</option>
+                                                    <option value="Maintenance" selected="@(tb.Status == "Maintenance")">Bảo trì</option>
+                                                </select>
+                                            </form>
+                                            <a asp-action="Index" asp-route-editTableId="@tb.Id" class="btn-outline-bms py-1 px-2 text-nowrap" style="font-size:0.75rem">
+                                                Sửa
+                                            </a>
+                                        </div>
                                     }
                                     else
                                     {
@@ -365,6 +406,9 @@
     </div>
 </div>
 
+</div>
+
+<div class="tab-pane fade @(activeTab == "combos" ? "show active" : "")" id="tabCombos" role="tabpanel" aria-labelledby="tab-combos-btn">
 <!-- 3. GÓI COMBO GIỜ CHƠI -->
 <div class="row g-3 mb-4">
     <div class="col-lg-4">
@@ -428,7 +472,7 @@
                     </button>
                     @if (editCombo != null)
                     {
-                        <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+                        <a asp-action="Index" asp-route-tab="combos" class="btn-outline-bms">Hủy</a>
                     }
                 </div>
             </form>
@@ -445,11 +489,11 @@
                     <thead>
                         <tr>
                             <th>Tên gói Combo</th>
-                            <th class="text-center">Số giờ</th>
+                            <th class="text-center text-nowrap">Số giờ</th>
                             <th>Món đi kèm</th>
-                            <th class="text-end">Giá trọn gói</th>
-                            <th>Trạng thái</th>
-                            <th class="text-end">Thao tác</th>
+                            <th class="text-end text-nowrap">Giá trọn gói</th>
+                            <th class="text-nowrap">Trạng thái</th>
+                            <th class="text-end text-nowrap">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -457,10 +501,10 @@
                         {
                             <tr>
                                 <td class="fw-bold">@c.Name</td>
-                                <td class="text-center">@c.PlaytimeHours.ToString("0.#") giờ</td>
+                                <td class="text-center text-nowrap">@c.PlaytimeHours.ToString("0.#") giờ</td>
                                 <td>@c.IncludedItemsSummary</td>
-                                <td class="text-end fw-bold text-danger">@c.Price.ToString("N0") VND</td>
-                                <td>
+                                <td class="text-end fw-bold text-danger text-nowrap">@c.Price.ToString("N0") VND</td>
+                                <td class="text-nowrap">
                                     @if (c.IsActive)
                                     {
                                         <span class="badge-active">Đang mở</span>
@@ -470,17 +514,19 @@
                                         <span class="badge-inactive">Tạm ngưng</span>
                                     }
                                 </td>
-                                <td class="text-end">
-                                    <a asp-action="Index" asp-route-editComboId="@c.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
-                                        Sửa
-                                    </a>
-                                    <form asp-action="ToggleComboStatus" method="post" class="d-inline ms-1">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="id" value="@c.Id" />
-                                        <button type="submit" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
-                                            @(c.IsActive ? "Đóng" : "Mở")
-                                        </button>
-                                    </form>
+                                <td class="text-end text-nowrap">
+                                    <div class="d-inline-flex align-items-center justify-content-end gap-1 flex-nowrap">
+                                        <a asp-action="Index" asp-route-editComboId="@c.Id" asp-route-tab="combos" class="btn-outline-bms py-1 px-2 text-nowrap" style="font-size:0.75rem">
+                                            Sửa
+                                        </a>
+                                        <form asp-action="ToggleComboStatus" method="post" class="d-inline m-0">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@c.Id" />
+                                            <button type="submit" class="btn-outline-bms py-1 px-2 text-nowrap" style="font-size:0.75rem">
+                                                @(c.IsActive ? "Đóng" : "Mở")
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                         }
@@ -495,6 +541,9 @@
     </div>
 </div>
 
+</div>
+
+<div class="tab-pane fade @(activeTab == "cues" ? "show active" : "")" id="tabCues" role="tabpanel" aria-labelledby="tab-cues-btn">
 <!-- 4. GẬY CHO THUÊ THEO LƯỢT -->
 <div class="row g-3">
     <div class="col-lg-4">
@@ -538,7 +587,7 @@
                     </button>
                     @if (editCue != null)
                     {
-                        <a asp-action="Index" class="btn-outline-bms">Hủy</a>
+                        <a asp-action="Index" asp-route-tab="cues" class="btn-outline-bms">Hủy</a>
                     }
                 </div>
             </form>
@@ -555,10 +604,10 @@
                     <thead>
                         <tr>
                             <th>Tên gậy</th>
-                            <th class="text-end">Giá / lượt</th>
-                            <th class="text-center">Số lượng</th>
-                            <th>Trạng thái</th>
-                            <th class="text-end">Thao tác</th>
+                            <th class="text-end text-nowrap">Giá / lượt</th>
+                            <th class="text-center text-nowrap">Số lượng</th>
+                            <th class="text-nowrap">Trạng thái</th>
+                            <th class="text-end text-nowrap">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -566,9 +615,9 @@
                         {
                             <tr>
                                 <td class="fw-semibold">@cue.Name</td>
-                                <td class="text-end fw-bold">@cue.Price.ToString("N0") VND/lượt</td>
-                                <td class="text-center">@cue.StockQuantity cây</td>
-                                <td>
+                                <td class="text-end fw-bold text-nowrap">@cue.Price.ToString("N0") VND/lượt</td>
+                                <td class="text-center text-nowrap">@cue.StockQuantity cây</td>
+                                <td class="text-nowrap">
                                     @if (cue.IsActive)
                                     {
                                         <span class="badge-active">Đang cho thuê</span>
@@ -578,17 +627,19 @@
                                         <span class="badge-inactive">Tạm ngưng</span>
                                     }
                                 </td>
-                                <td class="text-end">
-                                    <a asp-action="Index" asp-route-editCueId="@cue.Id" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
-                                        Sửa
-                                    </a>
-                                    <form asp-action="ToggleCueStatus" method="post" class="d-inline ms-1">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="id" value="@cue.Id" />
-                                        <button type="submit" class="btn-outline-bms py-1 px-2" style="font-size:0.75rem">
-                                            @(cue.IsActive ? "Đóng" : "Mở")
-                                        </button>
-                                    </form>
+                                <td class="text-end text-nowrap">
+                                    <div class="d-inline-flex align-items-center justify-content-end gap-1 flex-nowrap">
+                                        <a asp-action="Index" asp-route-editCueId="@cue.Id" asp-route-tab="cues" class="btn-outline-bms py-1 px-2 text-nowrap" style="font-size:0.75rem">
+                                            Sửa
+                                        </a>
+                                        <form asp-action="ToggleCueStatus" method="post" class="d-inline m-0">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@cue.Id" />
+                                            <button type="submit" class="btn-outline-bms py-1 px-2 text-nowrap" style="font-size:0.75rem">
+                                                @(cue.IsActive ? "Đóng" : "Mở")
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                         }
@@ -602,10 +653,22 @@
         </div>
     </div>
 </div>
+</div>
+</div>
 
 @section Scripts {
     <script>
         (function () {
+            document.querySelectorAll('#pricingTabs button[data-bs-toggle="tab"]').forEach(btn => {
+                btn.addEventListener('shown.bs.tab', () => {
+                    const tabKey = btn.getAttribute('data-tab-key');
+                    if (!tabKey) return;
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('tab', tabKey);
+                    window.history.replaceState({}, '', url);
+                });
+            });
+
             const radios = document.querySelectorAll('input[name="mgrTableQuickFilter"]');
             const rows = document.querySelectorAll('#mgr-table-tbody .mgr-table-row');
             const emptyRow = document.getElementById('mgr-table-filter-empty');
