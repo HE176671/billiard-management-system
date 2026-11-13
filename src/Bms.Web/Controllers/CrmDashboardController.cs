@@ -24,6 +24,9 @@ public class CrmDashboardController : Controller
         _campaignService = campaignService;
     }
 
+    /// <summary>TV5: màu hạng theo thứ tự (thấp → cao), dùng chung cho Dashboard và Thống kê hội viên.</summary>
+    public static readonly string[] TierPalette = { "#b45309", "#94a3b8", "#f59e0b", "#0ea5e9", "#7c3aed", "#db2777" };
+
     /// <summary>TV5: nhóm hiển thị riêng trên màn thống kê — có tài khoản nhưng chưa thanh toán lần nào.</summary>
     public const string NeverVisitedKey = "NeverVisited";
 
@@ -88,7 +91,7 @@ public class CrmDashboardController : Controller
         // Phân bố hạng
         // TV5: màu theo thứ tự hạng (thấp → cao); khách chưa gán TierId tính vào hạng thấp nhất,
         // để tổng các cột luôn bằng tổng số hội viên.
-        var palette = new[] { "#b45309", "#94a3b8", "#f59e0b", "#0ea5e9", "#7c3aed", "#db2777" };
+        var palette = TierPalette;
         var tierPoints = tiers.Select((t, i) => new TierDistributionPoint
         {
             TierName = t.TierName,

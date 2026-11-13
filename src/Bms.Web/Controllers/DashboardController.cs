@@ -73,35 +73,22 @@ public class DashboardController : Controller
 
         var tiers = await _context.MembershipTiers
             .AsNoTracking()
-            .OrderBy(t => t.SpendThreshold)
+            .OrderBy(t => t.SpendThreshold).ThenBy(t => t.SortOrder)
             .ToListAsync();
 
-        var tierCounts = await customerQuery
-            .Where(u => u.TierId != null)
-            .GroupBy(u => u.TierId!.Value)
-            .Select(g => new { TierId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.TierId, x => x.Count);
-
-        var tierColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        // TV5: khách chưa gán TierId tính vào hạng thấp nhất (giống TierEvaluationService),
+        // để tổng các phần bằng tổng số hội viên và khớp màn Thống kê hội viên.
+        var tierIdOfCustomers = await customerQuery.Select(u => u.TierId).ToListAsync();
+        for (int i = 0; i < tiers.Count; i++)
         {
-            ["Member"] = "#3b82f6",
-            ["Đồng"] = "#3b82f6",
-            ["Silver"] = "#94a3b8",
-            ["Bạc"] = "#94a3b8",
-            ["Gold"] = "#f59e0b",
-            ["Vàng"] = "#f59e0b",
-            ["Kim Cương"] = "#8b5cf6"
-        };
-
-        foreach (var tier in tiers)
-        {
-            tierCounts.TryGetValue(tier.Id, out int count);
-            string color = tierColors.TryGetValue(tier.TierName, out var c) ? c : "#6b7280";
+            var tier = tiers[i];
+            int count = tierIdOfCustomers.Count(id => id == tier.Id
+                || (i == 0 && (id == null || !tiers.Any(t => t.Id == id))));
             vm.TierDistribution.Add(new TierDistributionPoint
             {
                 TierName = tier.TierName,
                 Count = count,
-                ColorHex = color
+                ColorHex = CrmDashboardController.TierPalette[i % CrmDashboardController.TierPalette.Length]
             });
         }
 

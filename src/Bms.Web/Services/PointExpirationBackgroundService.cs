@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -42,9 +43,13 @@ public class LoyaltyDailyJob : BackgroundService
             return;
         }
 
+        bool isStartupCatchUp = true;
         while (!stoppingToken.IsCancellationRequested)
         {
-            await RunSafeCycleAsync(stoppingToken);
+            // Lần chạy bù lúc khởi động: bỏ qua nếu hôm nay đã chạy rồi, tránh nhật ký bị lặp
+            // mỗi lần khởi động lại web (dữ liệu vốn không đổi vì các bước đều chống chạy trùng).
+            await RunSafeCycleAsync(stoppingToken, skipIfAlreadyRanToday: isStartupCatchUp);
+            isStartupCatchUp = false;
 
             // Chờ tới 00:05 giờ Việt Nam tiếp theo
             var nowVn = DateTime.UtcNow.ToVn();
@@ -69,11 +74,21 @@ public class LoyaltyDailyJob : BackgroundService
         _logger.LogInformation("LoyaltyDailyJob đang dừng.");
     }
 
-    private async Task RunSafeCycleAsync(CancellationToken ct)
+    private async Task RunSafeCycleAsync(CancellationToken ct, bool skipIfAlreadyRanToday = false)
     {
         try
         {
             using var scope = _scopeFactory.CreateScope();
+            if (skipIfAlreadyRanToday)
+            {
+                var db = scope.ServiceProvider.GetRequiredService<Bms.Web.Data.ApplicationDbContext>();
+                var todayKey = VnTime.Today.ToString("yyyy-MM-dd");
+                if (await db.AuditLogs.AnyAsync(a => a.ActionType == AuditActions.TierReviewRun && a.EntityId == todayKey, ct))
+                {
+                    _logger.LogInformation("LoyaltyDailyJob: hôm nay ({Day}) đã chạy, bỏ qua lần chạy bù khi khởi động.", todayKey);
+                    return;
+                }
+            }
             var cycle = scope.ServiceProvider.GetRequiredService<IDailyCycleService>();
             var result = await cycle.RunAsync(actorId: null, manual: false, ct);
             var t = result.Summary.TierSummary;

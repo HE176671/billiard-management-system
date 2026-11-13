@@ -254,6 +254,17 @@ public class OperationsReportController : Controller
 
         model.ActiveSessionCount = sessionsInWindow.Count(s => s.Status == "Active");
 
+        // Cảnh báo phiên đang mở quá lâu (nghi quên đóng bàn): số giờ của phiên này
+        // được tính tới hiện tại nên có thể làm tỷ lệ lấp đầy cao bất thường.
+        var tableCodeById = tables.ToDictionary(t => t.Id, t => t.TableCode);
+        model.LongOpenSessions = sessionsInWindow
+            .Where(s => s.Status == "Active" && s.EndAtUtc == null
+                        && (nowUtc - s.StartAtUtc).TotalHours > OperationsReportViewModel.LongOpenHours)
+            .OrderBy(s => s.StartAtUtc)
+            .Select(s => new LongOpenSessionRow(s.Id, tableCodeById.GetValueOrDefault(s.TableId, "?"), s.StartAtUtc,
+                Math.Round((decimal)(nowUtc - s.StartAtUtc).TotalHours, 1)))
+            .ToList();
+
         // Các phiên đã kết thúc trong khoảng [startUtc, endUtc)
         var closedSessions = sessionsInWindow
             .Where(s => s.Status == "Closed" && s.EndAtUtc.HasValue && s.EndAtUtc.Value >= startUtc && s.EndAtUtc.Value < endUtc)

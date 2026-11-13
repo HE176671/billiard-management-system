@@ -57,9 +57,14 @@ public class OperationsReportViewModel
     public List<HeatmapDayRow> HeatmapRows { get; set; } = new();
     public string PeakSlotLabel { get; set; } = "—";
     public decimal PeakSlotPercent { get; set; }
+
+    /// <summary>Phiên đang mở quá <see cref="LongOpenHours"/> giờ — nghi quên đóng bàn, làm sai tỷ lệ lấp đầy.</summary>
+    public const int LongOpenHours = 12;
+    public List<LongOpenSessionRow> LongOpenSessions { get; set; } = new();
 }
 
 public record TableTypeFilterOption(int Id, string Name);
+public record LongOpenSessionRow(int SessionId, string TableCode, DateTime StartAtUtc, decimal OpenHours);
 
 public record TableTypeOccupancyRow(
     int TableTypeId,
