@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Bms.Web.Data;
+using Bms.Web.Data.Entities;
 using Bms.Web.Models;
 using Bms.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -677,6 +678,7 @@ public class OrderController : Controller
     private async Task<List<CategoryMenuViewModel>> GetActiveMenuCategoriesAsync()
     {
         return await _db.ProductCategories
+            .Where(c => c.Name != ProductCategory.RentalCueCategoryName && !c.Name.Contains("Gậy"))
             .Include(c => c.Products)
             .OrderBy(c => c.Name)
             .Select(c => new CategoryMenuViewModel
