@@ -1,0 +1,24 @@
+{
+  "repoId": "588169a4-3d32-41f7-a008-212c8bb0a657",
+  "repoName": "billiard-management-system",
+  "server": "https://api.grapuco.com",
+  "language": "csharp",
+  "features": {
+    "embeddings": true,
+    "dataFlowAnalysis": true
+  },
+  "ignore": [
+    "node_modules",
+    "dist",
+    ".next",
+    ".git",
+    ".grapuco",
+    "__pycache__",
+    "vendor",
+    "target",
+    "build"
+  ],
+  "workspaceId": "ec57f2e0-ea41-4e21-8516-ca0474cc4c62",
+  "workspaceName": "repoOfSWP391",
+  "lastPush": "2026-11-09T13:18:44.533Z"
+}

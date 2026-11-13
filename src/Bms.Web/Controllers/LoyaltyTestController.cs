@@ -575,11 +575,11 @@ public class LoyaltyTestController : Controller
                         s.EndAtUtc AS EndAtUtc,
                         s.HourlyRateSnapshot AS HourlyRateSnapshot,
                         CASE
+                            WHEN s.Status = 'Closed' AND s.PlaytimeAmount IS NOT NULL THEN s.PlaytimeAmount
                             WHEN OBJECT_ID(N'dbo.fn_CalcPlaytimeAmount', N'FN') IS NOT NULL
                                  AND dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) IS NOT NULL
                             THEN dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
-                            WHEN s.Status = 'Closed' AND s.PlaytimeAmount IS NOT NULL THEN s.PlaytimeAmount
-                            WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
+                            WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount >= 0 THEN s.PlaytimeAmount
                             ELSE CAST(ROUND(
                                 (CASE WHEN DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) < 1
                                       THEN 1

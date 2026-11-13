@@ -403,7 +403,7 @@
                 }
             </div>
 
-            <div class="py-1" style="font-size:0.88rem">
+            <div id="rcpPlayRow" class="py-1 @(Model.PlaytimeAmount <= 0 ? "d-none" : "")" style="font-size:0.88rem">
                 <div class="d-flex justify-content-between">
                     <span>
                         Tiền giờ chơi bàn@(Model.SelectedSession != null ? $" (Bàn {Model.SelectedSession.TableCode} · {Model.SelectedSession.PlayDurationText})" : ""):
@@ -863,7 +863,18 @@
                     }
 
                     document.getElementById('rcpRef').textContent = refInput.value;
-                    document.getElementById('rcpPlay').textContent = fmtMoney(playInput.value);
+                    const rcpPlayRow = document.getElementById('rcpPlayRow');
+                    if (rcpPlayRow) {
+                        const playVal = parseFloat(playInput.value) || 0;
+                        if (playVal <= 0) {
+                            rcpPlayRow.classList.add('d-none');
+                        } else {
+                            rcpPlayRow.classList.remove('d-none');
+                        }
+                    }
+                    if (document.getElementById('rcpPlay')) {
+                        document.getElementById('rcpPlay').textContent = fmtMoney(playInput.value);
+                    }
                     document.getElementById('rcpFnb').textContent = fmtMoney(fnbInput.value);
                     document.getElementById('rcpTierName').textContent = d.tierName;
                     document.getElementById('rcpTierPct').textContent = d.tierDiscountPercent;

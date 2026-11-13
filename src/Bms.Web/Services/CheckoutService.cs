@@ -360,10 +360,11 @@ public partial class CheckoutService : ICheckoutService
             var rows = await _db.Database.SqlQuery<CheckoutAmountsRow>($"""
                 SELECT TOP 1
                     s.Id AS SessionId,
-                    CASE WHEN OBJECT_ID(N'dbo.fn_CalcPlaytimeAmount', N'FN') IS NOT NULL
+                    CASE WHEN s.Status = 'Closed' AND s.PlaytimeAmount IS NOT NULL THEN s.PlaytimeAmount
+                         WHEN OBJECT_ID(N'dbo.fn_CalcPlaytimeAmount', N'FN') IS NOT NULL
                               AND dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) IS NOT NULL
                          THEN dbo.fn_CalcPlaytimeAmount(s.Id, ISNULL(s.EndAtUtc, SYSUTCDATETIME()))
-                         WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount > 0 THEN s.PlaytimeAmount
+                         WHEN s.PlaytimeAmount IS NOT NULL AND s.PlaytimeAmount >= 0 THEN s.PlaytimeAmount
                          ELSE CAST(ROUND((CASE WHEN DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) < 1
                                               THEN 1 ELSE DATEDIFF(MINUTE, s.StartAtUtc, ISNULL(s.EndAtUtc, SYSUTCDATETIME())) END / 60.0)
                                               * s.HourlyRateSnapshot, -3) AS decimal(18,2)) END AS PlaytimeAmount,
