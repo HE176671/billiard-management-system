@@ -4,7 +4,7 @@ Nhánh: `hung-wf5`. Cập nhật 09/11/2026.
 
 WF5 bao gồm các chức năng quản trị hệ thống, cấu hình giá, phân tích vận hành, nhật ký kiểm toán và tự động hóa chu kỳ hội viên:
 
-> **Admin** tạo tài khoản & phân quyền → **Manager** cấu hình loại bàn & giá giờ → **Staff** vận hành trực tiếp trên sơ đồ bàn (realtime SignalR) → **Manager** theo dõi **Báo cáo doanh thu**, **Báo cáo vận hành** (tỷ lệ lấp đầy, heatmap giờ cao điểm, hiệu suất từng bàn, top món F&B) và **Nhật ký hệ thống** → **00:05 job cuối ngày**: phát voucher sinh nhật, xét giữ hạng 12 tháng / ân hạn 30 ngày / hạ tối đa 1 bậc, gửi email tự động.
+> **Admin** tạo tài khoản & phân quyền → **Staff** vận hành trực tiếp trên sơ đồ bàn (realtime SignalR) → **Manager** theo dõi **Báo cáo doanh thu**, **Báo cáo vận hành** (tỷ lệ lấp đầy, heatmap giờ cao điểm, hiệu suất từng bàn, top món F&B) và **Nhật ký hệ thống** → **00:05 job cuối ngày**: phát voucher sinh nhật, xét giữ hạng 12 tháng / ân hạn 30 ngày / hạ tối đa 1 bậc, gửi email tự động.
 
 ## Use case và màn hình
 
@@ -13,7 +13,6 @@ WF5 bao gồm các chức năng quản trị hệ thống, cấu hình giá, ph�
 | UC01 | Đăng nhập / đăng xuất | Admin, Manager, Staff | `/Account/Login` |
 | UC02 | Đổi mật khẩu | Admin, Manager, Staff | `/Profile/ChangePassword` |
 | UC03 | Tài khoản & phân quyền: tạo, sửa, khóa, đặt lại mật khẩu, đổi vai trò (Admin/Manager/Staff) | **Admin** | `/Employee` |
-| UC35 | Thêm / đổi tên loại bàn, sửa giá giờ (1 giá/loại), ghi nhật ký | Manager | `/Pricing` |
 | UC36 | Kiểm kê kho (điều chỉnh tồn, bắt buộc lý do, ghi nhật ký) | Manager | `/Inventory` |
 | UC37 | Báo cáo doanh thu theo **ngày / tháng**, biểu đồ, so sánh mục tiêu tháng, xuất CSV | Manager | `/Revenue` |
 | UC38 | Nhật ký hệ thống (lọc ngày, thao tác, người thực hiện, từ khóa) | Manager | `/AuditLog` |
@@ -62,7 +61,7 @@ Công thức (`RevenueTargetService.Calculate`, có smoke test): `% đạt = th�
 
 ## Ghi nhật ký tự động (`AuditLogs`)
 
-Tạo/khóa/đổi vai trò/đặt lại mật khẩu tài khoản, thêm/sửa/xóa mục tiêu doanh thu, đổi giá giờ, thêm/đổi tên loại bàn, kiểm kê kho, hủy món/hóa đơn, duyệt điều chỉnh điểm, đổi cấu hình hạng, và mỗi lần chạy chu kỳ xét hạng cuối ngày đều được ghi vào bảng `AuditLogs` kèm người thực hiện, thời điểm UTC+7, giá trị cũ/mới và lý do.
+Tạo/khóa/đổi vai trò/đặt lại mật khẩu tài khoản, thêm/sửa/xóa mục tiêu doanh thu (phần TV5); các module khác gọi cùng dịch vụ này khi đổi giá giờ, thêm/đổi tên loại bàn, kiểm kê kho, hủy món/hóa đơn, duyệt điều chỉnh điểm, đổi cấu hình hạng, và mỗi lần chạy chu kỳ xét hạng cuối ngày đều được ghi vào bảng `AuditLogs` kèm người thực hiện, thời điểm UTC+7, giá trị cũ/mới và lý do.
 
 ## Email (SMTP)
 
@@ -79,7 +78,7 @@ dotnet user-secrets set "Smtp:FromAddress" "<gmail>" --project src/Bms.Web
 
 1. **`admin.demo`**: vào **Tài khoản & phân quyền** (`/Employee`), tạo nhân viên mới, đổi vai trò Staff ↔ Manager, thử tự khóa chính mình → hệ thống chặn.
 2. **`manager.demo`**:
-   - Vào **Bảng giá & Giờ chơi** (`/Pricing`) → thêm loại bàn hoặc đổi giá giờ → kiểm tra **Nhật ký hệ thống** (`/AuditLog`) thấy bản ghi vừa lưu.
+   - Vào **Nhật ký hệ thống** (`/AuditLog`) → lọc theo thao tác "Mục tiêu doanh thu" hoặc "Thay đổi tài khoản" để thấy các bản ghi vừa tạo. (Bảng giá do thành viên khác phụ trách, chỉ gọi `IAuditLogService` của TV5 để ghi nhật ký.)
    - Vào **Mục tiêu doanh thu** (`/RevenueTarget`) → đặt mục tiêu tháng này; thử đặt tháng đã qua, số không tròn nghìn, tháng trùng → bị chặn; sửa số của tháng này không ghi lý do → bị chặn; xem Dashboard có thanh tiến độ.
    - Vào **Báo cáo doanh thu** (`/Revenue`) → lọc theo ngày/tháng, xem biểu đồ, nhóm theo tháng thấy cột % đạt mục tiêu, xuất CSV.
    - Vào **Báo cáo vận hành** (`/OperationsReport`) → xem KPI tỷ lệ lấp đầy, bảng Heatmap giờ cao điểm theo thứ, top bàn đông/vắng khách, top món F&B, thử nhập ngày bắt đầu > ngày kết thúc để demo validation server, và bấm **CSV**.
