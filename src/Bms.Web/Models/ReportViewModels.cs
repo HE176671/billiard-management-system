@@ -13,6 +13,8 @@ public class RevenueReportViewModel
     public int InvoiceCount { get; set; }
     public List<RevenuePeriodRow> Periods { get; set; } = new();
     public List<RevenueMethodRow> Methods { get; set; } = new();
+    /// <summary>TV5 — UC40: mục tiêu theo tháng "yyyy-MM" (chỉ nạp khi nhóm theo tháng).</summary>
+    public Dictionary<string, decimal> MonthTargets { get; set; } = new();
 }
 public record RevenuePeriodRow(string Period, decimal Revenue, int PaymentCount);
 public record RevenueMethodRow(string Method, decimal Revenue, int PaymentCount);

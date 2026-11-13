@@ -40,7 +40,7 @@
                         else if (User.IsInRole("Staff"))
                         {
                             <li class="nav-item">
-                                <a class="nav-link text-dark" asp-controller="Shift" asp-action="Index">Khu vực nhân viên</a>
+                                <a class="nav-link text-dark" asp-controller="Table" asp-action="Index">Khu vực nhân viên</a>
                             </li>
                         }
                     </ul>
@@ -58,7 +58,7 @@
                                 }
                                 else if (User.IsInRole("Staff"))
                                 {
-                                    <a class="nav-link text-dark fw-medium" asp-controller="Shift" asp-action="Index">👤 @User.Identity.Name</a>
+                                    <a class="nav-link text-dark fw-medium" asp-controller="Table" asp-action="Index">👤 @User.Identity.Name</a>
                                 }
                                 else
                                 {

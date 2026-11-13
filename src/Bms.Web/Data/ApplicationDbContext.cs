@@ -24,6 +24,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BilliardTable>           BilliardTables           => Set<BilliardTable>();
     public DbSet<WorkShift>               WorkShifts               => Set<WorkShift>();
     public DbSet<AuditLog>                AuditLogs                => Set<AuditLog>();
+    public DbSet<RevenueTarget>           RevenueTargets           => Set<RevenueTarget>();
     public DbSet<PlaySession>             PlaySessions             => Set<PlaySession>();
     public DbSet<PlaySessionTableSegment> PlaySessionTableSegments => Set<PlaySessionTableSegment>();
     public DbSet<SessionCombo>            SessionCombos            => Set<SessionCombo>();
@@ -413,6 +414,21 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
             e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.CreatedAtUtc);
+        });
+
+        // TV5 — UC40 mục tiêu doanh thu tháng
+        builder.Entity<RevenueTarget>(e =>
+        {
+            e.ToTable("RevenueTargets");
+            e.Property(x => x.TargetAmount).HasColumnType("decimal(18,0)");
+            e.Property(x => x.Note).HasMaxLength(300);
+            e.Property(x => x.CreatedById).HasMaxLength(450);
+            e.Property(x => x.UpdatedById).HasMaxLength(450);
+            e.Property(x => x.CreatedAtUtc).HasColumnType("datetime2(0)");
+            e.Property(x => x.UpdatedAtUtc).HasColumnType("datetime2(0)");
+            e.HasIndex(x => new { x.Year, x.Month }).IsUnique().HasDatabaseName("UX_RevenueTargets_Year_Month");
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ApplicationUser>().WithMany().HasForeignKey(x => x.UpdatedById).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<ProductCategory>(e =>

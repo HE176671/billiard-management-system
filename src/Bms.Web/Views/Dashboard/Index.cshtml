@@ -96,6 +96,31 @@
 </div>
 
 <!-- Biểu đồ phân tích (Chart.js) -->
+@* TV5 — UC40: tiến độ mục tiêu doanh thu tháng *@
+<div class="form-card mb-4">
+    @if (Model.MonthTarget is { } mt)
+    {
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong><i class="bi bi-bullseye me-1 text-primary"></i> Mục tiêu tháng @mt.Label: @mt.TargetAmount.ToString("N0") ₫</strong>
+            <span class="badge @(mt.StatusText == "Chậm tiến độ" ? "bg-danger" : "bg-success")">@mt.StatusText</span>
+        </div>
+        <div class="progress mb-2" style="height:12px">
+            <div class="progress-bar @(mt.PercentAchieved >= 100 ? "bg-success" : mt.PercentAchieved >= 70 ? "bg-warning" : "bg-danger")"
+                 style="width:@Math.Min(100, mt.PercentAchieved).ToString(System.Globalization.CultureInfo.InvariantCulture)%"></div>
+        </div>
+        <small class="text-muted">
+            Đã thu @mt.ActualRevenue.ToString("N0") ₫ (@mt.PercentAchieved%) · dự báo cuối tháng @mt.ForecastRevenue.ToString("N0") ₫
+            @if (!mt.Achieved) { <span> · cần @mt.RequiredPerDay.ToString("N0") ₫/ngày</span> }
+            · <a asp-controller="RevenueTarget" asp-action="Index">Chi tiết</a>
+        </small>
+    }
+    else
+    {
+        <span class="text-muted"><i class="bi bi-bullseye me-1"></i> Tháng này chưa có mục tiêu doanh thu.</span>
+        <a asp-controller="RevenueTarget" asp-action="Create" class="ms-2">Đặt mục tiêu</a>
+    }
+</div>
+
 <div class="row g-4 mb-4">
     <!-- Biểu đồ 1: Doanh thu 7 ngày gần nhất -->
     <div class="col-lg-8">

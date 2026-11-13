@@ -4,6 +4,8 @@ public class DashboardViewModel
 {
     // --- TV2 (Dung) Loyalty & Charts ---
     public decimal MonthlyRevenue { get; set; }
+    /// <summary>TV5 — UC40: tiến độ mục tiêu doanh thu tháng này (null nếu chưa đặt).</summary>
+    public Bms.Web.Services.RevenueTargetProgress? MonthTarget { get; set; }
     public decimal TotalPlaytimeHours { get; set; }
     public int TotalCustomerMembers { get; set; }
 

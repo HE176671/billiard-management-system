@@ -4,6 +4,9 @@
 @{
     ViewData["Title"] = "Thống kê hội viên";
     Layout = "_AdminLayout";
+
+    // TV5: nhãn riêng cho nhóm "Chưa ghé lần nào" (chỉ có trên màn thống kê)
+    string SegLabel(string seg) => seg == "NeverVisited" ? "Chưa ghé lần nào" : VnFormat.SegmentLabel(seg);
 }
 
 @if (TempData["Success"] != null)
@@ -56,8 +59,10 @@
         <div class="stat-card">
             <div class="stat-icon amber"><i class="bi bi-arrow-repeat"></i></div>
             <div>
-                <div class="stat-value">@Model.RepeatRate30DaysPercent.ToString("0.#")%</div>
-                <div class="stat-label">Tỷ lệ khách quay lại 30 ngày (@Model.RepeatCustomers30Days/@Model.ActiveCustomers30Days)</div>
+                <div class="stat-value">@(Model.ActiveCustomers30Days == 0 ? "—" : Model.RepeatRate30DaysPercent.ToString("0.#") + "%")</div>
+                <div class="stat-label">@(Model.ActiveCustomers30Days == 0
+                    ? "Tỷ lệ quay lại 30 ngày: chưa có hội viên thanh toán"
+                    : $"Tỷ lệ khách quay lại 30 ngày ({Model.RepeatCustomers30Days}/{Model.ActiveCustomers30Days} khách)")</div>
             </div>
         </div>
     </div>
@@ -82,10 +87,10 @@
             <div class="d-flex flex-wrap gap-1 mt-3 justify-content-center">
                 @foreach (var kv in Model.SegmentCounts)
                 {
-                    var (style, _) = CustomerSegmentService.GetSegmentMeta(kv.Key);
-                    <a asp-controller="CustomerManagement" asp-action="Index" asp-route-segment="@kv.Key"
+                    var style = kv.Key == "NeverVisited" ? "background:#f1f5f9;color:#475569" : CustomerSegmentService.GetSegmentMeta(kv.Key).BadgeStyle;
+                    <a asp-controller="CustomerManagement" asp-action="Index" asp-route-segment="@(kv.Key == "NeverVisited" ? null : kv.Key)"
                        class="text-decoration-none" style="@style;padding:2px 9px;border-radius:6px;font-size:0.72rem;font-weight:600">
-                        @VnFormat.SegmentLabel(kv.Key): @kv.Value
+                        @SegLabel(kv.Key): @kv.Value
                     </a>
                 }
             </div>
@@ -184,7 +189,7 @@
             @if (!Model.HighValueAtRisk.Any())
             {
                 <div class="text-center py-5 text-muted">
-                    Hiện không có khách quen nào vắng mặt từ 30 đến 90 ngày.
+                    Hiện không có khách quen nào vắng mặt trên 30 ngày.
                 </div>
             }
             else
@@ -212,7 +217,7 @@
                                         </a>
                                         <div class="text-muted" style="font-size:0.75rem">@(c.PhoneNumber ?? "—") · Hạng @c.TierName</div>
                                     </td>
-                                    <td><span class="text-danger fw-semibold">@(c.RecencyDays ?? 0) ngày trước</span></td>
+                                    <td><span class="text-danger fw-semibold">@(c.RecencyDays.HasValue ? $"{c.RecencyDays} ngày trước" : "Chưa ghé")</span></td>
                                     <td class="text-end">@c.Frequency12M lượt</td>
                                     <td class="text-end fw-semibold">@VnFormat.Money(c.Monetary12M)</td>
                                     <td class="text-end">
@@ -256,9 +261,9 @@
 <script>
     (function () {
         const segKeys = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Keys));
-        const segLabels = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Keys.Select(VnFormat.SegmentLabel)));
+        const segLabels = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Keys.Select(SegLabel)));
         const segValues = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Values));
-        const segColors = ['#9333ea', '#16a34a', '#2563eb', '#ea580c'];
+        const segColors = ['#9333ea', '#16a34a', '#2563eb', '#ea580c', '#94a3b8'];
 
         const rfmCtx = document.getElementById('rfmChart');
         if (rfmCtx) {
@@ -275,7 +280,7 @@
                         if (elements.length > 0) {
                             const idx = elements[0].index;
                             const seg = segKeys[idx];
-                            window.location.href = '/CustomerManagement?segment=' + encodeURIComponent(seg);
+                            window.location.href = seg === 'NeverVisited' ? '/CustomerManagement' : '/CustomerManagement?segment=' + encodeURIComponent(seg);
                         }
                     },
                     plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }

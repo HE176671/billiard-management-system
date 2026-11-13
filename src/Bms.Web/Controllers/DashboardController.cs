@@ -11,10 +11,13 @@ public class DashboardController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<DashboardController>? _logger;
+    private readonly Bms.Web.Services.IRevenueTargetService _targets;
 
-    public DashboardController(ApplicationDbContext context, ILogger<DashboardController>? logger = null)
+    public DashboardController(ApplicationDbContext context, Bms.Web.Services.IRevenueTargetService targets,
+        ILogger<DashboardController>? logger = null)
     {
         _context = context;
+        _targets = targets;
         _logger = logger;
     }
 
@@ -131,6 +134,10 @@ public class DashboardController : Controller
                 Amount = match?.Total ?? 0
             });
         }
+
+        // TV5 — UC40: tiến độ mục tiêu doanh thu tháng này
+        var vnToday = Bms.Web.Services.VnTime.Today;
+        vm.MonthTarget = await _targets.GetProgressAsync(vnToday.Year, vnToday.Month);
 
         return View(vm);
     }

@@ -24,6 +24,12 @@ public class CrmDashboardController : Controller
         _campaignService = campaignService;
     }
 
+    /// <summary>TV5: nhóm hiển thị riêng trên màn thống kê — có tài khoản nhưng chưa thanh toán lần nào.</summary>
+    public const string NeverVisitedKey = "NeverVisited";
+
+    private static bool IsNeverVisited(CustomerRfmProfile p) =>
+        p.Segment == CustomerSegmentService.SegAtRisk && p.RecencyDays == null && p.Frequency12M == 0;
+
     // GET /CrmDashboard
     [HttpGet]
     public async Task<IActionResult> Index(int topPage = 1, int riskPage = 1)
@@ -34,7 +40,18 @@ public class CrmDashboardController : Controller
         var monthStartUtc = VnTime.StartOfDayUtc(new DateOnly(todayVn.Year, todayVn.Month, 1));
         var thirtyDaysAgoUtc = now.AddDays(-30);
 
-        var profiles = await _segmentService.GetAllProfilesAsync(forceRefresh: true);
+        var rawProfiles = await _segmentService.GetAllProfilesAsync(forceRefresh: true);
+
+        // TV5: hội viên chưa gán TierId được coi là hạng thấp nhất (giống TierEvaluationService),
+        // hiển thị đúng tên hạng trong DB thay cho chữ "Member" mặc định.
+        var tiers = await _db.MembershipTiers.AsNoTracking()
+            .OrderBy(t => t.SpendThreshold).ThenBy(t => t.SortOrder).ToListAsync();
+        var lowestTier = tiers.FirstOrDefault();
+        var profiles = rawProfiles
+            .Select(p => lowestTier != null && (p.TierId == null || !tiers.Any(t => t.Id == p.TierId))
+                ? p with { TierId = lowestTier.Id, TierName = lowestTier.TierName }
+                : p)
+            .ToList();
 
         int totalMembers = profiles.Count;
         int newThisMonth = profiles.Count(p => p.CreatedAtUtc >= monthStartUtc);
@@ -63,22 +80,20 @@ public class CrmDashboardController : Controller
         };
         var segCounts = segOrder.ToDictionary(
             s => s,
-            s => profiles.Count(p => string.Equals(p.Segment, s, StringComparison.OrdinalIgnoreCase)));
+            s => profiles.Count(p => string.Equals(p.Segment, s, StringComparison.OrdinalIgnoreCase)
+                                     && !(s == CustomerSegmentService.SegAtRisk && IsNeverVisited(p))));
+        // TV5: tách riêng hội viên chưa thanh toán lần nào khỏi nhóm "Lâu rồi chưa ghé"
+        segCounts[NeverVisitedKey] = profiles.Count(IsNeverVisited);
 
         // Phân bố hạng
-        var tiers = await _db.MembershipTiers.AsNoTracking()
-            .OrderBy(t => t.SpendThreshold).ThenBy(t => t.SortOrder).ToListAsync();
-        var tierColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Member"] = "#3b82f6",
-            ["Silver"] = "#94a3b8",
-            ["Gold"] = "#f59e0b"
-        };
-        var tierPoints = tiers.Select(t => new TierDistributionPoint
+        // TV5: màu theo thứ tự hạng (thấp → cao); khách chưa gán TierId tính vào hạng thấp nhất,
+        // để tổng các cột luôn bằng tổng số hội viên.
+        var palette = new[] { "#b45309", "#94a3b8", "#f59e0b", "#0ea5e9", "#7c3aed", "#db2777" };
+        var tierPoints = tiers.Select((t, i) => new TierDistributionPoint
         {
             TierName = t.TierName,
             Count = profiles.Count(p => p.TierId == t.Id),
-            ColorHex = tierColors.GetValueOrDefault(t.TierName, "#64748b")
+            ColorHex = palette[i % palette.Length]
         }).ToList();
 
         var allSpenders = profiles
@@ -93,7 +108,7 @@ public class CrmDashboardController : Controller
             .ToList();
 
         var allAtRisk = profiles
-            .Where(p => p.Segment == CustomerSegmentService.SegAtRisk)
+            .Where(p => p.Segment == CustomerSegmentService.SegAtRisk && !IsNeverVisited(p))
             .OrderByDescending(p => p.Monetary12M)
             .ToList();
         int riskTotalPages = Math.Max(1, (int)Math.Ceiling(allAtRisk.Count / (double)pageSize));
