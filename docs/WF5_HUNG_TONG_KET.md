@@ -1,27 +1,26 @@
-# WF5 — Quản trị tài khoản, giá bàn, báo cáo vận hành, nhật ký & chu kỳ hạng (TV5 Hùng)
+# WF5 — Tài khoản, phân quyền, báo cáo, mục tiêu doanh thu & thống kê (TV5 Hùng)
 
-Nhánh: `hung-wf5`. Cập nhật 09/11/2026.
+Nhánh: `hung-wf5` (đã gộp vào `develops`). Cập nhật 13/11/2026.
 
-WF5 bao gồm các chức năng quản trị hệ thống, cấu hình giá, phân tích vận hành, nhật ký kiểm toán và tự động hóa chu kỳ hội viên:
+Phạm vi TV5 = **7 màn + Đăng nhập/Hồ sơ dùng chung**:
 
-> **Admin** tạo tài khoản & phân quyền → **Staff** vận hành trực tiếp trên sơ đồ bàn (realtime SignalR) → **Manager** theo dõi **Báo cáo doanh thu**, **Báo cáo vận hành** (tỷ lệ lấp đầy, heatmap giờ cao điểm, hiệu suất từng bàn, top món F&B) và **Nhật ký hệ thống** → **00:05 job cuối ngày**: phát voucher sinh nhật, xét giữ hạng 12 tháng / ân hạn 30 ngày / hạ tối đa 1 bậc, gửi email tự động.
+> **Admin** tạo tài khoản & phân quyền (khóa là mất phiên ngay) → **Manager** xem **Tổng quan**, đặt **Mục tiêu doanh thu**, theo dõi **Báo cáo doanh thu**, **Báo cáo vận hành**, **Nhật ký hệ thống** và **Thống kê hội viên**.
 
 ## Use case và màn hình
 
 | UC | Chức năng | Vai trò | Màn hình / đường dẫn |
 |---|---|---|---|
 | UC01 | Đăng nhập / đăng xuất | Admin, Manager, Staff | `/Account/Login` |
-| UC02 | Đổi mật khẩu | Admin, Manager, Staff | `/Profile/ChangePassword` |
+| UC02 | Hồ sơ, đổi mật khẩu | Admin, Manager, Staff | `/Profile` |
+| — | Tổng quan hoạt động (doanh thu, bàn, phiên, hạng, tiến độ mục tiêu) | Manager | `/Dashboard` |
 | UC03 | Tài khoản & phân quyền: tạo, sửa, khóa, đặt lại mật khẩu, đổi vai trò (Admin/Manager/Staff) | **Admin** | `/Employee` |
-| UC36 | Kiểm kê kho (điều chỉnh tồn, bắt buộc lý do, ghi nhật ký) | Manager | `/Inventory` |
 | UC37 | Báo cáo doanh thu theo **ngày / tháng**, biểu đồ, so sánh mục tiêu tháng, xuất CSV | Manager | `/Revenue` |
 | UC38 | Nhật ký hệ thống (lọc ngày, thao tác, người thực hiện, từ khóa) | Manager | `/AuditLog` |
 | UC39 | **Báo cáo vận hành**: tỷ lệ lấp đầy bàn, heatmap giờ cao điểm (7 thứ × giờ mở cửa), hiệu suất từng bàn (bàn đông nhất / vắng nhất), doanh thu giờ chơi theo loại bàn, top món F&B, xuất CSV | Manager | `/OperationsReport` |
 | UC40 | **Mục tiêu doanh thu tháng**: thêm / sửa / xóa, theo dõi % đạt, dự báo cuối tháng, số cần thu mỗi ngày | Manager | `/RevenueTarget` |
-| UC41 | Xét hạng định kỳ (job 00:05 + nút "Chạy xét hạng ngay") | System, Manager | `/CrmDashboard` |
-| UC42 | Voucher sinh nhật (chỉ dùng trong ngày sinh nhật; sinh 29/02 năm thường nhận vào 28/02) | System, Staff áp dụng | job 00:05 |
+| — | Thống kê hội viên: nhóm tần suất ghé (tách riêng "Chưa ghé lần nào"), cơ cấu hạng, chi tiêu cao nhất, khách quen vắng mặt, nút "Chạy xét hạng ngay" | Manager | `/CrmDashboard` |
 
-Hạ tầng dùng chung: `IAuditLogService` + `AuditActions`, `IEmailService` (SMTP, API-02), `TableHub` (`/hubs/table`, sơ đồ bàn realtime), `[BroadcastTableChange]`, `LoyaltyDailyJob` (BackgroundService chạy 00:05 giờ VN).
+Dịch vụ dùng chung do TV5 cung cấp: `IAuditLogService` + `AuditActions` (các module khác gọi để ghi nhật ký). Đăng nhập: tài khoản `IsActive = 0` bị từ chối; sai mật khẩu 5 lần khóa tạm 5 phút; khóa tài khoản thì mất phiên ngay ở request kế tiếp (`OnValidatePrincipal` kiểm `IsActive`, `ValidationInterval = 0`).
 
 ## Chi tiết Báo cáo vận hành (`/OperationsReport`)
 
@@ -63,17 +62,6 @@ Công thức (`RevenueTargetService.Calculate`, có smoke test): `% đạt = th�
 
 Tạo/khóa/đổi vai trò/đặt lại mật khẩu tài khoản, thêm/sửa/xóa mục tiêu doanh thu (phần TV5); các module khác gọi cùng dịch vụ này khi đổi giá giờ, thêm/đổi tên loại bàn, kiểm kê kho, hủy món/hóa đơn, duyệt điều chỉnh điểm, đổi cấu hình hạng, và mỗi lần chạy chu kỳ xét hạng cuối ngày đều được ghi vào bảng `AuditLogs` kèm người thực hiện, thời điểm UTC+7, giá trị cũ/mới và lý do.
 
-## Email (SMTP)
-
-Cấu hình trong `appsettings.json` mục `Smtp` (hoặc user-secrets). Để trống `Host` = chế độ demo: không gửi thật, chỉ ghi log `[EMAIL DEMO]`.
-
-```
-dotnet user-secrets set "Smtp:Host" "smtp.gmail.com" --project src/Bms.Web
-dotnet user-secrets set "Smtp:UserName" "<gmail>" --project src/Bms.Web
-dotnet user-secrets set "Smtp:Password" "<app password>" --project src/Bms.Web
-dotnet user-secrets set "Smtp:FromAddress" "<gmail>" --project src/Bms.Web
-```
-
 ## Kịch bản demo (mật khẩu demo `123456`)
 
 1. **`admin.demo`**: vào **Tài khoản & phân quyền** (`/Employee`), tạo nhân viên mới, đổi vai trò Staff ↔ Manager, thử tự khóa chính mình → hệ thống chặn.
@@ -82,5 +70,5 @@ dotnet user-secrets set "Smtp:FromAddress" "<gmail>" --project src/Bms.Web
    - Vào **Mục tiêu doanh thu** (`/RevenueTarget`) → đặt mục tiêu tháng này; thử đặt tháng đã qua, số không tròn nghìn, tháng trùng → bị chặn; sửa số của tháng này không ghi lý do → bị chặn; xem Dashboard có thanh tiến độ.
    - Vào **Báo cáo doanh thu** (`/Revenue`) → lọc theo ngày/tháng, xem biểu đồ, nhóm theo tháng thấy cột % đạt mục tiêu, xuất CSV.
    - Vào **Báo cáo vận hành** (`/OperationsReport`) → xem KPI tỷ lệ lấp đầy, bảng Heatmap giờ cao điểm theo thứ, top bàn đông/vắng khách, top món F&B, thử nhập ngày bắt đầu > ngày kết thúc để demo validation server, và bấm **CSV**.
-   - Vào **Thống kê hội viên** (`/CrmDashboard`) → bấm **"Chạy xét hạng ngay"** để chạy job xét hạng & phát voucher sinh nhật.
-3. **`staff.demo01`**: đăng nhập vào thẳng **Quản lý bàn** (`/Table`), mở bàn / đóng bàn trên 2 cửa sổ trình duyệt để thấy SignalR cập nhật realtime.
+   - Vào **Thống kê hội viên** (`/CrmDashboard`) → đọc nhóm tần suất ghé, cơ cấu hạng, khách quen vắng mặt.
+3. **Khóa là mất phiên ngay**: cửa sổ ẩn danh đăng nhập `staff.demo02`; Admin khóa NV2 → bên Staff bấm bất kỳ đâu bị đăng xuất, đăng nhập lại bị từ chối.
