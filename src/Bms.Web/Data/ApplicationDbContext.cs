@@ -28,6 +28,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PlaySessionTableSegment> PlaySessionTableSegments => Set<PlaySessionTableSegment>();
     public DbSet<SessionCombo>            SessionCombos            => Set<SessionCombo>();
     public DbSet<SessionComboItem>        SessionComboItems        => Set<SessionComboItem>();
+    public DbSet<SessionCueRental>         SessionCueRentals        => Set<SessionCueRental>();
 
     // Loyalty & CRM tables (Dung - TV2)
     public DbSet<MembershipTier>          MembershipTiers          => Set<MembershipTier>();

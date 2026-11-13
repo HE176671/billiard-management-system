@@ -29,14 +29,8 @@
     <!-- ================================================================= -->
     <!-- Cột trái: Sơ đồ bàn -->
     <section class="table-grid-section">
-        <div class="section-box-header d-flex justify-content-between align-items-center">
-            <h2 class="section-box-title mb-0">Sơ đồ bàn</h2>
-            @if (User.IsInRole("Manager") || User.IsInRole("Admin"))
-            {
-                <a asp-controller="Table" asp-action="QrCodes" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 shadow-xs" style="font-size:0.8rem">
-                    <i class="bi bi-qr-code me-1"></i> Mã QR đặt món bàn
-                </a>
-            }
+        <div class="section-box-header">
+            <h2 class="section-box-title">Sơ đồ bàn</h2>
         </div>
 
         <!-- Bộ lọc nhanh trạng thái bàn: Tất cả / Đang sử dụng / Còn trống / Đã hết giờ Combo (Tính vượt giờ) / Bảo trì -->
@@ -145,6 +139,16 @@
                 </div>
             </div>
 
+            <!-- Nhóm (c2): Gậy đang thuê theo lượt (hiện khi phiên có thuê gậy) -->
+            <div class="panel-card-box d-none" id="detail-cues-box">
+                <div class="panel-group-title d-flex justify-content-between align-items-baseline mb-2">
+                    <span>Gậy đang thuê</span>
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" id="detail-cues-badge">0 cây</span>
+                </div>
+                <div class="detail-cues-list" id="detail-cues-list">
+                </div>
+            </div>
+
             <!-- Nhóm (d): Chi phí -->
             <div class="panel-card-box d-none" id="detail-pricing-box">
                 <div class="panel-group-title">Chi phí tiền bàn</div>
@@ -160,28 +164,13 @@
                     <span class="detail-key" id="detail-playtime-label">Tổng tạm tính:</span>
                     <span class="detail-val" id="detail-playtime-amount">--</span>
                 </div>
-            </div>
-
-            <!-- Nhóm (d2): Dịch vụ F&B / Gọi món (UC-23, UC-25) -->
-            <div class="panel-card-box d-none" id="detail-fnb-box">
-                <div class="panel-group-title d-flex justify-content-between align-items-center mb-2">
-                    <span><i class="bi bi-cup-straw text-info me-1"></i>Món đã gọi (F&B)</span>
-                    <div class="d-flex align-items-center gap-1">
-                        <button type="button" class="btn btn-sm btn-primary-bms py-0 px-2" id="btn-open-counter-order" title="Gọi món tại quầy">
-                            <i class="bi bi-plus-lg me-1"></i>Gọi món
-                        </button>
-                    </div>
+                <div class="detail-data-row d-none" id="detail-cue-amount-row">
+                    <span class="detail-key">Tiền thuê gậy:</span>
+                    <span class="detail-val text-info-emphasis" id="detail-cue-amount">--</span>
                 </div>
-                <div id="detail-fnb-orders-list">
-                    <div class="text-muted small py-1 fst-italic">Chưa gọi món nào.</div>
-                </div>
-                <div class="detail-data-row border-top pt-2 mt-2">
-                    <span class="detail-key">Tiền F&B:</span>
-                    <span class="detail-val text-success fw-bold" id="detail-fnb-total">0 đ</span>
-                </div>
-                <div class="detail-data-row border-top pt-1 mt-1">
-                    <span class="detail-key fw-bold text-dark">Tổng bill (Bàn + F&B):</span>
-                    <span class="detail-val text-primary fw-bold fs-6" id="detail-grand-total">--</span>
+                <div class="detail-data-row d-none" id="detail-grand-total-row">
+                    <span class="detail-key fw-bold">Tổng cộng (bàn + gậy):</span>
+                    <span class="detail-val fw-bold text-success" id="detail-grand-total">--</span>
                 </div>
             </div>
 
@@ -266,6 +255,17 @@
                     </div>
                 </div>
 
+                <!-- Thuê gậy theo lượt (tuỳ chọn) ngay lúc mở bàn -->
+                <div class="border-top pt-2 mt-2" id="open-cue-section">
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <div>
+                            <div class="fw-bold small text-dark"><i class="bi bi-vector-pen me-1"></i>Thuê gậy (tuỳ chọn)</div>
+                            <div class="text-muted" style="font-size:0.75rem" id="open-cue-summary">Chưa chọn gậy thuê.</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-wireframe" id="btn-open-cue-picker">Chọn gậy</button>
+                    </div>
+                </div>
+
                 <div class="action-btn-row mt-2">
                     <button type="button" class="btn btn-primary-bms btn-action-main" id="btn-confirm-open">
                         Xác nhận mở bàn
@@ -322,6 +322,14 @@
                     <div class="summary-data-row summary-amount-row py-1">
                         <span class="summary-key fw-bold">Tổng tiền bàn:</span>
                         <span class="summary-val fw-bold text-success fs-6" id="close-summary-amount">--</span>
+                    </div>
+                    <div class="summary-data-row d-none" id="close-summary-cue-row">
+                        <span class="summary-key">Tiền thuê gậy:</span>
+                        <span class="summary-val fw-semibold text-info-emphasis" id="close-summary-cue-amount">--</span>
+                    </div>
+                    <div class="summary-data-row summary-amount-row py-1 d-none" id="close-summary-grand-row">
+                        <span class="summary-key fw-bold">Tổng cộng (bàn + gậy):</span>
+                        <span class="summary-val fw-bold text-success fs-6" id="close-summary-grand">--</span>
                     </div>
                     <div class="small text-muted text-end mb-1" id="close-summary-timestamp">
                         Tạm tính lúc --:--:--
@@ -385,6 +393,9 @@
                     <button type="button" class="btn btn-danger-bms btn-action-main" id="btn-close-table" disabled>
                         CLOSE TABLE
                     </button>
+                    <button type="button" class="btn btn-outline-primary w-100 btn-wireframe h-100" id="btn-rent-cue" style="grid-column: span 2;" disabled>
+                        THUÊ THÊM GẬY
+                    </button>
                     <button type="button" class="btn btn-outline-secondary w-100 btn-wireframe h-100" id="btn-transfer" style="grid-column: span 2;" disabled>
                         CHUYỂN BÀN
                     </button>
@@ -394,143 +405,51 @@
     </aside>
 </div>
 
-<!-- Modal Gọi món tại quầy (UC-23) -->
-<div class="modal fade" id="counterOrderModal" tabindex="-1" aria-labelledby="counterOrderModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content bg-dark text-white border-secondary">
-            <div class="modal-header border-secondary">
-                <h5 class="modal-title" id="counterOrderModalLabel">
-                    <i class="bi bi-cart-plus text-info me-2"></i>Gọi món tại quầy — Bàn <span id="counterOrderTableCode" class="text-warning">--</span>
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- ===================================================================== -->
+<!-- POP-UP CHỌN GẬY THUÊ THEO LƯỢT (dùng chung cho lúc mở bàn & thuê thêm) -->
+<!-- ===================================================================== -->
+<div class="modal fade" id="cue-picker-modal" tabindex="-1" aria-labelledby="cue-picker-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cue-picker-title">Thuê gậy theo lượt</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="counterOrderSessionId" value="" />
-                
-                <div class="mb-3">
-                    <input type="text" id="counterOrderSearch" class="form-control bg-dark text-white border-secondary" 
-                           placeholder="Tìm kiếm món trong thực đơn..." oninput="filterCounterOrderProducts()" />
+                <div class="small text-muted mb-2" id="cue-picker-subtitle">Chọn loại gậy và số lượng. Giá tính cố định theo lượt, tiền gậy cộng vào hóa đơn khi đóng bàn.</div>
+
+                <div id="cue-picker-loading" class="text-muted small py-2 d-none">
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    Đang tải danh sách gậy...
+                </div>
+                <div id="cue-picker-error" class="alert alert-danger p-2 small mb-2 d-none"></div>
+                <div id="cue-picker-empty" class="alert alert-warning p-2 small mb-2 d-none">
+                    Hiện chưa có loại gậy nào đang mở cho thuê. Vui lòng thiết lập tại trang Bảng giá.
                 </div>
 
-                <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
-                    <table class="table table-dark table-hover align-middle mb-0" id="counterOrderProductsTable">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0" id="cue-picker-table">
                         <thead>
-                            <tr class="text-white-50 border-bottom border-secondary small text-uppercase">
-                                <th>Tên món</th>
-                                <th>Danh mục</th>
-                                <th class="text-end">Đơn giá</th>
-                                <th class="text-center">Tồn kho</th>
-                                <th class="text-center" style="width: 140px;">Số lượng gọi</th>
+                            <tr>
+                                <th>Loại gậy</th>
+                                <th class="text-end">Giá/lượt</th>
+                                <th class="text-center">Còn</th>
+                                <th class="text-center" style="width:130px">Số lượng</th>
                             </tr>
                         </thead>
-                        <tbody id="counterOrderProductsBody">
-                            @{
-                                var availableProducts = ViewBag.AvailableProducts as List<Bms.Web.Models.ProductViewModel> ?? new();
-                            }
-                            @foreach (var p in availableProducts)
-                            {
-                                <tr class="counter-product-row" data-id="@p.Id" data-name="@p.Name.ToLower()" data-price="@p.Price" data-stock="@p.StockQuantity">
-                                    <td class="fw-bold text-white">@p.Name</td>
-                                    <td><span class="badge bg-secondary">@p.CategoryName</span></td>
-                                    <td class="text-end text-info fw-semibold">@p.Price.ToString("N0") đ</td>
-                                    <td class="text-center">
-                                        @if (p.StockQuantity <= 0)
-                                        {
-                                            <span class="badge bg-danger">Hết hàng</span>
-                                        }
-                                        else if (p.StockQuantity <= 5)
-                                        {
-                                            <span class="badge bg-warning text-dark">@p.StockQuantity</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-success">@p.StockQuantity</span>
-                                        }
-                                    </td>
-                                    <td class="text-center">
-                                        @if (p.StockQuantity > 0)
-                                        {
-                                            <div class="input-group input-group-sm">
-                                                <button type="button" class="btn btn-outline-secondary btn-qty-minus" onclick="changeCounterQty(@p.Id, -1)">-</button>
-                                                <input type="number" class="form-control bg-dark text-white border-secondary text-center counter-qty-input" 
-                                                       id="counter-qty-@p.Id" data-product-id="@p.Id" data-price="@p.Price" data-stock="@p.StockQuantity"
-                                                       value="0" min="0" max="@p.StockQuantity" onchange="validateCounterQty(this)" />
-                                                <button type="button" class="btn btn-outline-secondary btn-qty-plus" onclick="changeCounterQty(@p.Id, 1)">+</button>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-white-50 small fst-italic">Không khả dụng</span>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
+                        <tbody id="cue-picker-body"></tbody>
                     </table>
                 </div>
-
-                <div class="mt-3">
-                    <label class="form-label text-white-50 small text-uppercase">Ghi chú gọi món:</label>
-                    <input type="text" id="counterOrderNote" class="form-control bg-dark text-white border-secondary" placeholder="Ví dụ: Ít đá, không đường..." />
-                </div>
-
-                <div class="p-3 bg-secondary bg-opacity-25 rounded border border-secondary mt-3 d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-white-50">Tổng tiền món gọi thêm:</span>
-                        <strong id="counterOrderTotalDisplay" class="text-success fs-5 ms-2">0 đ</strong>
-                    </div>
-                    <span id="counterOrderItemCountDisplay" class="badge bg-info text-dark">0 món đã chọn</span>
-                </div>
             </div>
-            <div class="modal-footer border-secondary">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
-                <button type="button" class="btn btn-primary-bms px-4" id="btnSubmitCounterOrder" onclick="submitCounterOrder()">
-                    <i class="bi bi-check2-circle me-1"></i>Xác nhận gọi món (Trừ kho & Thêm vào bill)
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Hủy món có lý do (UC-25) -->
-<div class="modal fade" id="cancelOrderItemModal" tabindex="-1" aria-labelledby="cancelOrderItemModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content bg-dark text-white border-secondary">
-            <div class="modal-header border-secondary">
-                <h5 class="modal-title" id="cancelOrderItemModalLabel">
-                    <i class="bi bi-x-circle text-danger me-2"></i>Hủy món (Hoàn kho một lần - UC-25)
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="cancelOrderDetailId" value="" />
-                
-                <div class="mb-3">
-                    <label class="form-label text-white-50 small text-uppercase">Món cần hủy:</label>
-                    <div id="cancelProductName" class="fw-bold text-info fs-5">--</div>
+            <div class="modal-footer justify-content-between">
+                <div class="small">
+                    <span class="text-muted">Đã chọn: </span><strong id="cue-picker-total-qty">0</strong> cây
+                    <span class="text-muted ms-2">Tạm tính: </span><strong class="text-success" id="cue-picker-total-amount">0 VND</strong>
                 </div>
-
-                <div class="mb-3">
-                    <label class="form-label text-white-50 small text-uppercase">Số lượng hủy: <span class="text-danger">*</span></label>
-                    <input type="number" id="cancelQuantityInput" class="form-control bg-dark text-white border-secondary" min="1" max="1" value="1" required />
-                    <div class="text-white-50 small mt-1">Tối đa có thể hủy: <span id="cancelMaxQty" class="text-warning fw-bold">1</span></div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-wireframe" data-bs-dismiss="modal" id="btn-cue-picker-cancel">Hủy</button>
+                    <button type="button" class="btn btn-primary-bms" id="btn-cue-picker-confirm" disabled>Xác nhận</button>
                 </div>
-
-                <div class="mb-3">
-                    <label class="form-label text-white-50 small text-uppercase">Lý do hủy món (bắt buộc): <span class="text-danger">*</span></label>
-                    <textarea id="cancelReasonInput" class="form-control bg-dark text-white border-secondary" rows="3" 
-                              placeholder="Ví dụ: Khách đổi ý không dùng, phục vụ mang nhầm, sản phẩm lỗi..." required></textarea>
-                </div>
-
-                <div class="alert alert-warning py-2 small mb-0">
-                    <i class="bi bi-info-circle me-1"></i>Kho sẽ được hoàn lại đúng số lượng hủy một lần duy nhất qua Sổ cái Thẻ kho và tiền món sẽ được trừ khỏi bill.
-                </div>
-            </div>
-            <div class="modal-footer border-secondary">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
-                <button type="button" class="btn btn-danger-bms" id="btnSubmitCancelItem" onclick="submitCancelOrderItem()">
-                    <i class="bi bi-trash me-1"></i>Xác nhận hủy món
-                </button>
             </div>
         </div>
     </div>
@@ -538,206 +457,4 @@
 
 @section Scripts {
     <script src="~/js/table-management.js" asp-append-version="true"></script>
-    <script src="~/js/table-realtime.js" asp-append-version="true"></script>
-    <script>
-        let counterOrderModalInstance = null;
-        let cancelItemModalInstance = null;
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const btnOpen = document.getElementById('btn-open-counter-order');
-            if (btnOpen) {
-                btnOpen.addEventListener('click', () => {
-                    if (window.currentSelectedTable && window.currentSelectedTable.sessionId) {
-                        openCounterOrderModal(window.currentSelectedTable.sessionId, window.currentSelectedTable.code);
-                    } else {
-                        alert('Vui lòng chọn một bàn đang hoạt động để gọi món');
-                    }
-                });
-            }
-        });
-
-        function openCounterOrderModal(sessionId, tableCode) {
-            document.getElementById('counterOrderSessionId').value = sessionId;
-            document.getElementById('counterOrderTableCode').textContent = tableCode;
-            document.getElementById('counterOrderNote').value = '';
-            document.getElementById('counterOrderSearch').value = '';
-            filterCounterOrderProducts();
-
-            document.querySelectorAll('.counter-qty-input').forEach(input => {
-                input.value = 0;
-            });
-            recalcCounterOrder();
-
-            if (!counterOrderModalInstance) {
-                counterOrderModalInstance = new bootstrap.Modal(document.getElementById('counterOrderModal'));
-            }
-            counterOrderModalInstance.show();
-        }
-
-        function filterCounterOrderProducts() {
-            const query = (document.getElementById('counterOrderSearch').value || '').trim().toLowerCase();
-            document.querySelectorAll('.counter-product-row').forEach(row => {
-                const name = row.getAttribute('data-name') || '';
-                row.style.display = (!query || name.includes(query)) ? '' : 'none';
-            });
-        }
-
-        function changeCounterQty(prodId, delta) {
-            const input = document.getElementById(`counter-qty-${prodId}`);
-            if (!input) return;
-            const current = parseInt(input.value) || 0;
-            const max = parseInt(input.getAttribute('data-stock')) || 0;
-            const newVal = Math.max(0, Math.min(max, current + delta));
-            input.value = newVal;
-            recalcCounterOrder();
-        }
-
-        function validateCounterQty(input) {
-            let val = parseInt(input.value) || 0;
-            const max = parseInt(input.getAttribute('data-stock')) || 0;
-            if (val < 0) val = 0;
-            if (val > max) val = max;
-            input.value = val;
-            recalcCounterOrder();
-        }
-
-        function recalcCounterOrder() {
-            let total = 0;
-            let count = 0;
-            document.querySelectorAll('.counter-qty-input').forEach(input => {
-                const qty = parseInt(input.value) || 0;
-                const price = parseFloat(input.getAttribute('data-price')) || 0;
-                if (qty > 0) {
-                    total += (qty * price);
-                    count += qty;
-                }
-            });
-            document.getElementById('counterOrderTotalDisplay').textContent = total.toLocaleString('vi-VN') + ' đ';
-            document.getElementById('counterOrderItemCountDisplay').textContent = `${count} món đã chọn`;
-        }
-
-        async function submitCounterOrder() {
-            const sessionId = parseInt(document.getElementById('counterOrderSessionId').value);
-            if (!sessionId) {
-                alert('Phiên chơi không hợp lệ');
-                return;
-            }
-
-            const items = [];
-            document.querySelectorAll('.counter-qty-input').forEach(input => {
-                const qty = parseInt(input.value) || 0;
-                const prodId = parseInt(input.getAttribute('data-product-id')) || 0;
-                if (qty > 0 && prodId > 0) {
-                    items.push({ ProductId: prodId, Quantity: qty });
-                }
-            });
-
-            if (items.length === 0) {
-                alert('Vui lòng chọn số lượng ít nhất 1 món để gọi!');
-                return;
-            }
-
-            const note = document.getElementById('counterOrderNote').value;
-            const btn = document.getElementById('btnSubmitCounterOrder');
-            btn.disabled = true;
-
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-
-            try {
-                const response = await fetch('/Order/CreateCounterOrder', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'RequestVerificationToken': token
-                    },
-                    body: JSON.stringify({
-                        SessionId: sessionId,
-                        Items: items,
-                        Note: note
-                    })
-                });
-
-                const res = await response.json();
-                if (res.success) {
-                    if (counterOrderModalInstance) counterOrderModalInstance.hide();
-                    if (window.showToast) window.showToast(res.message, 'success');
-                    if (window.currentSelectedTable && window.currentSelectedTable.id) {
-                        window.handleTableSelect(window.currentSelectedTable.id);
-                    }
-                } else {
-                    alert('Lỗi: ' + res.message);
-                }
-            } catch (err) {
-                alert('Lỗi kết nối khi gọi món: ' + err.message);
-            } finally {
-                btn.disabled = false;
-            }
-        }
-
-        window.openCancelItemModal = function(detailId, productName, maxQty) {
-            document.getElementById('cancelOrderDetailId').value = detailId;
-            document.getElementById('cancelProductName').textContent = productName;
-            document.getElementById('cancelMaxQty').textContent = maxQty;
-            const qtyInput = document.getElementById('cancelQuantityInput');
-            qtyInput.max = maxQty;
-            qtyInput.value = 1;
-            document.getElementById('cancelReasonInput').value = '';
-
-            if (!cancelItemModalInstance) {
-                cancelItemModalInstance = new bootstrap.Modal(document.getElementById('cancelOrderItemModal'));
-            }
-            cancelItemModalInstance.show();
-        };
-
-        async function submitCancelOrderItem() {
-            const detailId = parseInt(document.getElementById('cancelOrderDetailId').value);
-            const cancelQty = parseInt(document.getElementById('cancelQuantityInput').value);
-            const reason = (document.getElementById('cancelReasonInput').value || '').trim();
-
-            if (!reason) {
-                alert('Vui lòng nhập lý do hủy món (bắt buộc theo quy định)');
-                return;
-            }
-
-            if (!cancelQty || cancelQty < 1) {
-                alert('Số lượng hủy không hợp lệ');
-                return;
-            }
-
-            const btn = document.getElementById('btnSubmitCancelItem');
-            btn.disabled = true;
-
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-
-            try {
-                const response = await fetch('/Order/CancelItem', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'RequestVerificationToken': token
-                    },
-                    body: JSON.stringify({
-                        OrderDetailId: detailId,
-                        CancelQuantity: cancelQty,
-                        Reason: reason
-                    })
-                });
-
-                const res = await response.json();
-                if (res.success) {
-                    if (cancelItemModalInstance) cancelItemModalInstance.hide();
-                    if (window.showToast) window.showToast(res.message, 'success');
-                    if (window.currentSelectedTable && window.currentSelectedTable.id) {
-                        window.handleTableSelect(window.currentSelectedTable.id);
-                    }
-                } else {
-                    alert('Lỗi: ' + res.message);
-                }
-            } catch (err) {
-                alert('Lỗi kết nối khi hủy món: ' + err.message);
-            } finally {
-                btn.disabled = false;
-            }
-        }
-    </script>
 }

@@ -694,6 +694,41 @@ public static class SchemaUpgrader
             logger.LogWarning(ex, "Không thể tự khởi tạo dữ liệu mẫu Role Manager / Gậy cho thuê / Combo.");
         }
 
+        // 3b. Bảng phụ SessionCueRentals: ghi nhận gậy thuê theo lượt gắn với phiên chơi (không sửa bảng/stored procedure có sẵn)
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                IF OBJECT_ID('dbo.SessionCueRentals', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.SessionCueRentals (
+                        Id int IDENTITY NOT NULL CONSTRAINT PK_SessionCueRentals PRIMARY KEY,
+                        SessionId int NOT NULL,
+                        ProductId int NOT NULL,
+                        ProductNameSnapshot nvarchar(100) NOT NULL,
+                        UnitPriceSnapshot decimal(18,2) NOT NULL,
+                        Quantity int NOT NULL,
+                        RentedAtUtc datetime2(0) NOT NULL CONSTRAINT DF_SessionCueRentals_Rented DEFAULT SYSUTCDATETIME(),
+                        CreatedById nvarchar(450) NOT NULL,
+                        IsReturned bit NOT NULL CONSTRAINT DF_SessionCueRentals_Returned DEFAULT 0,
+                        ReturnedAtUtc datetime2(0) NULL,
+                        CONSTRAINT FK_SessionCueRentals_Session FOREIGN KEY (SessionId) REFERENCES dbo.PlaySessions(Id),
+                        CONSTRAINT FK_SessionCueRentals_Product FOREIGN KEY (ProductId) REFERENCES dbo.Products(Id),
+                        CONSTRAINT FK_SessionCueRentals_CreatedBy FOREIGN KEY (CreatedById) REFERENCES dbo.AspNetUsers(Id),
+                        CONSTRAINT CK_SessionCueRentals_Quantity CHECK (Quantity > 0),
+                        CONSTRAINT CK_SessionCueRentals_Price CHECK (UnitPriceSnapshot >= 0),
+                        CONSTRAINT CK_SessionCueRentals_Name CHECK (LEN(LTRIM(RTRIM(ProductNameSnapshot))) > 0)
+                    );
+                    CREATE INDEX IX_SessionCueRentals_SessionId ON dbo.SessionCueRentals(SessionId);
+                    CREATE INDEX IX_SessionCueRentals_ProductId ON dbo.SessionCueRentals(ProductId);
+                    CREATE INDEX IX_SessionCueRentals_CreatedById ON dbo.SessionCueRentals(CreatedById);
+                END;
+                """);
+        }
+        catch (Exception cueEx)
+        {
+            logger.LogWarning(cueEx, "Không thể tự khởi tạo bảng SessionCueRentals (thuê gậy theo phiên).");
+        }
+
         // 4. Chuẩn hóa dữ liệu Gmail hội viên (sửa email sai định dạng / thiếu email -> @gmail.com) & đồng bộ Tổng mức chi tiêu
         try
         {

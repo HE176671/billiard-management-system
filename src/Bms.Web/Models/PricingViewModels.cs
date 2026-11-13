@@ -5,6 +5,7 @@ namespace Bms.Web.Models;
 
 public class PricingListViewModel
 {
+    public string ActiveTab { get; set; } = "tables";
     public List<PricingRowViewModel> Configs { get; set; } = new();
     public List<TableTypeOptionViewModel> TableTypes { get; set; } = new();
 

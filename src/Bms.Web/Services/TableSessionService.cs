@@ -175,6 +175,7 @@ public class TableSessionService : ITableSessionService
         int? targetSessionIdForHistory = raw.SessionId;
         List<SessionSegmentViewModel> segments = new();
         List<SessionComboPurchaseViewModel> combos = new();
+        List<SessionCueRentalViewModel> cueRentals = new();
 
         if (raw.Status == "InUse" && raw.SessionId.HasValue)
         {
@@ -204,6 +205,7 @@ public class TableSessionService : ITableSessionService
                               }).ToListAsync();
 
             combos = await LoadSessionCombosAsync(sid);
+            cueRentals = await LoadSessionCueRentalsAsync(sid);
         }
 
         List<OrderViewModel> orders = new();
@@ -288,6 +290,8 @@ public class TableSessionService : ITableSessionService
             Orders = orders,
             Segments = segments,
             Combos = combos,
+            CueRentals = cueRentals,
+            CueRentalAmount = cueRentals.Sum(c => c.Subtotal),
             ServerTimeUtc = serverTimeUtc
         };
     }
@@ -454,8 +458,24 @@ public class TableSessionService : ITableSessionService
     // PHẦN 3: THAO TÁC GHI DỮ LIỆU QUA STORED PROCEDURES (MỞ, ĐÓNG, CHUYỂN BÀN, CHỌN COMBO)
     // =========================================================================
 
-    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string? customerId = null, int? comboId = null)
+    public async Task<TableOperationResult> OpenSessionAsync(int tableId, string staffId, string? customerId = null, int? comboId = null, List<CueRentalLineRequest>? cueRentals = null)
     {
+        var cueLines = MergeCueLines(cueRentals, out var cueLineError);
+        if (cueLineError != null)
+        {
+            return TableOperationResult.Fail(null, cueLineError, autoReload: false);
+        }
+
+        if (cueLines.Count > 0)
+        {
+            // Kiểm tra gậy/tồn kho trước khi mở bàn để không mở bàn rồi mới báo hết gậy.
+            var cueStockError = await ValidateCueLinesAsync(cueLines);
+            if (cueStockError != null)
+            {
+                return TableOperationResult.Fail(null, cueStockError, autoReload: false);
+            }
+        }
+
         if (tableId <= 0)
         {
             return TableOperationResult.Fail(null, "Mã bàn không hợp lệ.", autoReload: false);
@@ -529,22 +549,26 @@ public class TableSessionService : ITableSessionService
                     return comboRes;
                 }
 
+                var (comboCueAmount, comboCueWarning) = await RentCuesAtOpenAsync(sessionId, cueLines, staffId);
                 return TableOperationResult.Ok(new
                 {
                     SessionId = sessionId,
                     StartAtUtc = startAtUtc,
                     HasCombo = true,
-                    ComboData = comboRes.Data
-                }, comboRes.Message);
-            }
+                    ComboData = comboRes.Data,
+                    CueRentalAmount = comboCueAmount,
+                    CueRentalWarning = comboCueWarning
+                }, comboRes.Message);            }
 
+            var (cueAmount, cueWarning) = await RentCuesAtOpenAsync(sessionId, cueLines, staffId);
             return TableOperationResult.Ok(new
             {
                 SessionId = sessionId,
                 StartAtUtc = startAtUtc,
-                HasCombo = false
-            });
-        }
+                HasCombo = false,
+                CueRentalAmount = cueAmount,
+                CueRentalWarning = cueWarning
+            });        }
         catch (SqlException ex)
         {
             return HandleSqlException(ex, "OpenSessionAsync", tableId);
@@ -564,6 +588,25 @@ public class TableSessionService : ITableSessionService
     }
 
     public async Task<TableOperationResult> CloseSessionAsync(int sessionId, string staffId)
+    {
+        // Chụp lại tiền gậy trước khi đóng; sau khi đóng thành công thì cộng trả toàn bộ gậy của phiên về tồn kho.
+        decimal cueRentalAmount = 0m;
+        if (sessionId > 0)
+        {
+            var cueRentals = await LoadSessionCueRentalsAsync(sessionId);
+            cueRentalAmount = cueRentals.Sum(c => c.Subtotal);
+        }
+
+        var result = await CloseSessionCoreAsync(sessionId, staffId, cueRentalAmount);
+        if (result.Success)
+        {
+            await ReleaseCueRentalsAsync(sessionId);
+        }
+
+        return result;
+    }
+
+    private async Task<TableOperationResult> CloseSessionCoreAsync(int sessionId, string staffId, decimal cueRentalAmount)
     {
         if (sessionId <= 0)
         {
@@ -621,7 +664,8 @@ public class TableSessionService : ITableSessionService
                     HourlyRateSnapshot = hourlyRateSnapshot,
                     StartAtUtc = startAtUtc,
                     EndAtUtc = endAtUtc,
-                    BilledMinutes = billedMinutes
+                    BilledMinutes = billedMinutes,
+                    CueRentalAmount = cueRentalAmount
                 });
             }
 
@@ -646,6 +690,19 @@ public class TableSessionService : ITableSessionService
     }
 
     public async Task<CloseSummaryViewModel?> GetCloseSummaryAsync(int sessionId)
+    {
+        var summary = await GetCloseSummaryCoreAsync(sessionId);
+        if (summary == null)
+        {
+            return null;
+        }
+
+        summary.CueRentals = await LoadSessionCueRentalsAsync(sessionId);
+        summary.CueRentalAmount = summary.CueRentals.Sum(c => c.Subtotal);
+        return summary;
+    }
+
+    private async Task<CloseSummaryViewModel?> GetCloseSummaryCoreAsync(int sessionId)
     {
         if (sessionId <= 0)
         {
@@ -829,6 +886,333 @@ WHERE s.Id = @SessionId AND s.Status = 'Active';";
                 await conn.CloseAsync();
             }
         }
+    }
+
+    // =========================================================================
+    // PHẦN: THUÊ GẬY THEO LƯỢT (CHỌN LÚC MỞ BÀN HOẶC THUÊ THÊM KHI ĐANG CHƠI)
+    // - Giá cố định lấy từ danh mục "Gậy cho thuê", chụp lại (snapshot) lúc thuê.
+    // - Trừ tồn khi thuê (nguyên tử, không cho âm), cộng trả lại khi đóng bàn.
+    // - Tiền gậy = đơn giá × số lượng, cộng vào hóa đơn lúc đóng bàn.
+    // =========================================================================
+
+    public async Task<List<RentalCueOptionViewModel>> GetRentalCuesAsync()
+    {
+        // Đồng bộ lại tồn kho cho các phiên đã đóng mà chưa kịp hoàn gậy (ví dụ lỗi giữa chừng khi đóng bàn).
+        await ReleaseCueRentalsAsync(sessionId: null);
+
+        return await _context.Products.AsNoTracking()
+            .Where(p => p.IsActive
+                        && p.Category != null
+                        && p.Category.Name == ProductCategory.RentalCueCategoryName)
+            .OrderBy(p => p.Price)
+            .ThenBy(p => p.Name)
+            .Select(p => new RentalCueOptionViewModel
+            {
+                ProductId = p.Id,
+                Name = p.Name,
+                Price = p.Price,
+                StockQuantity = p.StockQuantity
+            })
+            .ToListAsync();
+    }
+
+    public async Task<TableOperationResult> AddCueRentalAsync(int sessionId, List<CueRentalLineRequest>? lines, string staffId)
+    {
+        if (sessionId <= 0)
+        {
+            return TableOperationResult.Fail(null, "Mã phiên chơi không hợp lệ.", autoReload: false);
+        }
+
+        if (string.IsNullOrWhiteSpace(staffId))
+        {
+            return TableOperationResult.Fail(null, "Thông tin nhân viên thực hiện không hợp lệ.", autoReload: false);
+        }
+
+        var merged = MergeCueLines(lines, out var lineError);
+        if (lineError != null)
+        {
+            return TableOperationResult.Fail(null, lineError, autoReload: false);
+        }
+
+        if (merged.Count == 0)
+        {
+            return TableOperationResult.Fail(null, "Vui lòng chọn ít nhất 1 cây gậy để thuê.", autoReload: false);
+        }
+
+        bool isActive = await _context.PlaySessions.AsNoTracking()
+            .AnyAsync(s => s.Id == sessionId && s.Status == "Active");
+        if (!isActive)
+        {
+            return TableOperationResult.Fail(51502, "Phiên chơi không còn ở trạng thái Hoạt động (có thể đã được nhân viên khác đóng).", autoReload: true);
+        }
+
+        var (error, amount) = await ApplyCueRentalsAsync(sessionId, merged, staffId);
+        if (error != null)
+        {
+            return TableOperationResult.Fail(null, error, autoReload: false);
+        }
+
+        int totalCues = merged.Sum(m => m.Quantity);
+        return TableOperationResult.Ok(
+            new { SessionId = sessionId, CueRentalAmount = amount, TotalQuantity = totalCues },
+            $"Đã thuê {totalCues} cây gậy ({amount:N0} VND).");
+    }
+
+    /// <summary>
+    /// Gộp các dòng trùng ProductId, bỏ dòng số lượng 0 và báo lỗi nếu có số lượng âm.
+    /// </summary>
+    private static List<CueRentalLineRequest> MergeCueLines(List<CueRentalLineRequest>? lines, out string? error)
+    {
+        error = null;
+        var result = new List<CueRentalLineRequest>();
+        if (lines == null)
+        {
+            return result;
+        }
+
+        foreach (var line in lines)
+        {
+            if (line == null || (line.ProductId <= 0 && line.Quantity == 0))
+            {
+                continue;
+            }
+
+            if (line.ProductId <= 0 || line.Quantity < 0)
+            {
+                error = "Danh sách gậy thuê không hợp lệ.";
+                return new List<CueRentalLineRequest>();
+            }
+
+            if (line.Quantity == 0)
+            {
+                continue;
+            }
+
+            if (line.Quantity > 100)
+            {
+                error = "Số lượng thuê mỗi loại gậy không hợp lệ.";
+                return new List<CueRentalLineRequest>();
+            }
+
+            var existing = result.FirstOrDefault(r => r.ProductId == line.ProductId);
+            if (existing != null)
+            {
+                existing.Quantity += line.Quantity;
+            }
+            else
+            {
+                result.Add(new CueRentalLineRequest { ProductId = line.ProductId, Quantity = line.Quantity });
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Kiểm tra trước (không ghi) các gậy chọn có hợp lệ và còn đủ tồn hay không. Trả về thông báo lỗi hoặc null.
+    /// </summary>
+    private async Task<string?> ValidateCueLinesAsync(List<CueRentalLineRequest> merged)
+    {
+        if (merged.Count == 0)
+        {
+            return null;
+        }
+
+        var ids = merged.Select(m => m.ProductId).ToList();
+        var products = await _context.Products.AsNoTracking()
+            .Include(p => p.Category)
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync();
+
+        foreach (var line in merged)
+        {
+            var product = products.FirstOrDefault(p => p.Id == line.ProductId);
+            if (product == null
+                || !product.IsActive
+                || product.Category == null
+                || product.Category.Name != ProductCategory.RentalCueCategoryName)
+            {
+                return "Loại gậy đã chọn không tồn tại hoặc đã ngừng cho thuê.";
+            }
+
+            if (product.StockQuantity < line.Quantity)
+            {
+                return $"Gậy \"{product.Name}\" chỉ còn {product.StockQuantity} cây, không đủ để thuê {line.Quantity} cây.";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Trừ tồn nguyên tử + ghi dòng thuê trong một transaction. Trả về (lỗi, tổng tiền gậy vừa thuê).
+    /// </summary>
+    private async Task<(string? Error, decimal Amount)> ApplyCueRentalsAsync(int sessionId, List<CueRentalLineRequest> merged, string staffId)
+    {
+        try
+        {
+            var ids = merged.Select(m => m.ProductId).ToList();
+            var products = await _context.Products.AsNoTracking()
+                .Include(p => p.Category)
+                .Where(p => ids.Contains(p.Id))
+                .ToListAsync();
+
+            foreach (var line in merged)
+            {
+                var product = products.FirstOrDefault(p => p.Id == line.ProductId);
+                if (product == null
+                    || !product.IsActive
+                    || product.Category == null
+                    || product.Category.Name != ProductCategory.RentalCueCategoryName)
+                {
+                    return ("Loại gậy đã chọn không tồn tại hoặc đã ngừng cho thuê.", 0m);
+                }
+            }
+
+            await using var tx = await _context.Database.BeginTransactionAsync();
+            var nowUtc = DateTime.UtcNow;
+            decimal amount = 0m;
+
+            foreach (var line in merged)
+            {
+                var product = products.First(p => p.Id == line.ProductId);
+                int qty = line.Quantity;
+                int pid = product.Id;
+
+                // Trừ tồn nguyên tử: chỉ thành công khi còn đủ gậy, tránh hai nhân viên cùng thuê cây cuối.
+                int affected = await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE dbo.Products SET StockQuantity = StockQuantity - {qty} WHERE Id = {pid} AND StockQuantity >= {qty}");
+                if (affected == 0)
+                {
+                    await tx.RollbackAsync();
+                    int currentStock = await _context.Products.AsNoTracking()
+                        .Where(p => p.Id == pid)
+                        .Select(p => p.StockQuantity)
+                        .FirstOrDefaultAsync();
+                    return ($"Gậy \"{product.Name}\" chỉ còn {currentStock} cây, không đủ để thuê {qty} cây.", 0m);
+                }
+
+                _context.SessionCueRentals.Add(new SessionCueRental
+                {
+                    SessionId = sessionId,
+                    ProductId = pid,
+                    ProductNameSnapshot = product.Name,
+                    UnitPriceSnapshot = product.Price,
+                    Quantity = qty,
+                    RentedAtUtc = nowUtc,
+                    CreatedById = staffId,
+                    IsReturned = false
+                });
+                amount += product.Price * qty;
+            }
+
+            await _context.SaveChangesAsync();
+            await tx.CommitAsync();
+            return (null, amount);
+        }
+        catch (Exception ex)
+        {
+            _context.ChangeTracker.Clear();
+            _logger.LogError(ex, "Lỗi khi thuê gậy cho phiên {SessionId} bởi nhân viên {StaffId}.", sessionId, staffId);
+            return ("Không thể ghi nhận thuê gậy do lỗi hệ thống. Vui lòng thử lại.", 0m);
+        }
+    }
+
+    /// <summary>
+    /// Cộng trả tồn kho cho các dòng thuê chưa trả. sessionId = null: xử lý mọi phiên đã đóng nhưng chưa hoàn gậy.
+    /// Chạy lại nhiều lần vẫn an toàn (chỉ xử lý dòng IsReturned = 0). Không ném lỗi ra ngoài.
+    /// </summary>
+    private async Task ReleaseCueRentalsAsync(int? sessionId)
+    {
+        const string sqlBySession = @"
+SET XACT_ABORT ON;
+BEGIN TRAN;
+DECLARE @Returned TABLE (ProductId int NOT NULL, Quantity int NOT NULL);
+UPDATE r SET IsReturned = 1, ReturnedAtUtc = SYSUTCDATETIME()
+OUTPUT inserted.ProductId, inserted.Quantity INTO @Returned
+FROM dbo.SessionCueRentals r
+WHERE r.IsReturned = 0 AND r.SessionId = {0};
+UPDATE p SET StockQuantity = p.StockQuantity + x.Qty
+FROM dbo.Products p
+JOIN (SELECT ProductId, SUM(Quantity) AS Qty FROM @Returned GROUP BY ProductId) x ON x.ProductId = p.Id;
+COMMIT;";
+
+        const string sqlOrphans = @"
+SET XACT_ABORT ON;
+BEGIN TRAN;
+DECLARE @Returned TABLE (ProductId int NOT NULL, Quantity int NOT NULL);
+UPDATE r SET IsReturned = 1, ReturnedAtUtc = SYSUTCDATETIME()
+OUTPUT inserted.ProductId, inserted.Quantity INTO @Returned
+FROM dbo.SessionCueRentals r
+JOIN dbo.PlaySessions s ON s.Id = r.SessionId
+WHERE r.IsReturned = 0 AND s.Status <> 'Active';
+UPDATE p SET StockQuantity = p.StockQuantity + x.Qty
+FROM dbo.Products p
+JOIN (SELECT ProductId, SUM(Quantity) AS Qty FROM @Returned GROUP BY ProductId) x ON x.ProductId = p.Id;
+COMMIT;";
+
+        try
+        {
+            if (sessionId.HasValue)
+            {
+                await _context.Database.ExecuteSqlRawAsync(sqlBySession, sessionId.Value);
+            }
+            else
+            {
+                await _context.Database.ExecuteSqlRawAsync(sqlOrphans);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Không thể hoàn tồn kho gậy thuê (SessionId={SessionId}). Sẽ tự đồng bộ lại ở lần mở danh sách gậy kế tiếp.", sessionId);
+        }
+    }
+
+    private async Task<List<SessionCueRentalViewModel>> LoadSessionCueRentalsAsync(int sessionId)
+    {
+        try
+        {
+            var rentals = await _context.SessionCueRentals.AsNoTracking()
+                .Where(r => r.SessionId == sessionId)
+                .OrderBy(r => r.RentedAtUtc)
+                .ThenBy(r => r.Id)
+                .Select(r => new SessionCueRentalViewModel
+                {
+                    Id = r.Id,
+                    ProductId = r.ProductId,
+                    ProductName = r.ProductNameSnapshot,
+                    Quantity = r.Quantity,
+                    UnitPrice = r.UnitPriceSnapshot,
+                    RentedAtUtc = r.RentedAtUtc
+                })
+                .ToListAsync();
+
+            foreach (var r in rentals)
+            {
+                r.RentedAtUtc = DateTime.SpecifyKind(r.RentedAtUtc, DateTimeKind.Utc);
+            }
+
+            return rentals;
+        }
+        catch (Exception ex)
+        {
+            // Không làm hỏng luồng mở/đóng bàn nếu bảng gậy thuê chưa sẵn sàng.
+            _logger.LogError(ex, "Không thể tải danh sách gậy thuê của phiên {SessionId}.", sessionId);
+            return new List<SessionCueRentalViewModel>();
+        }
+    }
+
+    private async Task<(decimal Amount, string? Warning)> RentCuesAtOpenAsync(int sessionId, List<CueRentalLineRequest> cueLines, string staffId)
+    {
+        if (cueLines.Count == 0)
+        {
+            return (0m, null);
+        }
+
+        var (error, amount) = await ApplyCueRentalsAsync(sessionId, cueLines, staffId);
+        return error == null
+            ? (amount, null)
+            : (0m, $"Đã mở bàn nhưng chưa thuê được gậy: {error} Vui lòng thuê gậy lại sau khi bắt đầu chơi.");
     }
 
     public async Task<TableOperationResult> AddSessionComboAsync(int sessionId, int comboId, int quantity, string staffId)
