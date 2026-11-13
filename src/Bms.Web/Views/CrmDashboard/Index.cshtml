@@ -56,8 +56,10 @@
         <div class="stat-card">
             <div class="stat-icon amber"><i class="bi bi-arrow-repeat"></i></div>
             <div>
-                <div class="stat-value">@Model.RepeatRate30DaysPercent.ToString("0.#")%</div>
-                <div class="stat-label">Tỷ lệ khách quay lại 30 ngày (@Model.RepeatCustomers30Days/@Model.ActiveCustomers30Days)</div>
+                <div class="stat-value">@(Model.ActiveCustomers30Days == 0 ? "—" : Model.RepeatRate30DaysPercent.ToString("0.#") + "%")</div>
+                <div class="stat-label">@(Model.ActiveCustomers30Days == 0
+                    ? "Tỷ lệ quay lại 30 ngày: chưa có hội viên thanh toán"
+                    : $"Tỷ lệ khách quay lại 30 ngày ({Model.RepeatCustomers30Days}/{Model.ActiveCustomers30Days} khách)")</div>
             </div>
         </div>
     </div>
@@ -184,7 +186,7 @@
             @if (!Model.HighValueAtRisk.Any())
             {
                 <div class="text-center py-5 text-muted">
-                    Hiện không có khách quen nào vắng mặt từ 30 đến 90 ngày.
+                    Hiện không có khách quen nào vắng mặt trên 30 ngày.
                 </div>
             }
             else
@@ -212,7 +214,7 @@
                                         </a>
                                         <div class="text-muted" style="font-size:0.75rem">@(c.PhoneNumber ?? "—") · Hạng @c.TierName</div>
                                     </td>
-                                    <td><span class="text-danger fw-semibold">@(c.RecencyDays ?? 0) ngày trước</span></td>
+                                    <td><span class="text-danger fw-semibold">@(c.RecencyDays.HasValue ? $"{c.RecencyDays} ngày trước" : "Chưa ghé")</span></td>
                                     <td class="text-end">@c.Frequency12M lượt</td>
                                     <td class="text-end fw-semibold">@VnFormat.Money(c.Monetary12M)</td>
                                     <td class="text-end">
@@ -258,7 +260,7 @@
         const segKeys = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Keys));
         const segLabels = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Keys.Select(VnFormat.SegmentLabel)));
         const segValues = @Html.Raw(JsonSerializer.Serialize(Model.SegmentCounts.Values));
-        const segColors = ['#9333ea', '#16a34a', '#2563eb', '#ea580c'];
+        const segColors = ['#9333ea', '#16a34a', '#2563eb', '#ea580c', '#94a3b8'];
 
         const rfmCtx = document.getElementById('rfmChart');
         if (rfmCtx) {

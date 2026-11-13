@@ -65,7 +65,7 @@
                 <select name="segment" class="form-select" style="width:175px"
                         onchange="this.form.submit()">
                     <option value="" selected="@(string.IsNullOrEmpty(Model.Segment))">Tất cả nhóm khách</option>
-                    @foreach (var seg in new[] { "Champion", "Loyal", "New", "AtRisk" })
+                    @foreach (var seg in new[] { "Champion", "Loyal", "New", "AtRisk", "NeverVisited" })
                     {
                         <option value="@seg" selected="@(Model.Segment == seg)">@VnFormat.SegmentLabel(seg)</option>
                     }

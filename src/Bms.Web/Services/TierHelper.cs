@@ -73,6 +73,7 @@ public static class VnFormat
         "Loyal"    => "Thân thiết",
         "New"      => "Khách mới",
         "AtRisk"   => "Lâu rồi chưa ghé",
+        "NeverVisited" => "Chưa ghé lần nào",
         "Lost"     => "Lâu rồi chưa ghé",
         "Regular"  => "Thân thiết",
         _          => segment ?? "Thân thiết"

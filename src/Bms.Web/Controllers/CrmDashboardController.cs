@@ -59,7 +59,8 @@ public class CrmDashboardController : Controller
             CustomerSegmentService.SegChampion,
             CustomerSegmentService.SegLoyal,
             CustomerSegmentService.SegNew,
-            CustomerSegmentService.SegAtRisk
+            CustomerSegmentService.SegAtRisk,
+            CustomerSegmentService.SegNever
         };
         var segCounts = segOrder.ToDictionary(
             s => s,
@@ -68,17 +69,14 @@ public class CrmDashboardController : Controller
         // Phân bố hạng
         var tiers = await _db.MembershipTiers.AsNoTracking()
             .OrderBy(t => t.SpendThreshold).ThenBy(t => t.SortOrder).ToListAsync();
-        var tierColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Member"] = "#3b82f6",
-            ["Silver"] = "#94a3b8",
-            ["Gold"] = "#f59e0b"
-        };
-        var tierPoints = tiers.Select(t => new TierDistributionPoint
+        // TV5: màu theo thứ tự hạng (thấp → cao); khách chưa gán TierId tính vào hạng thấp nhất,
+        // để tổng các cột luôn bằng tổng số hội viên.
+        var palette = new[] { "#b45309", "#94a3b8", "#f59e0b", "#0ea5e9", "#7c3aed", "#db2777" };
+        var tierPoints = tiers.Select((t, i) => new TierDistributionPoint
         {
             TierName = t.TierName,
-            Count = profiles.Count(p => p.TierId == t.Id),
-            ColorHex = tierColors.GetValueOrDefault(t.TierName, "#64748b")
+            Count = profiles.Count(p => p.TierId == t.Id || (i == 0 && (p.TierId == null || !tiers.Any(x => x.Id == p.TierId)))),
+            ColorHex = palette[i % palette.Length]
         }).ToList();
 
         var allSpenders = profiles
