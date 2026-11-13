@@ -22,7 +22,7 @@
 
 @if (Model.Current is { } c)
 {
-    <div class="form-card mb-4">
+    <div class="form-card mb-4" style="max-width:none">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h6 class="mb-0">Tháng này (@c.Label) — ngày @c.DaysElapsed/@c.DaysInMonth</h6>
             <span class="badge @Badge(c)">@c.StatusText</span>
@@ -31,10 +31,10 @@
             <div class="progress-bar @Bar(c.PercentAchieved)" style="width:@Math.Min(100, c.PercentAchieved).ToString(System.Globalization.CultureInfo.InvariantCulture)%">@c.PercentAchieved%</div>
         </div>
         <div class="row g-3 text-center">
-            <div class="col-6 col-md-3"><div class="stat-label">Mục tiêu</div><div class="fw-semibold">@c.TargetAmount.ToString("N0") ₫</div></div>
-            <div class="col-6 col-md-3"><div class="stat-label">Đã thu</div><div class="fw-semibold text-success">@c.ActualRevenue.ToString("N0") ₫</div></div>
-            <div class="col-6 col-md-3"><div class="stat-label">Dự báo cuối tháng</div><div class="fw-semibold">@c.ForecastRevenue.ToString("N0") ₫</div></div>
-            <div class="col-6 col-md-3"><div class="stat-label">Cần thu mỗi ngày còn lại</div><div class="fw-semibold @(c.Achieved ? "text-success" : "text-danger")">@(c.Achieved ? "Đã đạt" : c.RequiredPerDay.ToString("N0") + " ₫")</div></div>
+            <div class="col-6 col-md-3"><div class="stat-label">Mục tiêu</div><div class="fw-semibold">@c.TargetAmount.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</div></div>
+            <div class="col-6 col-md-3"><div class="stat-label">Đã thu</div><div class="fw-semibold text-success">@c.ActualRevenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</div></div>
+            <div class="col-6 col-md-3"><div class="stat-label">Dự báo cuối tháng</div><div class="fw-semibold">@c.ForecastRevenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</div></div>
+            <div class="col-6 col-md-3"><div class="stat-label">Cần thu mỗi ngày còn lại</div><div class="fw-semibold @(c.Achieved ? "text-success" : "text-danger")">@(c.Achieved ? "Đã đạt" : c.RequiredPerDay.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) + " VND")</div></div>
         </div>
     </div>
 }
@@ -72,8 +72,8 @@ else
                 {
                     <tr>
                         <td><strong>@p.Label</strong></td>
-                        <td class="text-end">@p.TargetAmount.ToString("N0")</td>
-                        <td class="text-end">@(p.State == TargetMonthState.Future ? "—" : p.ActualRevenue.ToString("N0"))</td>
+                        <td class="text-end">@p.TargetAmount.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))</td>
+                        <td class="text-end">@(p.State == TargetMonthState.Future ? "—" : p.ActualRevenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")))</td>
                         <td>
                             @if (p.State != TargetMonthState.Future)
                             {

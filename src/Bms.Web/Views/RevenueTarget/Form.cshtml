@@ -29,10 +29,10 @@
         {
             <div class="alert alert-light border mb-3" style="font-size:0.875rem">
                 Tháng <strong>@Model.Month?.ToString("00")/@Model.Year</strong> ·
-                mục tiêu hiện tại <strong>@Model.OldAmount?.ToString("N0") ₫</strong>
+                mục tiêu hiện tại <strong>@Model.OldAmount?.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</strong>
                 @if (Model.State != TargetMonthState.Future)
                 {
-                    <span> · đã thu <strong>@Model.ActualRevenue?.ToString("N0") ₫</strong></span>
+                    <span> · đã thu <strong>@Model.ActualRevenue?.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</strong></span>
                 }
             </div>
             <input type="hidden" asp-for="Year" />

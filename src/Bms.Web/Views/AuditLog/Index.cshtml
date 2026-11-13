@@ -2,7 +2,7 @@
 @{
     ViewData["Title"] = "Nhật ký hệ thống";
     Layout = "_AdminLayout";
-    string Money(string? v) => decimal.TryParse(v, out var d) ? d.ToString("N0") : (v ?? "");
+    string Money(string? v) => decimal.TryParse(v, out var d) ? d.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) : (v ?? "");
 }
 <partial name="_Alerts" />
 <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>

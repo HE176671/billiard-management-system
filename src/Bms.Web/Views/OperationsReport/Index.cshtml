@@ -22,7 +22,7 @@
 </p>
 
 <!-- Bộ lọc báo cáo -->
-<form method="get" class="form-card mb-4">
+<form method="get" class="form-card mb-4" style="max-width:none">
     <div class="row g-3 align-items-end">
         <div class="col-sm-6 col-md-2">
             <label for="from" class="form-label">Từ ngày</label>
@@ -61,7 +61,7 @@
             </select>
         </div>
         <div class="col-sm-6 col-md-2 d-flex gap-2">
-            <button type="submit" class="btn-primary-bms">
+            <button type="submit" class="btn-primary-bms text-nowrap">
                 <i class="bi bi-funnel"></i> Xem
             </button>
             <a asp-action="Export"
@@ -70,7 +70,7 @@
                asp-route-openHour="@Model.OpenHour"
                asp-route-closeHour="@Model.CloseHour"
                asp-route-tableTypeId="@Model.TableTypeId"
-               class="btn-outline-bms" title="Xuất file CSV">
+               class="btn-outline-bms text-nowrap" title="Xuất file CSV">
                 <i class="bi bi-download"></i> CSV
             </a>
         </div>
@@ -83,6 +83,20 @@
 }
 else
 {
+    @if (Model.LongOpenSessions.Any())
+    {
+        <div class="alert alert-warning mb-4">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            <strong>Có @Model.LongOpenSessions.Count phiên đang mở quá @Bms.Web.Models.OperationsReportViewModel.LongOpenHours giờ</strong>
+            (có thể nhân viên quên đóng bàn — số giờ của phiên được tính tới hiện tại nên tỷ lệ lấp đầy có thể cao bất thường):
+            @foreach (var s in Model.LongOpenSessions)
+            {
+                <span class="badge bg-warning text-dark ms-1">Bàn @s.TableCode · mở từ @s.StartAtUtc.AddHours(7).ToString("dd/MM HH:mm") · @s.OpenHours giờ</span>
+            }
+            <a asp-controller="Table" asp-action="Index" class="alert-link ms-1">Mở sơ đồ bàn</a>
+        </div>
+    }
+
     <!-- Hàng thẻ KPI tổng quan -->
     <div class="row g-3 mb-4">
         <div class="col-sm-6 col-xl-3">
@@ -99,7 +113,7 @@ else
                 <div class="stat-icon green"><i class="bi bi-clock-history"></i></div>
                 <div>
                     <div class="stat-value">@Model.TotalPlayHours <span style="font-size:0.9rem;font-weight:normal">giờ</span></div>
-                    <div class="stat-label">Tổng giờ có khách (@Model.TotalDays ngày · @Model.TotalTables bàn)</div>
+                    <div class="stat-label">Tổng giờ có khách cả ngày (@Model.TotalDays ngày · @Model.TotalTables bàn)</div>
                 </div>
             </div>
         </div>
@@ -130,7 +144,7 @@ else
                 <i class="bi bi-layers me-1 text-primary"></i> Tỷ lệ lấp đầy &amp; Doanh thu giờ chơi theo loại bàn
             </span>
             <span class="text-muted" style="font-size:0.8rem">
-                Tổng doanh thu giờ chơi: <strong>@Model.TotalPlaytimeRevenue.ToString("N0") VND</strong>
+                Tổng doanh thu giờ chơi: <strong>@Model.TotalPlaytimeRevenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</strong>
             </span>
         </div>
         <div class="table-responsive">
@@ -140,7 +154,7 @@ else
                         <th>Loại bàn</th>
                         <th class="text-center">Số bàn</th>
                         <th class="text-center">Phiên kết thúc</th>
-                        <th class="text-end">Giờ có khách</th>
+                        <th class="text-end">Giờ có khách<br /><small class="text-muted fw-normal">trong giờ mở cửa</small></th>
                         <th class="text-end">Giờ khả dụng</th>
                         <th style="min-width:170px">Tỷ lệ lấp đầy</th>
                         <th class="text-end">Doanh thu giờ chơi</th>
@@ -163,7 +177,7 @@ else
                                     <span style="min-width:48px;font-weight:600;font-size:0.85rem">@row.OccupancyPercent%</span>
                                 </div>
                             </td>
-                            <td class="text-end fw-semibold">@row.PlaytimeRevenue.ToString("N0") VND</td>
+                            <td class="text-end fw-semibold">@row.PlaytimeRevenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</td>
                         </tr>
                     }
                     @if (!Model.TableTypeRows.Any())
@@ -285,7 +299,7 @@ else
                         <i class="bi bi-cup-straw me-1 text-success"></i> Top món F&amp;B bán chạy
                     </span>
                     <span class="text-muted" style="font-size:0.8rem">
-                        Tổng F&amp;B: <strong>@Model.TotalFandBRevenue.ToString("N0") VND</strong>
+                        Tổng F&amp;B: <strong>@Model.TotalFandBRevenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</strong>
                     </span>
                 </div>
                 <div class="table-responsive">
@@ -307,7 +321,7 @@ else
                                     <td class="text-center">@item.GrossQuantity</td>
                                     <td class="text-center text-muted">@item.CancelledQuantity</td>
                                     <td class="text-center fw-semibold">@item.NetQuantity</td>
-                                    <td class="text-end fw-semibold">@item.Revenue.ToString("N0") VND</td>
+                                    <td class="text-end fw-semibold">@item.Revenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</td>
                                 </tr>
                             }
                             @if (!Model.TopFandBItems.Any())
@@ -358,7 +372,7 @@ else
                                     <span style="min-width:44px;font-size:0.82rem;font-weight:600">@t.OccupancyPercent%</span>
                                 </div>
                             </td>
-                            <td class="text-end">@t.PlaytimeRevenue.ToString("N0") VND</td>
+                            <td class="text-end">@t.PlaytimeRevenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</td>
                         </tr>
                     }
                 </tbody>

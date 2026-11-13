@@ -1,6 +1,6 @@
 @model Bms.Web.Models.EmployeeListViewModel
 @{
-    ViewData["Title"] = "Quản lý người dùng";
+    ViewData["Title"] = "Tài khoản & phân quyền";
     Layout = "_AdminLayout";
     string RoleLabel(string r) => r switch { "Admin" => "Admin · Quản trị", "Manager" => "Manager · Quản lý", _ => "Staff · Nhân viên" };
     string RoleStyle(string r) => r switch
@@ -148,7 +148,7 @@
                                     @if (!isSelf && emp.RoleName != "Admin")
                                     {
                                         <form asp-action="Delete" asp-route-id="@emp.Id" method="post" class="d-inline"
-                                              onsubmit="return confirm('Xóa vĩnh viễn tài khoản @emp.FullName?\n\nChỉ xóa được tài khoản tạo nhầm, chưa có ca làm hay giao dịch. Tài khoản đã làm việc thì hãy Khóa.')">
+                                              onsubmit="return confirm('Xóa vĩnh viễn tài khoản @emp.FullName?\n\nChỉ xóa được tài khoản tạo nhầm, chưa có giao dịch. Tài khoản đã làm việc thì hãy Khóa.')">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="btn-sm-icon text-danger" title="Xóa tài khoản tạo nhầm">
                                                 <i class="bi bi-trash"></i>
@@ -182,8 +182,8 @@
     <h6 style="font-weight:600" class="mb-2"><i class="bi bi-info-circle me-2"></i>Phân quyền theo vai trò</h6>
     <div class="row g-3">
         <div class="col-md-4"><strong>Admin</strong> — chỉ quản trị tài khoản: tạo, sửa, khóa, đặt lại mật khẩu, đổi vai trò. Không vận hành quán.</div>
-        <div class="col-md-4"><strong>Manager</strong> — vận hành quán: giá, món, kho, ca, báo cáo, nhật ký, hạng hội viên, quà, email ưu đãi. Không hủy món/hóa đơn.</div>
-        <div class="col-md-4"><strong>Staff</strong> — tại quầy: mở/đóng ca, mở bàn, gọi món, thanh toán, hủy món/hóa đơn có lý do, đăng ký hội viên.</div>
+        <div class="col-md-4"><strong>Manager</strong> — vận hành quán: giá, món, kho, báo cáo, mục tiêu doanh thu, nhật ký, hạng hội viên, quà, email ưu đãi. Không hủy món/hóa đơn.</div>
+        <div class="col-md-4"><strong>Staff</strong> — tại quầy: mở/đóng bàn, gọi món, thanh toán, hủy món/hóa đơn có lý do, đăng ký hội viên.</div>
     </div>
     <p class="text-muted mb-0 mt-2">Đổi vai trò, khóa hoặc đặt lại mật khẩu sẽ đăng xuất phiên đang mở của tài khoản đó. Mọi thay đổi được ghi vào Nhật ký hệ thống.</p>
 </div>

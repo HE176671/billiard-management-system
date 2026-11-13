@@ -4,6 +4,8 @@
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
 
     var showTargets = Model.GroupBy == "month";
+    // Kỳ lưu dạng "yyyy-MM-dd" / "yyyy-MM" (khóa so khớp mục tiêu); hiển thị kiểu Việt Nam.
+    string PeriodLabel(string key) => key.Length == 10 ? $"{key[8..10]}/{key[5..7]}/{key[..4]}" : key.Length == 7 ? $"{key[5..7]}/{key[..4]}" : key;
     string FormatMethodLabel(string method) => method switch
     {
         "Cash" => "Tiền mặt",
@@ -18,7 +20,7 @@
     Doanh thu thực thu từ bảng <code>PaymentTransactions</code> theo thời điểm giao dịch (múi giờ Việt Nam UTC+7).
 </p>
 
-<form method="get" class="form-card mb-4">
+<form method="get" class="form-card mb-4" style="max-width:none">
     <div class="row g-3 align-items-end">
         <div class="col-sm-6 col-md-3">
             <label for="from" class="form-label">Từ ngày</label>
@@ -36,14 +38,14 @@
             </select>
         </div>
         <div class="col-sm-6 col-md-3 d-flex gap-2">
-            <button class="btn-primary-bms" type="submit">
+            <button class="btn-primary-bms text-nowrap" type="submit">
                 <i class="bi bi-funnel"></i> Xem báo cáo
             </button>
             <a asp-action="Export"
                asp-route-from="@Model.From.ToString("yyyy-MM-dd")"
                asp-route-to="@Model.To.ToString("yyyy-MM-dd")"
                asp-route-groupBy="@Model.GroupBy"
-               class="btn-outline-bms" title="Xuất file CSV">
+               class="btn-outline-bms text-nowrap" title="Xuất file CSV">
                 <i class="bi bi-download"></i> Xuất CSV
             </a>
         </div>
@@ -61,7 +63,7 @@ else
             <div class="stat-card">
                 <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
                 <div>
-                    <div class="stat-value">@Model.TotalRevenue.ToString("N0") VND</div>
+                    <div class="stat-value">@Model.TotalRevenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</div>
                     <div class="stat-label">Tổng doanh thu thực thu</div>
                 </div>
             </div>
@@ -127,9 +129,9 @@ else
                             @foreach (var row in Model.Periods)
                             {
                                 <tr>
-                                    <td><strong>@row.Period</strong></td>
+                                    <td><strong>@PeriodLabel(row.Period)</strong></td>
                                     <td class="text-end @(row.Revenue > 0 ? "fw-semibold text-success" : "text-muted")">
-                                        @row.Revenue.ToString("N0") VND
+                                        @row.Revenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND
                                     </td>
                                     <td class="text-center">@row.PaymentCount</td>
                                     @if (showTargets)
@@ -137,7 +139,7 @@ else
                                         if (Model.MonthTargets.TryGetValue(row.Period, out var target))
                                         {
                                             var pct = Math.Round(row.Revenue / target * 100, 1);
-                                            <td class="text-end">@target.ToString("N0")</td>
+                                            <td class="text-end">@target.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))</td>
                                             <td class="text-end fw-semibold @(pct >= 100 ? "text-success" : "text-danger")">@pct%</td>
                                         }
                                         else
@@ -175,7 +177,7 @@ else
                             {
                                 <tr>
                                     <td><strong>@FormatMethodLabel(row.Method)</strong></td>
-                                    <td class="text-end fw-semibold">@row.Revenue.ToString("N0") VND</td>
+                                    <td class="text-end fw-semibold">@row.Revenue.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) VND</td>
                                     <td class="text-center">@row.PaymentCount</td>
                                 </tr>
                             }
@@ -199,7 +201,7 @@ else
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
         <script>
             (function () {
-                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Periods.Select(p => p.Period)));
+                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Periods.Select(p => PeriodLabel(p.Period))));
                 const revenue = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Periods.Select(p => p.Revenue)));
                 const targets = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Periods.Select(p => Model.MonthTargets.TryGetValue(p.Period, out var t) ? (decimal?)t : null)));
                 const datasets = [{ type: 'bar', label: 'Doanh thu (VND)', data: revenue, backgroundColor: '#2563eb' }];
