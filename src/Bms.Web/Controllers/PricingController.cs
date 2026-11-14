@@ -77,6 +77,7 @@ public class PricingController : Controller
         {
             var nowUtc = DateTime.UtcNow;
             var tables = await _context.BilliardTables.AsNoTracking()
+                .Where(t => t.FloorNumber > 0 && t.TableCode != "TAKEAWAY")
                 .Include(t => t.TableType)
                 .OrderBy(t => t.FloorNumber)
                 .ThenBy(t => t.TableCode)

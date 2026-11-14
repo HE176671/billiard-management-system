@@ -98,7 +98,7 @@
                                 @foreach (var s in Model.ActiveSessions)
                                 {
                                     <option value="@s.SessionId" selected="@(Model.SelectedSessionId == s.SessionId)">
-                                        Bàn @s.TableCode — Thời gian chơi: @s.PlayDurationText
+                                        @(s.TableCode.StartsWith("[Mang về]") ? $"{s.TableCode} — Đồ ăn & nước uống mang về" : $"Bàn {s.TableCode} — Thời gian chơi: {s.PlayDurationText}")
                                     </option>
                                 }
                             </select>
@@ -118,13 +118,24 @@
                     {
                         <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2" style="font-size:0.82rem">
                             <span>
-                                <span class="badge bg-danger me-1">Bàn @Model.SelectedSession.TableCode</span>
-                                Thời gian chơi: <strong>@Model.SelectedSession.PlayDurationText</strong>
-                                <span class="text-muted ms-1">(@Model.SelectedSession.StartAtUtc.ToVn().ToString("HH:mm") – @((Model.SelectedSession.EndAtUtc ?? DateTime.UtcNow).ToVn().ToString("HH:mm")))</span>
+                                @if (Model.SelectedSession.TableCode.StartsWith("[Mang về]"))
+                                {
+                                    <span class="badge bg-success me-1">@Model.SelectedSession.TableCode</span>
+                                    <span>Điểm bán: <strong>Quầy F&amp;B (Khách mua lẻ mang về)</strong></span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger me-1">Bàn @Model.SelectedSession.TableCode</span>
+                                    @:Thời gian chơi: <strong>@Model.SelectedSession.PlayDurationText</strong>
+                                    <span class="text-muted ms-1">(@Model.SelectedSession.StartAtUtc.ToVn().ToString("HH:mm") – @((Model.SelectedSession.EndAtUtc ?? DateTime.UtcNow).ToVn().ToString("HH:mm")))</span>
+                                }
                             </span>
-                            <span class="text-muted">
-                                Đơn giá bàn: <strong>@VnFormat.Money(Model.SelectedSession.HourlyRateSnapshot)/giờ</strong>
-                            </span>
+                            @if (!Model.SelectedSession.TableCode.StartsWith("[Mang về]"))
+                            {
+                                <span class="text-muted">
+                                    Đơn giá bàn: <strong>@VnFormat.Money(Model.SelectedSession.HourlyRateSnapshot)/giờ</strong>
+                                </span>
+                            }
                         </div>
                     }
                 </div>

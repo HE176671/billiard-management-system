@@ -32,6 +32,7 @@ public class TableSessionService : ITableSessionService
         var serverTimeUtc = DateTime.UtcNow;
 
         var query = from table in _context.BilliardTables.AsNoTracking()
+                    where table.FloorNumber > 0 && table.TableCode != "TAKEAWAY"
                     join type in _context.TableTypes.AsNoTracking() on table.TableTypeId equals type.Id
                     join session in _context.PlaySessions.AsNoTracking().Where(s => s.Status == "Active")
                         on table.Id equals session.TableId into sessionGroup

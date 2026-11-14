@@ -566,7 +566,7 @@ public class LoyaltyTestController : Controller
                         s.Id AS SessionId,
                         CASE 
                             WHEN s.Status = 'Closed' AND s.PlaytimeAmount = 0 
-                            THEN CONCAT(N'[Mang về] ', ISNULL(t.TableCode, CONCAT(N'Bàn #', s.TableId)))
+                            THEN CONCAT(N'[Mang về] Quầy F&B (Đơn #', ISNULL((SELECT TOP 1 CAST(o.Id AS nvarchar(20)) FROM dbo.Orders o WHERE o.SessionId = s.Id), CAST(s.Id AS nvarchar(20))), ')')
                             ELSE ISNULL(t.TableCode, CONCAT(N'Bàn #', s.TableId)) 
                         END AS TableCode,
                         CAST(NULL AS nvarchar(450)) AS CustomerId,
@@ -594,7 +594,7 @@ public class LoyaltyTestController : Controller
                         ), 0) AS FandBAmount,
                         s.Status AS Status,
                         ROW_NUMBER() OVER (
-                            PARTITION BY s.TableId
+                            PARTITION BY s.TableId, (CASE WHEN s.Status = 'Closed' AND s.PlaytimeAmount = 0 THEN s.Id ELSE 0 END)
                             ORDER BY CASE WHEN s.Status IN ('Active', 'Open') THEN 0 ELSE 1 END, s.StartAtUtc DESC, s.Id DESC
                         ) AS Rn
                     FROM dbo.PlaySessions s
@@ -607,7 +607,9 @@ public class LoyaltyTestController : Controller
                     PlaytimeAmount, FandBAmount, Status
                 FROM RankedSessions
                 WHERE Rn = 1 OR SessionId = {targetId}
-                ORDER BY TableCode ASC, SessionId DESC
+                ORDER BY 
+                    CASE WHEN TableCode LIKE N'[Mang về]%' THEN 1 ELSE 0 END,
+                    TableCode ASC, SessionId DESC
             ").ToListAsync();
         }
         catch

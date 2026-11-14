@@ -202,7 +202,7 @@ public class OrderController : Controller
 
         var activeSessions = await _db.PlaySessions
             .Include(s => s.BilliardTable).ThenInclude(t => t.TableType)
-            .Where(s => s.Status == "Active")
+            .Where(s => s.Status == "Active" && s.BilliardTable.FloorNumber > 0 && s.BilliardTable.TableCode != "TAKEAWAY")
             .OrderBy(s => s.BilliardTable.TableCode)
             .ToListAsync();
 
@@ -408,26 +408,31 @@ public class OrderController : Controller
                 totalAmount += prod.Price * item.Quantity;
             }
 
-            // 1. Lấy 1 Table hợp lệ trong DB để gắn session "Closed" (tiền giờ = 0)
-            var defaultTable = await _db.BilliardTables.Include(t => t.TableType).FirstOrDefaultAsync();
-            if (defaultTable == null)
+            // 1. Lấy hoặc tạo điểm phục vụ TAKEAWAY (FloorNumber = 0) trong DB để tách bạch hoàn toàn với bàn chơi
+            var takeawayTable = await _db.BilliardTables.FirstOrDefaultAsync(t => t.TableCode == "TAKEAWAY");
+            if (takeawayTable == null)
             {
-                await tx.RollbackAsync();
-                TempData["Error"] = "Chưa có dữ liệu bàn trong hệ thống.";
-                return RedirectToAction(nameof(Service), new { tab = "takeaway" });
+                var firstType = await _db.TableTypes.FirstOrDefaultAsync();
+                takeawayTable = new BilliardTable
+                {
+                    TableCode = "TAKEAWAY",
+                    FloorNumber = 0,
+                    Status = "Maintenance",
+                    TableTypeId = firstType?.Id ?? 1
+                };
+                _db.BilliardTables.Add(takeawayTable);
+                await _db.SaveChangesAsync();
             }
-
-            var hourlyRate = defaultTable.TableType?.HourlyRate > 0 ? defaultTable.TableType.HourlyRate : 1000m;
 
             var counterSession = new PlaySession
             {
-                TableId = defaultTable.Id,
+                TableId = takeawayTable.Id,
                 CustomerId = null,
                 OpenedById = staffId!,
                 ClosedById = staffId!,
                 StartAtUtc = DateTime.UtcNow,
                 EndAtUtc = DateTime.UtcNow,
-                HourlyRateSnapshot = hourlyRate,
+                HourlyRateSnapshot = 0m,
                 PlaytimeAmount = 0m,
                 Status = "Closed" // Đóng ngay lập tức, hoàn toàn không chiếm bàn
             };
