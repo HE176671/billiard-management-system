@@ -523,7 +523,6 @@ public class TableSessionService : ITableSessionService
 
                 cmd.Parameters.Add(new SqlParameter("@TableId", SqlDbType.Int) { Value = tableId });
                 cmd.Parameters.Add(new SqlParameter("@StaffId", SqlDbType.NVarChar, 450) { Value = staffId });
-                cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = DBNull.Value });
                 cmd.Parameters.Add(new SqlParameter("@CustomerId", SqlDbType.NVarChar, 450) { Value = (object?)normalizedCustomerId ?? DBNull.Value });
 
                 using var reader = await cmd.ExecuteReaderAsync();

@@ -18,7 +18,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
     // Custom business tables (Hung & Doan)
     public DbSet<TableType>               TableTypes               => Set<TableType>();
-    public DbSet<PricingConfig>           PricingConfigs           => Set<PricingConfig>();
     public DbSet<PaymentTransaction>      PaymentTransactions      => Set<PaymentTransaction>();
     public DbSet<PaymentIntent>           PaymentIntents           => Set<PaymentIntent>();
     public DbSet<BilliardTable>           BilliardTables           => Set<BilliardTable>();
@@ -33,7 +32,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     // Loyalty & CRM tables (Dung - TV2)
     public DbSet<MembershipTier>          MembershipTiers          => Set<MembershipTier>();
     public DbSet<PointTransaction>        PointTransactions        => Set<PointTransaction>();
-    public DbSet<Review>                  Reviews                  => Set<Review>();
     public DbSet<Notification>            Notifications            => Set<Notification>();
     public DbSet<RewardItemEntity>        RewardItems              => Set<RewardItemEntity>();
     public DbSet<CustomerVoucher>         CustomerVouchers         => Set<CustomerVoucher>();
@@ -258,16 +256,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.HasOne(x => x.Actor).WithMany().HasForeignKey(x => x.ActorId).OnDelete(DeleteBehavior.Restrict);
         });
 
-        // Reviews (TV2)
-        var review = builder.Entity<Review>();
-        review.ToTable("Reviews");
-        review.Property(x => x.CustomerId).HasMaxLength(450).IsRequired();
-        review.Property(x => x.Rating).HasColumnType("tinyint");
-        review.Property(x => x.Comment).HasMaxLength(500);
-        review.Property(x => x.CreatedAtUtc).HasColumnType("datetime2");
-        review.HasOne(x => x.Customer).WithMany(u => u.Reviews)
-            .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
-
         // Notifications (TV2)
         var noti = builder.Entity<Notification>();
         noti.ToTable("Notifications");
@@ -284,14 +272,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.ToTable("TableTypes");
             e.Property(x => x.Name).HasMaxLength(50).IsRequired();
             e.Property(x => x.HourlyRate).HasColumnType("decimal(18,2)");
-        });
-
-        // PricingConfigs (Hung)
-        builder.Entity<PricingConfig>(e =>
-        {
-            e.ToTable("PricingConfigs");
-            e.Property(x => x.HourlyRate).HasColumnType("decimal(18,2)");
-            e.HasOne(x => x.TableType).WithMany().HasForeignKey(x => x.TableTypeId);
         });
 
         // PaymentTransactions (Hung)

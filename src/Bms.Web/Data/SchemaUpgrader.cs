@@ -127,9 +127,6 @@ public static class SchemaUpgrader
                 CONSTRAINT FK_Noti_User FOREIGN KEY (UserId) REFERENCES dbo.AspNetUsers(Id) ON DELETE CASCADE
             );
         END;
-
-        IF OBJECT_ID('dbo.Reviews', 'U') IS NOT NULL AND COL_LENGTH('dbo.Reviews', 'AdminReply') IS NULL
-            ALTER TABLE dbo.Reviews ADD AdminReply nvarchar(max) NULL;
         """,
         """
         SET ANSI_NULLS ON;
@@ -484,9 +481,6 @@ public static class SchemaUpgrader
             await db.Database.ExecuteSqlRawAsync("""
                 SET ANSI_NULLS ON;
                 SET QUOTED_IDENTIFIER ON;
-
-                IF OBJECT_ID('dbo.Reviews', 'U') IS NOT NULL AND COL_LENGTH('dbo.Reviews', 'AdminReply') IS NULL
-                    ALTER TABLE dbo.Reviews ADD AdminReply nvarchar(max) NULL;
 
                 IF OBJECT_ID('dbo.RewardItems', 'U') IS NOT NULL
                 BEGIN
@@ -1003,6 +997,194 @@ public static class SchemaUpgrader
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Không thể tự nâng cấp schema WF2 (Gọi món & Kho).");
+        }
+
+        // 7. Dọn bỏ 2 bảng dư thừa (dbo.Bookings, dbo.Reviews) & cập nhật các SP phiên chơi
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE OR ALTER PROCEDURE dbo.usp_OpenSession
+                    @TableId int,
+                    @StaffId nvarchar(450),
+                    @CustomerId nvarchar(450) = NULL
+                AS
+                BEGIN
+                    SET NOCOUNT ON; SET XACT_ABORT ON;
+                    IF NOT EXISTS (SELECT 1 FROM dbo.AspNetUsers u JOIN dbo.AspNetUserRoles ur ON ur.UserId = u.Id
+                        JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+                        WHERE u.Id = @StaffId AND u.IsActive = 1 AND r.Name IN (N'Staff',N'Manager',N'Admin'))
+                        THROW 51401, N'Active Staff or Admin required.', 1;
+                    BEGIN TRY
+                        BEGIN TRANSACTION;
+                        DECLARE @Now datetime2(0) = SYSUTCDATETIME();
+                        DECLARE @TableStatus varchar(20), @Rate decimal(18,2);
+
+                        SELECT @TableStatus = t.Status, @Rate = ty.HourlyRate
+                          FROM dbo.BilliardTables t WITH (UPDLOCK, HOLDLOCK)
+                          JOIN dbo.TableTypes ty ON ty.Id = t.TableTypeId WHERE t.Id = @TableId;
+
+                        IF @TableStatus IS NULL OR @TableStatus <> 'Available'
+                            THROW 51402, N'Table is not Available.', 1;
+                        IF EXISTS (SELECT 1 FROM dbo.PlaySessions WHERE TableId = @TableId AND Status = 'Active')
+                            THROW 51403, N'Table already has an Active session.', 1;
+
+                        IF @CustomerId IS NOT NULL AND NOT EXISTS (
+                            SELECT 1 FROM dbo.AspNetUsers u JOIN dbo.AspNetUserRoles ur ON ur.UserId = u.Id
+                            JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+                            WHERE u.Id = @CustomerId AND u.IsActive = 1 AND r.Name = N'Customer')
+                            THROW 51408, N'Customer account is inactive or invalid.', 1;
+
+                        INSERT dbo.PlaySessions(TableId, CustomerId, OpenedById, StartAtUtc, HourlyRateSnapshot)
+                            VALUES (@TableId, @CustomerId, @StaffId, @Now, @Rate);
+                        DECLARE @Id int = CONVERT(int, SCOPE_IDENTITY());
+
+                        INSERT dbo.PlaySessionTableSegments(SessionId, TableId, HourlyRateSnapshot, StartAtUtc, EndAtUtc)
+                            VALUES (@Id, @TableId, @Rate, @Now, NULL);
+
+                        UPDATE dbo.BilliardTables SET Status = 'InUse' WHERE Id = @TableId;
+                        COMMIT;
+                        SELECT @Id AS SessionId, @Now AS StartAtUtc;
+                    END TRY
+                    BEGIN CATCH
+                        IF @@TRANCOUNT > 0 ROLLBACK;
+                        THROW;
+                    END CATCH
+                END;
+                """);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE OR ALTER PROCEDURE dbo.usp_CloseSession
+                    @SessionId int, @StaffId nvarchar(450)
+                AS
+                BEGIN
+                    SET NOCOUNT ON; SET XACT_ABORT ON;
+                    IF NOT EXISTS (SELECT 1 FROM dbo.AspNetUsers u JOIN dbo.AspNetUserRoles ur ON ur.UserId = u.Id
+                        JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+                        WHERE u.Id = @StaffId AND u.IsActive = 1 AND r.Name IN (N'Staff',N'Manager',N'Admin'))
+                        THROW 51501, N'Active Staff or Admin required.', 1;
+                    BEGIN TRY
+                        BEGIN TRANSACTION;
+                        DECLARE @TableId int, @LockedId int, @Status varchar(20),
+                            @Now datetime2(0) = SYSUTCDATETIME(),
+                            @Amount decimal(18,2);
+
+                        SELECT @Status = Status, @TableId = TableId
+                          FROM dbo.PlaySessions WITH (UPDLOCK, HOLDLOCK) WHERE Id = @SessionId;
+                        IF @Status IS NULL OR @Status <> 'Active'
+                            THROW 51502, N'Only an Active session can be closed.', 1;
+
+                        SELECT @LockedId = Id FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @TableId;
+
+                        UPDATE dbo.PlaySessionTableSegments SET EndAtUtc = @Now
+                         WHERE SessionId = @SessionId AND EndAtUtc IS NULL;
+                        IF @@ROWCOUNT = 0
+                            THROW 51699, N'Active session has no open table segment.', 1;
+
+                        SET @Amount = dbo.fn_CalcPlaytimeAmount(@SessionId, @Now);
+
+                        UPDATE dbo.PlaySessions
+                           SET EndAtUtc = @Now,
+                               ClosedById = @StaffId,
+                               Status = 'Closed',
+                               PlaytimeAmount = @Amount
+                         WHERE Id = @SessionId;
+
+                        UPDATE dbo.BilliardTables SET Status = 'Available' WHERE Id = @TableId;
+
+                        COMMIT;
+                        SELECT Id, StartAtUtc, EndAtUtc, HourlyRateSnapshot, PlaytimeAmount, Status
+                          FROM dbo.PlaySessions WHERE Id = @SessionId;
+                    END TRY
+                    BEGIN CATCH
+                        IF @@TRANCOUNT > 0 ROLLBACK;
+                        THROW;
+                    END CATCH
+                END;
+                """);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE OR ALTER PROCEDURE dbo.usp_TransferSession
+                    @SessionId int, @NewTableId int, @StaffId nvarchar(450)
+                AS
+                BEGIN
+                    SET NOCOUNT ON; SET XACT_ABORT ON;
+                    IF NOT EXISTS (SELECT 1 FROM dbo.AspNetUsers u JOIN dbo.AspNetUserRoles ur ON ur.UserId = u.Id
+                        JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+                        WHERE u.Id = @StaffId AND u.IsActive = 1 AND r.Name IN (N'Staff',N'Manager',N'Admin'))
+                        THROW 51611, N'Active Staff or Admin required.', 1;
+                    BEGIN TRY
+                        BEGIN TRANSACTION;
+                        DECLARE @Now datetime2(0) = SYSUTCDATETIME(), @Status varchar(20), @OldTableId int,
+                            @FirstId int, @SecondId int, @LockedId int,
+                            @NewStatus varchar(20), @NewRate decimal(18,2), @NewCode nvarchar(20);
+
+                        SELECT @Status = Status, @OldTableId = TableId
+                          FROM dbo.PlaySessions WITH (UPDLOCK, HOLDLOCK) WHERE Id = @SessionId;
+                        IF @Status IS NULL OR @Status <> 'Active'
+                            THROW 51612, N'Only an Active session can be transferred.', 1;
+                        IF @NewTableId = @OldTableId
+                            THROW 51614, N'Target table is the current table of the session.', 1;
+
+                        SET @FirstId = CASE WHEN @OldTableId < @NewTableId THEN @OldTableId ELSE @NewTableId END;
+                        SET @SecondId = CASE WHEN @OldTableId < @NewTableId THEN @NewTableId ELSE @OldTableId END;
+                        SELECT @LockedId = Id FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @FirstId;
+                        IF @SecondId IS NOT NULL
+                            SELECT @LockedId = Id FROM dbo.BilliardTables WITH (UPDLOCK, HOLDLOCK) WHERE Id = @SecondId;
+
+                        SELECT @NewStatus = t.Status, @NewRate = ty.HourlyRate, @NewCode = t.TableCode
+                          FROM dbo.BilliardTables t JOIN dbo.TableTypes ty ON ty.Id = t.TableTypeId
+                         WHERE t.Id = @NewTableId;
+                        IF @NewStatus IS NULL OR @NewStatus <> 'Available'
+                            THROW 51613, N'Target table does not exist or is not Available.', 1;
+
+                        UPDATE dbo.PlaySessionTableSegments SET EndAtUtc = @Now
+                         WHERE SessionId = @SessionId AND EndAtUtc IS NULL;
+                        IF @@ROWCOUNT = 0
+                            THROW 51699, N'Active session has no open table segment.', 1;
+
+                        INSERT dbo.PlaySessionTableSegments(SessionId, TableId, HourlyRateSnapshot, StartAtUtc, EndAtUtc)
+                            VALUES (@SessionId, @NewTableId, @NewRate, @Now, NULL);
+
+                        UPDATE dbo.PlaySessions SET TableId = @NewTableId WHERE Id = @SessionId;
+
+                        UPDATE dbo.BilliardTables SET Status = 'Available' WHERE Id = @OldTableId;
+                        UPDATE dbo.BilliardTables SET Status = 'InUse' WHERE Id = @NewTableId;
+                        COMMIT;
+                        SELECT @SessionId AS SessionId, @OldTableId AS OldTableId, @NewTableId AS NewTableId,
+                               @NewCode AS NewTableCode, @NewRate AS NewHourlyRate, @Now AS TransferAtUtc;
+                    END TRY
+                    BEGIN CATCH
+                        IF @@TRANCOUNT > 0 ROLLBACK;
+                        THROW;
+                    END CATCH
+                END;
+                """);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                DROP PROCEDURE IF EXISTS dbo.usp_CreateBooking;
+                DROP PROCEDURE IF EXISTS dbo.usp_CancelBooking;
+                DROP PROCEDURE IF EXISTS dbo.usp_CheckInBooking;
+                DROP PROCEDURE IF EXISTS dbo.usp_AutoExpireBookings;
+
+                IF OBJECT_ID('dbo.Reviews', 'U') IS NOT NULL
+                    DROP TABLE dbo.Reviews;
+
+                IF OBJECT_ID('dbo.FK_Session_Booking', 'F') IS NOT NULL
+                    ALTER TABLE dbo.PlaySessions DROP CONSTRAINT FK_Session_Booking;
+
+                IF COL_LENGTH('dbo.PlaySessions', 'BookingId') IS NOT NULL
+                    ALTER TABLE dbo.PlaySessions DROP COLUMN BookingId;
+
+                IF OBJECT_ID('dbo.Bookings', 'U') IS NOT NULL
+                    DROP TABLE dbo.Bookings;
+
+                IF OBJECT_ID('dbo.PricingConfigs', 'U') IS NOT NULL
+                    DROP TABLE dbo.PricingConfigs;
+                """);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Không thể dọn bỏ bảng dư thừa (Bookings/Reviews).");
         }
     }
 

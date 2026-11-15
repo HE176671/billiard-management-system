@@ -61,9 +61,6 @@
                 <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
                     <i class="bi bi-people"></i> Tài khoản &amp; phân quyền
                 </a>
-                <a class="sidebar-link @Active("AuditLog")" asp-controller="AuditLog" asp-action="Index">
-                    <i class="bi bi-journal-text"></i> Nhật ký hệ thống
-                </a>
             }
 
             @if (isManager)
@@ -91,9 +88,6 @@
                 <div class="nav-section-label">F&amp;B &amp; Kho hàng</div>
                 <a class="sidebar-link @Active("Product")" asp-controller="Product" asp-action="Index">
                     <i class="bi bi-cup-straw"></i> Thực đơn &amp; Món
-                </a>
-                <a class="sidebar-link @Active("Combo")" asp-controller="Combo" asp-action="Index">
-                    <i class="bi bi-box2-heart"></i> Gói Combo
                 </a>
                 <a class="sidebar-link @Active("Inventory")" asp-controller="Inventory" asp-action="Index">
                     <i class="bi bi-boxes"></i> Quản lý kho hàng
@@ -150,7 +144,6 @@
                     }
                 </a>
                 <a class="sidebar-link @Active("Product")" asp-controller="Product" asp-action="Index"><i class="bi bi-cup-straw"></i> Thực đơn &amp; Món</a>
-                <a class="sidebar-link @Active("Combo")" asp-controller="Combo" asp-action="Index"><i class="bi bi-box2-heart"></i> Gói Combo</a>
                 <a class="sidebar-link @Active("Inventory")" asp-controller="Inventory" asp-action="Index"><i class="bi bi-boxes"></i> Quản lý kho hàng</a>
             }
         </div>

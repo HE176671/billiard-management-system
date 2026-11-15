@@ -31,7 +31,6 @@ public class ApplicationUser : IdentityUser
     public DateTime? TierGraceUntilUtc { get; set; }
 
     public ICollection<PointTransaction> PointTransactions { get; set; } = new List<PointTransaction>();
-    public ICollection<Review> Reviews { get; set; } = new List<Review>();
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     public ICollection<CustomerVoucher> Vouchers { get; set; } = new List<CustomerVoucher>();
     public ICollection<CustomerNote> Notes { get; set; } = new List<CustomerNote>();

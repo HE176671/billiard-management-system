@@ -255,29 +255,43 @@
                                 <label for="inpVoucher" class="form-label">Mã quà tặng (voucher)</label>
                                 <button type="button" id="btnClearVoucher" class="btn checkout-field-action">Xóa mã</button>
                             </div>
-                            <div class="input-group">
-                                <span class="input-group-text bg-white"><i class="bi bi-ticket-perforated text-danger"></i></span>
-                                <input type="text" name="voucherCode" id="inpVoucher" list="memberVoucherList"
-                                       class="form-control font-monospace text-uppercase calc-trigger"
-                                       placeholder="VD: DRINK, FREEHOUR"
-                                       value="@Model.VoucherCode" autocomplete="off" />
-                            </div>
-                            <datalist id="memberVoucherList">
-                                @foreach (var v in Model.AvailableVouchers
+                            @{
+                                var groupedVouchers = Model.AvailableVouchers
                                     .Where(v => v.RewardItem != null)
                                     .GroupBy(v => v.RewardItem!.Code)
-                                    .Select(group => group.OrderBy(v => v.ExpiresAtUtc).First()))
-                                {
-                                    var rewardItem = v.RewardItem!;
-                                    var minTier = rewardItem.MinTier;
-                                    var tierSuffix = minTier != null ? $" · Hạng {minTier.TierName}+" : "";
-                                    <option value="@rewardItem.Code">
-                                        @rewardItem.Name (@(rewardItem.DiscountValue.HasValue ? "-" + VnFormat.Money(rewardItem.DiscountValue.Value) : VnFormat.RewardTypeLabel(rewardItem.RewardType))@tierSuffix)
-                                    </option>
-                                }
-                            </datalist>
+                                    .Select(group => group.OrderBy(v => v.ExpiresAtUtc).First())
+                                    .ToList();
+                                var hasCurrentVoucherInList = !string.IsNullOrWhiteSpace(Model.VoucherCode)
+                                    && groupedVouchers.Any(v => string.Equals(v.RewardItem!.Code, Model.VoucherCode, StringComparison.OrdinalIgnoreCase));
+                            }
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i class="bi bi-ticket-perforated text-danger"></i></span>
+                                <select name="voucherCode" id="inpVoucher" class="form-select calc-trigger">
+                                    <option value="">@(groupedVouchers.Any() ? "-- Chọn voucher khả dụng --" : "-- Hội viên chưa có voucher khả dụng --")</option>
+                                    @if (!string.IsNullOrWhiteSpace(Model.VoucherCode) && !hasCurrentVoucherInList)
+                                    {
+                                        <option value="@Model.VoucherCode" selected>@Model.VoucherCode</option>
+                                    }
+                                    @foreach (var v in groupedVouchers)
+                                    {
+                                        var rewardItem = v.RewardItem!;
+                                        var minTier = rewardItem.MinTier;
+                                        var eligible = minTier == null || detail.TierSpendThreshold >= minTier.SpendThreshold;
+                                        var tierSuffix = minTier != null
+                                            ? (eligible ? $" · Hạng {minTier.TierName}+" : $" · ⚠️ Yêu cầu Hạng {minTier.TierName} (Chưa đủ hạng)")
+                                            : "";
+                                        var discountText = rewardItem.DiscountValue.HasValue
+                                            ? "-" + VnFormat.Money(rewardItem.DiscountValue.Value)
+                                            : VnFormat.RewardTypeLabel(rewardItem.RewardType);
+                                        var isSelected = string.Equals(Model.VoucherCode, rewardItem.Code, StringComparison.OrdinalIgnoreCase);
+                                        <option value="@rewardItem.Code" selected="@isSelected" disabled="@(!eligible)">
+                                            @($"{rewardItem.Code} — {rewardItem.Name} ({discountText}{tierSuffix})")
+                                        </option>
+                                    }
+                                </select>
+                            </div>
                             <div id="lblVoucherWarning" class="alert alert-danger py-1 px-2 mt-2 mb-0 d-none" style="font-size:0.78rem"></div>
-                            <div class="form-text checkout-field-note">Dùng mã quà tặng còn hiệu lực mà hội viên đang sở hữu.</div>
+                            <div class="form-text checkout-field-note">Chọn mã quà tặng còn hiệu lực mà hội viên đang sở hữu.</div>
                         </div>
                         <div class="checkout-field">
                             <div class="checkout-field-heading">
@@ -603,10 +617,17 @@
         const btnCommitCheckout = document.getElementById('btnCommitCheckout');
         const transferPending = @Model.HasPendingTransfer.ToString().ToLowerInvariant();
 
+        const btnClearVoucher = document.getElementById('btnClearVoucher');
+
         if (transferPending) {
-            [playInput, fnbInput, voucherInput, pointsInput, refInput].forEach(x => {
+            [playInput, fnbInput, pointsInput, refInput].forEach(x => {
                 if (x) x.readOnly = true;
             });
+            if (voucherInput) {
+                if (voucherInput.tagName === 'SELECT') voucherInput.disabled = true;
+                else voucherInput.readOnly = true;
+            }
+            if (btnClearVoucher) btnClearVoucher.disabled = true;
             if (btnVietQR) btnVietQR.disabled = true;
             if (btnCash) btnCash.disabled = true;
             if (btnWallet) btnWallet.disabled = true;
@@ -623,8 +644,6 @@
         const lblMemberSpend12M = document.getElementById('lblMemberSpend12M');
         const btnMemberProfile = document.getElementById('btnMemberProfile');
         const rcpMemberBadge = document.getElementById('rcpMemberBadge');
-        const memberVoucherList = document.getElementById('memberVoucherList');
-        const btnClearVoucher = document.getElementById('btnClearVoucher');
 
         function syncSelectedCustomerToForm(newCustomerId, resetVoucherAndPoints) {
             if (!newCustomerId || !custInput) return;
@@ -862,13 +881,27 @@
                         if (rcpMemberBadge) {
                             rcpMemberBadge.textContent = 'HỘI VIÊN: ' + d.customerName;
                         }
-                        if (reloadVouchers === true && memberVoucherList && Array.isArray(d.availableVouchers)) {
-                            memberVoucherList.innerHTML = '';
+                        if (reloadVouchers === true && voucherInput && voucherInput.tagName === 'SELECT' && Array.isArray(d.availableVouchers)) {
+                            const prevVal = (voucherInput.value || '').toUpperCase();
+                            voucherInput.innerHTML = '';
+                            const defaultOpt = document.createElement('option');
+                            defaultOpt.value = '';
+                            defaultOpt.text = d.availableVouchers.length > 0
+                                ? '-- Chọn voucher khả dụng --'
+                                : '-- Hội viên chưa có voucher khả dụng --';
+                            voucherInput.appendChild(defaultOpt);
+
                             d.availableVouchers.forEach(v => {
                                 const opt = document.createElement('option');
                                 opt.value = v.code;
                                 opt.text = v.label;
-                                memberVoucherList.appendChild(opt);
+                                if (v.isEligible === false) {
+                                    opt.disabled = true;
+                                }
+                                if (prevVal && prevVal === (v.code || '').toUpperCase() && !opt.disabled) {
+                                    opt.selected = true;
+                                }
+                                voucherInput.appendChild(opt);
                             });
                         }
                     }

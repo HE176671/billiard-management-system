@@ -140,6 +140,7 @@ public class SelectedCustomerDetailViewModel
     public DateOnly? DateOfBirth { get; set; }
     public string? CardCode { get; set; }
     public string? TierName { get; set; }
+    public decimal TierSpendThreshold { get; set; }
     public int PointMultiplier { get; set; }
     public decimal DiscountPercent { get; set; }
     public int RewardPoints { get; set; }

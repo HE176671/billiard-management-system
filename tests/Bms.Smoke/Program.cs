@@ -104,21 +104,12 @@ try
     Check(await db.MembershipTiers.CountAsync(t => t.SpendThreshold == threshold) == 1, "Duplicate monetary threshold rejected");
 
     var type = await db.TableTypes.FirstAsync();
-    // Use a temporary type so existing configs never interfere with the test.
+    // Use a temporary type so existing types never interfere with the test.
     var testType = new TableType { Name = "Smoke " + key[..8], HourlyRate = 50000 };
     db.TableTypes.Add(testType); await db.SaveChangesAsync();
     var pricing = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
-    Check(await pricing.Create(new() { TableTypeId = testType.Id, StartHour = "08:00", EndHour = "12:00", HourlyRate = 50000 }) is RedirectToActionResult, "Pricing create");
-    var config = await db.PricingConfigs.SingleAsync(p => p.TableTypeId == testType.Id);
-    var overlap = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
-    Check(await overlap.Create(new() { Id = config.Id, TableTypeId = testType.Id, StartHour = "09:00", EndHour = "10:00", HourlyRate = 50000 }) is ViewResult && !overlap.ModelState.IsValid, "Overlap rejected even with forged create ID");
-    Check(await pricing.Create(new() { TableTypeId = testType.Id, StartHour = "12:00", EndHour = "14:00", HourlyRate = 60000 }) is RedirectToActionResult, "Adjacent pricing intervals accepted");
-    var invalid = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
-    Check(await invalid.Create(new() { TableTypeId = testType.Id, StartHour = "25:00", EndHour = "26:00", HourlyRate = 50000 }) is ViewResult && !invalid.ModelState.IsValid, "Out-of-day hours rejected");
-    var unknown = Prepare(new PricingController(db, new AuditLogService(db, new HttpContextAccessor())));
-    Check(await unknown.Create(new() { TableTypeId = int.MaxValue, StartHour = "08:00", EndHour = "10:00", HourlyRate = 50000 }) is ViewResult && !unknown.ModelState.IsValid, "Unknown table type rejected");
-    Check(await pricing.Edit(new CreateEditPricingViewModel() { Id = config.Id, TableTypeId = testType.Id, StartHour = "08:00", EndHour = "11:00", HourlyRate = 70000 }) is RedirectToActionResult && config.HourlyRate == 70000, "Pricing update");
-    Check(await pricing.Delete(config.Id) is RedirectToActionResult && !await db.PricingConfigs.AnyAsync(p => p.Id == config.Id), "Pricing delete");
+    Check(await pricing.UpdateTableBaseRate(testType.Id, 70000) is RedirectToActionResult
+        && (await db.TableTypes.AsNoTracking().SingleAsync(t => t.Id == testType.Id)).HourlyRate == 70000, "TableType base rate update");
 
     var staff = new ApplicationUser { UserName = "smoke." + key, Email = key + "@example.invalid", FullName = "Smoke staff", TierId = tier.Id };
     Check((await users.CreateAsync(staff, "SmokeOriginal!123")).Succeeded && (await users.AddToRoleAsync(staff, "Staff")).Succeeded, "Identity fixture creation");

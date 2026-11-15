@@ -47,7 +47,8 @@
             font-size: 0.7rem; color: var(--text-muted-light);
             display: block; margin-top: 2px;
         }
-        .sidebar-nav { flex: 1; padding: 1rem 0; overflow-y: auto; }
+        .sidebar-nav { flex: 1; padding: 1rem 0; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+        .sidebar-nav::-webkit-scrollbar { display: none; }
         .nav-section-label {
             font-size: 0.65rem; font-weight: 600; letter-spacing: 1px;
             color: var(--text-muted-light); text-transform: uppercase;
@@ -273,9 +274,6 @@
             <a class="sidebar-link @Active("Employee")" asp-controller="Employee" asp-action="Index">
                 <i class="bi bi-people"></i> Tài khoản &amp; phân quyền
             </a>
-            <a class="sidebar-link @Active("AuditLog")" asp-controller="AuditLog" asp-action="Index">
-                <i class="bi bi-journal-text"></i> Nhật ký hệ thống
-            </a>
         }
 
         @if (isManager)
@@ -305,9 +303,6 @@
             <div class="nav-section-label">F&amp;B &amp; Kho hàng</div>
             <a class="sidebar-link @Active("Product")" asp-controller="Product" asp-action="Index">
                 <i class="bi bi-cup-straw"></i> Thực đơn &amp; Món
-            </a>
-            <a class="sidebar-link @Active("Combo")" asp-controller="Combo" asp-action="Index">
-                <i class="bi bi-box2-heart"></i> Gói Combo
             </a>
             <a class="sidebar-link @Active("Inventory")" asp-controller="Inventory" asp-action="Index">
                 <i class="bi bi-boxes"></i> Quản lý kho hàng
@@ -366,7 +361,6 @@
                 }
             </a>
             <a class="sidebar-link @Active("Product")" asp-controller="Product" asp-action="Index"><i class="bi bi-cup-straw"></i> Thực đơn &amp; Món</a>
-            <a class="sidebar-link @Active("Combo")" asp-controller="Combo" asp-action="Index"><i class="bi bi-box2-heart"></i> Gói Combo</a>
             <a class="sidebar-link @Active("Inventory")" asp-controller="Inventory" asp-action="Index"><i class="bi bi-boxes"></i> Quản lý kho hàng</a>
         }
     </div>

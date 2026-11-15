@@ -14,8 +14,6 @@ public class PlaySession
     [InverseProperty(nameof(Entities.BilliardTable.PlaySessions))]
     public BilliardTable BilliardTable { get; set; } = null!;
 
-    public int? BookingId { get; set; }
-
     [MaxLength(450)]
     public string? CustomerId { get; set; }
 

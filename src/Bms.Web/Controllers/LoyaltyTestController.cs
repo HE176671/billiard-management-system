@@ -194,6 +194,7 @@ public class LoyaltyTestController : Controller
                     DateOfBirth = user.DateOfBirth,
                     CardCode = user.EmployeeCode,
                     TierName = user.Tier?.TierName ?? "Member",
+                    TierSpendThreshold = user.Tier?.SpendThreshold ?? 0m,
                     PointMultiplier = user.Tier?.PointMultiplier ?? 1,
                     DiscountPercent = user.Tier?.DiscountPercent ?? 0,
                     WalletBalance = user.WalletBalance,
